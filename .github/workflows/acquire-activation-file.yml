@@ -8,7 +8,7 @@ jobs:
     name: Request .alf Activation File
     runs-on: ubuntu-latest
     container:
-      image: unityci/editor:ubuntu-6000.0.38f1-android-3.3.0
+      image: unityci/editor:ubuntu-6000.0.38f1-android-3
     steps:
       - name: Generate Manual Activation File
         run: |
