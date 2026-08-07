@@ -107,10 +107,14 @@ namespace HighwayRenegade.Editor
             EditorUserBuildSettings.androidBuildSubtarget = MobileTextureSubtarget.ASTC;
 
             // Sustained-performance pacing rather than burst-then-throttle.
-            // appCategory replaces the deprecated androidIsGame flag; it maps to
-            // android:appCategory in the manifest, which the OS uses for power and
-            // data-usage attribution.
-            PlayerSettings.Android.appCategory = AndroidApplicationCategory.Game;
+            // NOTE: androidIsGame is deprecated in favour of PlayerSettings.Android.appCategory,
+            // but the AppCategory enum ships with the Android build module rather than the
+            // core editor, so referencing it breaks compilation on a machine without that
+            // module installed. The deprecated call sets the same manifest attribute and
+            // works everywhere; revisit once the Android module is a hard prerequisite.
+#pragma warning disable CS0618
+            PlayerSettings.Android.androidIsGame = true;
+#pragma warning restore CS0618
             PlayerSettings.Android.optimizedFramePacing = true;
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
 
