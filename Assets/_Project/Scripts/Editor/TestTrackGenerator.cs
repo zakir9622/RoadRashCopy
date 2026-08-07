@@ -111,16 +111,28 @@ namespace HighwayRenegade.Editor
                 Paint(barrier, new Color(0.62f, 0.60f, 0.55f));
             }
 
-            // Lane stripes purely as a speed cue — without motion reference, velocity is
-            // very hard to judge against a flat untextured surface.
+            // Shoulder rumble strips with tagged friction surfaces (mu = 0.45)
+            for (int side = -1; side <= 1; side += 2)
+            {
+                GameObject rumble = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                rumble.name = side < 0 ? "Rumble L" : "Rumble R";
+                rumble.tag = "ShoulderGravel";
+                rumble.transform.SetParent(root);
+                rumble.transform.localScale = new Vector3(1.2f, 0.08f, RoadLength);
+                rumble.transform.position =
+                    new Vector3(side * (RoadWidth * 0.5f - 1.2f), 0.04f, RoadLength * 0.5f - 40f);
+                Paint(rumble, new Color(0.72f, 0.42f, 0.20f));
+            }
+
+            // Lane stripes with tagged painted friction (mu = 0.82)
             for (float z = 0f; z < RoadLength - 40f; z += 18f)
             {
                 GameObject stripe = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 stripe.name = "Stripe";
+                stripe.tag = "PaintedLine";
                 stripe.transform.SetParent(root);
                 stripe.transform.localScale = new Vector3(0.35f, 0.02f, 6f);
                 stripe.transform.position = new Vector3(0f, 0.01f, z);
-                Object.DestroyImmediate(stripe.GetComponent<BoxCollider>());
                 Paint(stripe, new Color(0.85f, 0.82f, 0.55f));
             }
         }
@@ -213,11 +225,11 @@ namespace HighwayRenegade.Editor
             var controller = root.AddComponent<BikeController>();
             AssignPrivateReferences(controller, front, rear);
 
-            // Player and rivals get identical combat and crash components so both sides
-            // obey the same rules. Weapons are assigned by the caller.
+            // Player and rivals get identical combat, progress and crash components
             root.AddComponent<Damageable>();
             root.AddComponent<MeleeCombat>();
             root.AddComponent<BikeCrashHandler>();
+            root.AddComponent<TrackProgress>();
 
             // Engine note is synthesised from the bike's own RPM, so it needs no audio
             // asset and always matches the physics. 3D so rivals are audible in position.
@@ -226,6 +238,7 @@ namespace HighwayRenegade.Editor
 
             return controller;
         }
+
 
         /// <summary>
         /// Spawns the rival grid. Skill and aggression are varied per rider so the field

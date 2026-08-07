@@ -75,6 +75,44 @@ namespace HighwayRenegade.Core.Progression
         /// <summary>Total races finished, for stats and pacing decisions.</summary>
         public int RacesFinished;
 
+        /// <summary>Engine performance upgrade stage (0..5).</summary>
+        public int EngineStage;
+
+        /// <summary>Sport tire grip upgrade stage (0..5).</summary>
+        public int TireStage;
+
+        /// <summary>Brake system upgrade stage (0..5).</summary>
+        public int BrakeStage;
+
+        /// <summary>Chassis armor upgrade stage (0..5).</summary>
+        public int ArmorStage;
+
+        /// <summary>Currently equipped weapon (0 = Fists, 1 = Chain, 2 = Bat).</summary>
+        public int EquippedWeapon;
+
+        /// <summary>Riding assist setting (0 = Full, 1 = Sport, 2 = Off).</summary>
+        public int AssistSetting = 0;
+
+        /// <summary>Whether gyroscope tilt steering is enabled.</summary>
+        public bool GyroSteering = false;
+
+        /// <summary>Cost to purchase the next stage of an upgrade (0-5).</summary>
+        public static int UpgradeCost(int currentStage) => (currentStage + 1) * 600;
+
+        /// <summary>
+        /// Attempts to purchase an upgrade. Returns true and mutates currency/stage if affordable.
+        /// </summary>
+        public bool TryPurchaseUpgrade(ref int currentStage, int maxStage = 5)
+        {
+            if (currentStage >= maxStage) return false;
+            int cost = UpgradeCost(currentStage);
+            if (Currency < cost) return false;
+
+            Currency -= cost;
+            currentStage++;
+            return true;
+        }
+
         /// <summary>Finds a rival by id, or null.</summary>
         public RivalRecord FindRival(string id)
         {
@@ -140,6 +178,12 @@ namespace HighwayRenegade.Core.Progression
             if (data.Currency < 0) data.Currency = 0;
             if (data.ChapterIndex < 0) data.ChapterIndex = 0;
             if (data.RacesFinished < 0) data.RacesFinished = 0;
+            data.EngineStage = Math.Max(0, Math.Min(5, data.EngineStage));
+            data.TireStage = Math.Max(0, Math.Min(5, data.TireStage));
+            data.BrakeStage = Math.Max(0, Math.Min(5, data.BrakeStage));
+            data.ArmorStage = Math.Max(0, Math.Min(5, data.ArmorStage));
+            data.EquippedWeapon = Math.Max(0, Math.Min(2, data.EquippedWeapon));
+            data.AssistSetting = Math.Max(0, Math.Min(2, data.AssistSetting));
 
             for (int i = 0; i < data.Rivals.Count; i++)
             {
@@ -154,8 +198,6 @@ namespace HighwayRenegade.Core.Progression
                 if (string.IsNullOrEmpty(r.Name)) r.Name = r.Id;
             }
 
-            // Future upgrades slot in here as `if (data.SchemaVersion < 2) { ... }`.
-
             data.SchemaVersion = SaveData.CurrentSchemaVersion;
             return data;
         }
@@ -168,3 +210,4 @@ namespace HighwayRenegade.Core.Progression
             => data != null && data.SchemaVersion > SaveData.CurrentSchemaVersion;
     }
 }
+

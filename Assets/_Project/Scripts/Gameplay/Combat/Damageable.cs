@@ -28,19 +28,26 @@ namespace HighwayRenegade.Gameplay.Combat
         /// <summary>Raised on every hit that lands. Argument is the damage applied.</summary>
         public event Action<float> Damaged;
 
+        /// <summary>Raised with damage amount and attacker source for kill attribution & grudges.</summary>
+        public event Action<float, GameObject> DamagedBySource;
+
+        /// <summary>Raised once when health reaches zero. Argument is the killer GameObject, if known.</summary>
+        public event Action<GameObject> DiedWithSource;
+
         /// <summary>Raised once when health reaches zero.</summary>
         public event Action Died;
 
         private void Awake() => _health = _maxHealth;
 
         /// <summary>
-        /// Applies damage and knockback.
+        /// Applies damage, knockback, and records the attacker source.
         /// </summary>
         /// <param name="amount">Damage to apply.</param>
         /// <param name="impulse">Knockback magnitude in newton-seconds.</param>
         /// <param name="impulseDirection">World-space direction to shove the victim.</param>
+        /// <param name="source">GameObject that dealt the hit, or null.</param>
         /// <returns>True if the hit landed; false if ignored (dead or still invulnerable).</returns>
-        public bool ApplyDamage(float amount, float impulse, Vector3 impulseDirection)
+        public bool ApplyDamage(float amount, float impulse, Vector3 impulseDirection, GameObject source = null)
         {
             if (!IsAlive || amount <= 0f) return false;
             if (Time.time < _invulnerableUntil) return false;
@@ -57,7 +64,14 @@ namespace HighwayRenegade.Gameplay.Combat
             }
 
             Damaged?.Invoke(amount);
-            if (!IsAlive) Died?.Invoke();
+            DamagedBySource?.Invoke(amount, source);
+
+            if (!IsAlive)
+            {
+                Died?.Invoke();
+                DiedWithSource?.Invoke(source);
+            }
+
             return true;
         }
 

@@ -33,14 +33,10 @@ namespace HighwayRenegade.Gameplay.AI
         [Tooltip("Starting aggression. 1 is neutral; higher rivals pick fights unprompted.")]
         [Range(1f, 2.5f)][SerializeField] private float _baseAggression = 1f;
 
-        [Header("Steering")]
-        [Tooltip("How far ahead the rival aims when racing. Short = twitchy, long = lazy.")]
-        [SerializeField] private float _lookAheadDistance = 14f;
-
-        [Header("Decision Rate")]
-        [Tooltip("Seconds between brain evaluations. Re-deciding every frame is wasted " +
-                 "work and makes rivals feel jittery; humans do not re-plan at 60 Hz.")]
-        [SerializeField] private float _decisionInterval = 0.15f;
+        [Header("Tactical AI & Obstacle Avoidance")]
+        [Tooltip("Layer mask for road obstacles and traffic vehicles.")]
+        [SerializeField] private LayerMask _obstacleMask = ~0;
+        [SerializeField] private float _avoidanceDistance = 18f;
 
         private BikeController _bike;
         private Damageable _damageable;
@@ -49,6 +45,12 @@ namespace HighwayRenegade.Gameplay.AI
         private float _aggression;
         private float _nextDecisionTime;
         private BikeInput _input;
+
+        // Human reaction delay: ring buffer storing past target positions (8 steps ~ 130ms)
+        private const int TargetHistorySteps = 8;
+        private readonly Vector3[] _targetPositionHistory = new Vector3[TargetHistorySteps];
+        private int _historyIndex;
+        private bool _historyFilled;
 
         /// <summary>Current behaviour state — read by animation, audio, and debug HUD.</summary>
         public RivalState State => _state;
@@ -66,14 +68,20 @@ namespace HighwayRenegade.Gameplay.AI
             _combat = GetComponent<MeleeCombat>();
             _aggression = _baseAggression;
 
-            // Health lives on the shared Damageable so rivals and the player obey exactly
-            // the same damage rules. An AI with its own survivability model feels unfair.
-            if (_damageable != null) _damageable.Damaged += OnDamaged;
+            if (_damageable != null)
+            {
+                _damageable.Damaged += OnDamaged;
+                _damageable.DamagedBySource += OnDamagedBySource;
+            }
         }
 
         private void OnDestroy()
         {
-            if (_damageable != null) _damageable.Damaged -= OnDamaged;
+            if (_damageable != null)
+            {
+                _damageable.Damaged -= OnDamaged;
+                _damageable.DamagedBySource -= OnDamagedBySource;
+            }
         }
 
         private void Start()
@@ -83,22 +91,18 @@ namespace HighwayRenegade.Gameplay.AI
                 var player = FindFirstObjectByType<PlayerBikeInput>();
                 if (player != null) _target = player.transform;
             }
+
+            if (_target != null)
+            {
+                for (int i = 0; i < TargetHistorySteps; i++)
+                    _targetPositionHistory[i] = _target.position;
+                _historyFilled = true;
+            }
         }
 
         /// <summary>
         /// Applies a persistent rival profile loaded from the save.
-        ///
-        /// This is where a stored grudge becomes behaviour: seeding aggression from what
-        /// the player did in previous races means a rider who was wrecked last time comes
-        /// off the grid already hunting, with no scripting involved.
         /// </summary>
-        /// <param name="displayName">Rival's name, used for the GameObject and UI.</param>
-        /// <param name="skill">Fraction of top speed they will use, 0..1.</param>
-        /// <param name="startingAggression">Carried grudge; 1 is neutral.</param>
-        /// <param name="huntsPlayer">
-        /// True for a nemesis. Forces aggression to at least the attack threshold so they
-        /// pick fights from the start rather than waiting to be provoked.
-        /// </param>
         public void ApplyProfile(string displayName, float skill, float startingAggression, bool huntsPlayer)
         {
             if (!string.IsNullOrEmpty(displayName)) gameObject.name = displayName;
@@ -109,15 +113,14 @@ namespace HighwayRenegade.Gameplay.AI
             if (huntsPlayer && _baseAggression < RivalBrain.AggressionAttackThreshold)
                 _baseAggression = RivalBrain.AggressionAttackThreshold;
 
-            // Awake may already have run and copied the old value.
             _aggression = _baseAggression;
         }
 
         private void Update()
         {
-            // Aggression bleeds off continuously, not just at decision ticks, so the
-            // grudge fades smoothly rather than in visible steps.
             _aggression = RivalBrain.DecayAggression(_aggression, Time.deltaTime);
+
+            UpdateTargetHistory();
 
             if (Time.time >= _nextDecisionTime)
             {
@@ -129,10 +132,22 @@ namespace HighwayRenegade.Gameplay.AI
             TryAttack();
         }
 
+        private void UpdateTargetHistory()
+        {
+            if (_target == null) return;
+            _targetPositionHistory[_historyIndex] = _target.position;
+            _historyIndex = (_historyIndex + 1) % TargetHistorySteps;
+        }
+
+        private Vector3 GetDelayedTargetPosition()
+        {
+            if (_target == null || !_historyFilled) return _target != null ? _target.position : transform.position;
+            // Read oldest element in ring buffer (~130ms reaction lag)
+            return _targetPositionHistory[_historyIndex];
+        }
+
         /// <summary>
-        /// Swings while in Attack state. The cooldown lives in MeleeCombat, so calling
-        /// this every frame is safe and simply throws a punch whenever one is available.
-        /// Aggression is pushed across so a provoked rival hits measurably harder.
+        /// Swings while in Attack state. Aggression is pushed across so a provoked rival hits harder.
         /// </summary>
         private void TryAttack()
         {
@@ -169,10 +184,14 @@ namespace HighwayRenegade.Gameplay.AI
                 airborne: !_bike.IsGrounded);
         }
 
-        /// <summary>Translates the current state into throttle/brake/steer.</summary>
+        /// <summary>Translates the current state into throttle/brake/steer with tactical maneuvers.</summary>
         private BikeInput BuildInput()
         {
             _input = BikeInput.Neutral;
+            Vector3 targetPos = GetDelayedTargetPosition();
+            Vector3 toTarget = targetPos - transform.position;
+            Vector3 local = transform.InverseTransformDirection(toTarget);
+            float dist = toTarget.magnitude;
 
             switch (_state)
             {
@@ -182,41 +201,56 @@ namespace HighwayRenegade.Gameplay.AI
                     break;
 
                 case RivalState.Draft:
-                    // Hold station directly behind the target: full throttle in the
-                    // slipstream is both faster and sets up an overtake.
-                    _input.Throttle = _skill;
-                    _input.Steer = SteerToward(_target != null ? _target.position : AimPointAhead());
+                    _input.Throttle = 1f; // full throttle in slipstream
+                    float slingshot = RivalBrain.SlingshotOffset(dist, local.x);
+                    Vector3 draftAim = targetPos + transform.right * slingshot;
+                    _input.Steer = SteerToward(draftAim);
                     break;
 
                 case RivalState.Attack:
-                    // Close hard and line up alongside; the melee swing itself is driven
-                    // by the combat system, not here.
                     _input.Throttle = 1f;
                     _input.Steer = SteerToward(_target != null ? _target.position : AimPointAhead());
                     break;
 
                 case RivalState.Evade:
-                    // Back off and steer away from the threat rather than simply braking,
-                    // which would just leave the rival sitting in the player's path.
                     _input.Throttle = _skill * 0.55f;
                     _input.Steer = -SteerToward(_target != null ? _target.position : AimPointAhead());
                     break;
             }
 
+            // Injected pressure variance when side-by-side
+            float variance = RivalBrain.PressureSteeringVariance(_aggression, dist, Time.time);
+            _input.Steer = Mathf.Clamp(_input.Steer + variance, -1f, 1f);
+
+            // Obstacle avoidance steer bias
+            float avoidance = SampleObstacleAvoidance();
+            if (Mathf.Abs(avoidance) > 0.01f)
+                _input.Steer = Mathf.Clamp(_input.Steer + avoidance, -1f, 1f);
+
             return _input;
         }
 
         /// <summary>
-        /// Placeholder racing line: straight ahead. Replaced by spline sampling once
-        /// procedural highways land in Phase 3.
+        /// Forward raycast detecting slow traffic or barriers and providing lateral steering bias.
+        /// Non-allocating raycast.
         /// </summary>
+        private float SampleObstacleAvoidance()
+        {
+            if (Physics.Raycast(transform.position + Vector3.up * 0.5f, transform.forward, out RaycastHit hit,
+                                _avoidanceDistance, _obstacleMask, QueryTriggerInteraction.Ignore))
+            {
+                if (hit.collider != null && hit.collider.gameObject != gameObject && hit.collider.transform != _target)
+                {
+                    // Steer toward the open side
+                    Vector3 localHit = transform.InverseTransformPoint(hit.point);
+                    return localHit.x >= 0f ? -0.75f : 0.75f;
+                }
+            }
+            return 0f;
+        }
+
         private Vector3 AimPointAhead() => transform.position + transform.forward * _lookAheadDistance;
 
-        /// <summary>
-        /// Pure-pursuit steering. Dividing lateral by forward distance means a target far
-        /// ahead produces a gentle correction and a close one a sharp turn, which is the
-        /// behaviour a human rider exhibits.
-        /// </summary>
         private float SteerToward(Vector3 worldPoint)
         {
             Vector3 local = transform.InverseTransformDirection(worldPoint - transform.position);
@@ -224,20 +258,22 @@ namespace HighwayRenegade.Gameplay.AI
             return Mathf.Clamp(local.x / forward, -1f, 1f);
         }
 
-        /// <summary>
-        /// Raised by <see cref="Damageable"/> on every hit that lands. Escalates the
-        /// grudge so the rival starts hunting whoever has been hitting it.
-        ///
-        /// Note this fires for any damage source, including traffic collisions. That is
-        /// a deliberate simplification for now: attributing hits to a specific attacker
-        /// needs Damageable to carry the source, which lands with the traffic system in
-        /// Phase 3. Until then a shunted rival getting angry is acceptable - and arguably
-        /// reads fine, since the player is usually the reason it got shunted.
-        /// </summary>
         private void OnDamaged(float amount)
         {
             if (amount <= 0f) return;
             _aggression = RivalBrain.RegisterHitTaken(_aggression);
         }
+
+        private void OnDamagedBySource(float amount, GameObject source)
+        {
+            if (amount <= 0f) return;
+            // If the hit came from the player, prioritize targeting the player
+            if (source != null && source.GetComponent<PlayerBikeInput>() != null)
+            {
+                _target = source.transform;
+                _aggression = RivalBrain.RegisterHitTaken(_aggression, 2);
+            }
+        }
     }
 }
+

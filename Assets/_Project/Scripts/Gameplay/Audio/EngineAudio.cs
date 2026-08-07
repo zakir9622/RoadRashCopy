@@ -37,26 +37,41 @@ namespace HighwayRenegade.Gameplay.Audio
         [Tooltip("Mechanical noise floor - intake, chain, wind. Pure tones sound synthetic.")]
         [Range(0f, 0.5f)][SerializeField] private float _noiseLevel = 0.12f;
 
-        [Header("Mix")]
-        [Range(0f, 1f)][SerializeField] private float _volume = 0.35f;
+        [Header("Procedural Layers")]
+        [Tooltip("Transmission straight-cut gear whine volume.")]
+        [Range(0f, 0.4f)][SerializeField] private float _whineVolume = 0.15f;
 
-        [Tooltip("How much louder the engine gets under load. Off-throttle it should back " +
-                 "off audibly, or the bike sounds like it is always pinned.")]
-        [Range(0f, 1f)][SerializeField] private float _loadInfluence = 0.55f;
+        [Tooltip("Aerodynamic wind rush volume at top speed.")]
+        [Range(0f, 0.6f)][SerializeField] private float _windVolume = 0.28f;
 
-        [Tooltip("Seconds for the note to follow an RPM change. Zero makes gearshifts click.")]
-        [SerializeField] private float _smoothing = 0.06f;
+        [Tooltip("Tire scrub and slide friction volume.")]
+        [Range(0f, 0.5f)][SerializeField] private float _tireScrubVolume = 0.30f;
+
+        [Tooltip("Exhaust overrun crackle and backfire burst volume.")]
+        [Range(0f, 0.6f)][SerializeField] private float _popVolume = 0.45f;
 
         // --- Written by Update (main thread), read by OnAudioFilterRead (audio thread).
         //     Plain floats: torn reads are harmless here and cost nothing, whereas a lock
         //     on the audio thread risks a dropout. ---
         private float _targetFrequency = 60f;
         private float _targetAmplitude;
+        private float _targetWhineFreq;
+        private float _targetWhineAmp;
+        private float _targetWindAmp;
+        private float _targetScrubAmp;
+        private float _popTriggerTimer;
+        private float _lastThrottle;
 
         // --- Audio-thread state only. ---
         private float _phase;
+        private float _whinePhase;
         private float _currentFrequency = 60f;
         private float _currentAmplitude;
+        private float _currentWhineFreq;
+        private float _currentWhineAmp;
+        private float _currentWindAmp;
+        private float _currentScrubAmp;
+        private float _popDecayAmp;
         private int _sampleRate = 48000;
         private uint _noiseState = 0x9E3779B9;   // xorshift seed
 
@@ -95,27 +110,49 @@ namespace HighwayRenegade.Gameplay.Audio
             float rpm = Mathf.Max(_bike.EngineRpm, 500f);
             _targetFrequency = Mathf.Clamp(rpm / 60f * (_cylinders * 0.5f), 20f, 4000f);
 
-            // Loud under load, backing off on a closed throttle. A constant level makes
-            // the bike sound permanently pinned and kills the sense of shifting.
+            // Loud under load, backing off on a closed throttle.
             float rev = _bike.RpmFraction;
+            float speed01 = _bike.NormalisedSpeed;
             float load = Mathf.Clamp01(0.35f + rev * 0.65f);
             float idleFloor = 1f - _loadInfluence;
 
             _targetAmplitude = _volume * (idleFloor + _loadInfluence * load);
+
+            // Transmission whine synthesis target
+            _targetWhineFreq = Mathf.Clamp(_bike.TransmissionWhineFreq, 50f, 8000f);
+            _targetWhineAmp = _whineVolume * speed01 * (0.3f + 0.7f * rev);
+
+            // Aerodynamic wind rush target
+            _targetWindAmp = _windVolume * Mathf.Pow(speed01, 1.6f);
+
+            // Tire scrub friction noise target
+            float scrubNormalized = Mathf.Clamp01(_bike.ScrubIntensity / 3500f);
+            _targetScrubAmp = _tireScrubVolume * scrubNormalized;
+
+            // Exhaust overrun crackles & pops detection
+            if (_lastThrottle > 0.65f && rev > 0.60f)
+            {
+                // When throttle cuts at high RPM, trigger backfires
+                _popTriggerTimer = 0.35f;
+            }
+            _lastThrottle = rev;
         }
 
         /// <summary>
         /// Audio thread. No allocation, no Unity API, no locks.
+        /// Multi-layer procedural engine, transmission whine, wind rush, tire scrub and backfires.
         /// </summary>
         private void OnAudioFilterRead(float[] data, int channels)
         {
             float sampleRate = _sampleRate;
             float freqTarget = _targetFrequency;
             float ampTarget = _targetAmplitude;
+            float whineFreqTarget = _targetWhineFreq;
+            float whineAmpTarget = _targetWhineAmp;
+            float windAmpTarget = _targetWindAmp;
+            float scrubAmpTarget = _targetScrubAmp;
 
-            // Per-sample glide toward the target, so a gearshift is a swoop rather than a
-            // click. Converting the smoothing time into a per-sample coefficient keeps the
-            // rate independent of buffer size.
+            // Per-sample glide toward targets
             float glide = _smoothing > 0.0001f
                 ? 1f - Mathf.Exp(-1f / (_smoothing * sampleRate))
                 : 1f;
@@ -129,33 +166,63 @@ namespace HighwayRenegade.Gameplay.Audio
             {
                 _currentFrequency += (freqTarget - _currentFrequency) * glide;
                 _currentAmplitude += (ampTarget - _currentAmplitude) * glide;
+                _currentWhineFreq += (whineFreqTarget - _currentWhineFreq) * glide;
+                _currentWhineAmp += (whineAmpTarget - _currentWhineAmp) * glide;
+                _currentWindAmp += (windAmpTarget - _currentWindAmp) * glide;
+                _currentScrubAmp += (scrubAmpTarget - _currentScrubAmp) * glide;
 
                 _phase += _currentFrequency / sampleRate;
                 if (_phase >= 1f) _phase -= 1f;
 
+                _whinePhase += _currentWhineFreq / sampleRate;
+                if (_whinePhase >= 1f) _whinePhase -= 1f;
+
                 float t = _phase * 6.2831853f;
+                float tw = _whinePhase * 6.2831853f;
 
-                // Fundamental plus a few harmonics. Deliberately band-limited to four
-                // partials: more would alias badly once the engine is revving hard.
-                float sample = Mathf.Sin(t)
-                             + h2 * Mathf.Sin(t * 2f)
-                             + h3 * Mathf.Sin(t * 3f)
-                             + h4 * Mathf.Sin(t * 4f);
+                // 1. Engine fundamental + band-limited harmonics
+                float engineSample = Mathf.Sin(t)
+                                   + h2 * Mathf.Sin(t * 2f)
+                                   + h3 * Mathf.Sin(t * 3f)
+                                   + h4 * Mathf.Sin(t * 4f);
+                engineSample /= 1f + h2 + h3 + h4;
 
-                sample /= 1f + h2 + h3 + h4;   // normalise so brightness does not change level
+                if (noise > 0f) engineSample += NextNoise() * noise;
+                engineSample *= _currentAmplitude;
 
-                if (noise > 0f) sample += NextNoise() * noise;
+                // 2. Straight-cut gearbox whine (pure sine)
+                float whineSample = Mathf.Sin(tw) * _currentWhineAmp;
 
-                sample *= _currentAmplitude;
+                // 3. Aerodynamic wind rush (pink/white noise)
+                float rawNoise = NextNoise();
+                float windSample = rawNoise * _currentWindAmp;
 
-                // Soft clip. A hard clamp on a periodic waveform buzzes; tanh-like shaping
-                // saturates the way an overdriven speaker does.
-                if (sample > 1f) sample = 1f;
-                else if (sample < -1f) sample = -1f;
-                else sample = sample * (1.5f - 0.5f * sample * sample);
+                // 4. Tire scrub friction (harsher modulated noise)
+                float scrubSample = rawNoise * _currentScrubAmp;
+
+                // 5. Backfire pop impulse
+                float popSample = 0f;
+                if (_popDecayAmp > 0.001f)
+                {
+                    popSample = NextNoise() * _popDecayAmp * _popVolume;
+                    _popDecayAmp *= 0.9992f;
+                }
+                else if (_popTriggerTimer > 0f)
+                {
+                    _popDecayAmp = 1.0f;
+                    _popTriggerTimer = 0f;
+                }
+
+                // Sum all procedural layers
+                float totalSample = engineSample + whineSample + windSample + scrubSample + popSample;
+
+                // Soft clip saturation (tanh-like overdrive)
+                if (totalSample > 1f) totalSample = 1f;
+                else if (totalSample < -1f) totalSample = -1f;
+                else totalSample = totalSample * (1.5f - 0.5f * totalSample * totalSample);
 
                 for (int c = 0; c < channels; c++)
-                    data[i + c] = sample;
+                    data[i + c] = totalSample;
             }
         }
 
@@ -172,3 +239,4 @@ namespace HighwayRenegade.Gameplay.Audio
         }
     }
 }
+

@@ -108,8 +108,20 @@ namespace HighwayRenegade.Gameplay.Bike
         private float _engineRpm;
         private float _topSpeed = 60f;
         private float _driveGripUsage;   // 0..1 of rear grip spent longitudinally
+        private float _currentLeanAngle;
+        private float _targetLeanAngle;
+        private float _scrubIntensity;
+        private float _brakeDive;
+        private float _surfaceMu = 1.0f;
 
-        // --- Diagnostics, read by HUD, audio and VFX. No allocation. ---
+        [Header("Dynamic Roll & Caster")]
+        [Tooltip("Maximum visual and physical lean angle into corners, degrees.")]
+        [SerializeField] private float _maxLeanAngle = 48f;
+        [SerializeField] private float _leanSmoothing = 8f;
+        [Tooltip("Self-aligning torque from caster trail at speed.")]
+        [SerializeField] private float _casterTorque = 45f;
+
+        // --- Diagnostics, read by HUD, audio, haptics and camera. No allocation. ---
 
         /// <summary>Signed speed along the bike's forward axis, m/s.</summary>
         public float ForwardSpeed => _forwardSpeed;
@@ -153,6 +165,28 @@ namespace HighwayRenegade.Gameplay.Bike
         /// <summary>Geared top speed ignoring drag, m/s.</summary>
         public float TopSpeed => _topSpeed;
 
+        /// <summary>Dynamic lean angle into the current turn, degrees.</summary>
+        public float LeanAngleDeg => _currentLeanAngle;
+
+        /// <summary>Tire scrub energy (Watts), driving procedural audio and haptics.</summary>
+        public float ScrubIntensity => _scrubIntensity;
+
+        /// <summary>Suspension pitch compression (dive under braking, squat under drive).</summary>
+        public float BrakeDive => _brakeDive;
+
+        /// <summary>Current road surface friction multiplier (0.45 to 1.25).</summary>
+        public float SurfaceFriction => _surfaceMu;
+
+        /// <summary>Transmission gear mesh whine frequency for audio synthesis.</summary>
+        public float TransmissionWhineFreq => Powertrain.TransmissionWhineFrequency(_engine, _forwardSpeed, _gear);
+
+        /// <summary>Applies an upgraded engine spec (e.g. from the garage).</summary>
+        public void SetEngineSpec(in EngineSpec upgradedSpec)
+        {
+            _engine = upgradedSpec;
+            _topSpeed = Mathf.Max(10f, Powertrain.TopSpeedInGear(_engine, _engine.GearRatios.Length - 1));
+        }
+
         private void Awake()
         {
             _rb = GetComponent<Rigidbody>();
@@ -187,10 +221,13 @@ namespace HighwayRenegade.Gameplay.Bike
             UpdatePowertrain();
             UpdateSteering(NormalisedSpeed, dt);
             UpdateSlip(velocity);
+            UpdateDynamicLean(dt);
 
             _frontGrounded = ApplyWheel(_frontWheel, isDriveWheel: false, _frontTyre, dt);
             _rearGrounded = ApplyWheel(_rearWheel, isDriveWheel: true, _rearTyre, dt);
 
+            ApplyPitchMoments();
+            ApplyCasterAligningTorque();
             ApplyAerodynamicDrag(velocity);
             ApplyGravity();
 
@@ -240,6 +277,67 @@ namespace HighwayRenegade.Gameplay.Bike
         }
 
         /// <summary>
+        /// Dynamic lean: roll angle calculated from centripetal acceleration theta = atan(v^2 / (g * R)).
+        /// Gives authentic motorcycle posture and roll dynamics without compromising stability.
+        /// </summary>
+        private void UpdateDynamicLean(float dt)
+        {
+            if (!IsGrounded || Mathf.Abs(_forwardSpeed) < 1f)
+            {
+                _targetLeanAngle = 0f;
+                _currentLeanAngle = Mathf.MoveTowards(_currentLeanAngle, 0f, _leanSmoothing * 8f * dt);
+                return;
+            }
+
+            // Target lean proportional to steering angle and speed squared
+            float steerFraction = _currentSteerAngle / _maxSteerAngle;
+            float centripetal = (_forwardSpeed * _forwardSpeed * 0.035f) * steerFraction;
+            _targetLeanAngle = Mathf.Clamp(centripetal, -_maxLeanAngle, _maxLeanAngle);
+
+            _currentLeanAngle = Mathf.Lerp(_currentLeanAngle, _targetLeanAngle, _leanSmoothing * dt);
+        }
+
+        /// <summary>
+        /// Pitch moments: braking transfers weight to front forks (dive), drive force causes rear squat.
+        /// Applied as pitching torque around the transverse axis at center of mass.
+        /// </summary>
+        private void ApplyPitchMoments()
+        {
+            if (!IsGrounded)
+            {
+                _brakeDive = 0f;
+                return;
+            }
+
+            float throttle = _input.Throttle;
+            float brake = _input.Brake;
+
+            // Drive squat vs brake dive moment
+            float driveThrust = Powertrain.DriveForce(_engine, _forwardSpeed, _gear, throttle);
+            float brakeRetard = brake * _maxBrakeForce;
+
+            float netLongitudinal = driveThrust - brakeRetard;
+            _brakeDive = Mathf.Clamp((brakeRetard - driveThrust) / (_maxBrakeForce + 1f), -1f, 1f);
+
+            // Pitch torque: net force * CoM height (~0.6m)
+            Vector3 pitchAxis = transform.right;
+            float pitchTorque = netLongitudinal * 0.45f;
+            _rb.AddTorque(pitchAxis * (pitchTorque * 0.08f), ForceMode.Force);
+        }
+
+        /// <summary>
+        /// Caster self-aligning torque: stabilizes front wheel at high speed toward straight-ahead.
+        /// </summary>
+        private void ApplyCasterAligningTorque()
+        {
+            if (!_frontGrounded || Mathf.Abs(_forwardSpeed) < 3f) return;
+
+            // Caster restoring force proportional to steer angle and speed
+            float restoring = -(_currentSteerAngle / _maxSteerAngle) * _casterTorque * NormalisedSpeed;
+            _rb.AddTorque(transform.up * restoring, ForceMode.Acceleration);
+        }
+
+        /// <summary>
         /// Slip angle is the difference between where the bike points and where it is
         /// going. Deriving drift from measured slip rather than from a button means a
         /// collision or a bad landing can knock the bike sideways too, which is what
@@ -254,6 +352,7 @@ namespace HighwayRenegade.Gameplay.Bike
             {
                 _slipAngle = 0f;
                 _signedSlipAngle = 0f;
+                _scrubIntensity = 0f;
                 IsDrifting = false;
                 return;
             }
@@ -290,6 +389,9 @@ namespace HighwayRenegade.Gameplay.Bike
                 return false;
             }
 
+            // Surface friction coefficient: sample tag/layer or default to 1.0
+            _surfaceMu = SampleSurfaceFriction(hit);
+
             Vector3 pointVelocity = _rb.GetPointVelocity(origin);
 
             // --- 1. Suspension. This force IS the tyre's normal load, which is what makes
@@ -321,7 +423,7 @@ namespace HighwayRenegade.Gameplay.Bike
                 // The tyre can only transmit what friction allows. Exceeding it is wheelspin
                 // or lock-up, not extra thrust. Traction control then caps it further -
                 // strictly below the physical limit, never above.
-                float maxLongitudinal = TyreModel.FrictionAtLoad(tyre, normalLoad) * normalLoad;
+                float maxLongitudinal = TyreModel.FrictionAtLoad(tyre, normalLoad, _surfaceMu) * normalLoad;
                 float clamped = RidingAssists.LimitDriveForce(driveForce, maxLongitudinal, _assists);
 
                 longitudinalUsage = maxLongitudinal > 1f ? Mathf.Abs(clamped) / maxLongitudinal : 0f;
@@ -334,20 +436,20 @@ namespace HighwayRenegade.Gameplay.Bike
                 Vector3 brakeAxis = Vector3.ProjectOnPlane(transform.forward, hit.normal).normalized;
                 float brakeForce = -Mathf.Sign(_forwardSpeed) * _maxBrakeForce * _frontBrakeBias * _input.Brake;
 
-                float maxLongitudinal = TyreModel.FrictionAtLoad(tyre, normalLoad) * normalLoad;
+                float maxLongitudinal = TyreModel.FrictionAtLoad(tyre, normalLoad, _surfaceMu) * normalLoad;
                 float clamped = Mathf.Clamp(brakeForce, -maxLongitudinal, maxLongitudinal);
 
                 longitudinalUsage = maxLongitudinal > 1f ? Mathf.Abs(clamped) / maxLongitudinal : 0f;
                 _rb.AddForceAtPosition(brakeAxis * clamped, origin);
             }
 
-            // --- 3. Lateral tyre force from a real slip curve. ---
+            // --- 3. Lateral tyre force from a real slip curve with surface multiplier. ---
             Vector3 lateralAxis = wheel.right;
             float lateralVel = Vector3.Dot(lateralAxis, pointVelocity);
             float forwardVel = Vector3.Dot(wheel.forward, pointVelocity);
 
             float slipAngle = TyreModel.SlipAngleDeg(forwardVel, lateralVel);
-            float capacity = TyreModel.LateralForce(tyre, slipAngle, normalLoad);
+            float capacity = TyreModel.LateralForce(tyre, slipAngle, normalLoad, _surfaceMu);
 
             // Friction circle: grip already spent driving is unavailable for cornering.
             capacity *= TyreModel.RemainingLateralCapacity(longitudinalUsage);
@@ -363,7 +465,25 @@ namespace HighwayRenegade.Gameplay.Bike
             float applied = Mathf.Clamp(required, -capacity, capacity);
             _rb.AddForceAtPosition(lateralAxis * applied, origin);
 
+            // Telemetry: scrub power in Watts for audio and particle feedback
+            if (isDriveWheel)
+                _scrubIntensity = TyreModel.ScrubPower(lateralVel, applied);
+
             return true;
+        }
+
+        /// <summary>
+        /// Samples road surface friction multiplier from hit collider tag or layer.
+        /// Non-allocating lookup.
+        /// </summary>
+        private float SampleSurfaceFriction(in RaycastHit hit)
+        {
+            if (hit.collider == null) return 1.0f;
+            // Tag check without string concatenation or allocation
+            if (hit.collider.CompareTag("ShoulderGravel")) return 0.45f;
+            if (hit.collider.CompareTag("PaintedLine")) return 0.82f;
+            if (hit.collider.CompareTag("WetTarmac")) return 0.68f;
+            return 1.0f;
         }
 
         /// <summary>

@@ -141,8 +141,6 @@ namespace HighwayRenegade.Tests.EditMode
                                                     CombatMath.StealDamageThreshold));
         }
 
-        // --- Weapon comparison ---
-
         [Test]
         public void BetterPicksTheHarderHittingWeapon()
         {
@@ -150,5 +148,20 @@ namespace HighwayRenegade.Tests.EditMode
             Assert.AreEqual(WeaponType.Chain, CombatMath.Better(WeaponType.Fists, WeaponType.Chain));
             Assert.AreEqual(WeaponType.Bat, CombatMath.Better(WeaponType.Bat, WeaponType.Bat));
         }
+
+        [Test]
+        public void SwingRecoilDrag_HeavierWeaponsCreateMoreDrag()
+        {
+            Assert.That(CombatMath.SwingRecoilDrag(WeaponType.Bat), Is.GreaterThan(CombatMath.SwingRecoilDrag(WeaponType.Chain)));
+            Assert.That(CombatMath.SwingRecoilDrag(WeaponType.Chain), Is.GreaterThan(CombatMath.SwingRecoilDrag(WeaponType.Fists)));
+        }
+
+        [Test]
+        public void ZoneDamageMultiplier_ForkTakesMoreDamageThanSwingarm()
+        {
+            Assert.That(CombatMath.ZoneDamageMultiplier(1), Is.GreaterThan(CombatMath.ZoneDamageMultiplier(0)));
+            Assert.That(CombatMath.ZoneDamageMultiplier(0), Is.GreaterThan(CombatMath.ZoneDamageMultiplier(2)));
+        }
     }
 }
+

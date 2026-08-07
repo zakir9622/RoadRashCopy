@@ -110,6 +110,33 @@ namespace HighwayRenegade.Core.Combat
         }
 
         /// <summary>
+        /// Aerodynamic drag and recoil impulse applied to the attacker when throwing a swing at speed.
+        /// Heavy weapons produce noticeable drag force (Newtons) that slightly slows the attacker.
+        /// </summary>
+        public static float SwingRecoilDrag(WeaponType weapon)
+        {
+            switch (weapon)
+            {
+                case WeaponType.Bat:   return 460f;
+                case WeaponType.Chain: return 320f;
+                default:               return 110f; // Fists
+            }
+        }
+
+        /// <summary>
+        /// Damage multiplier based on struck zone (0: Torso, 1: Handlebars, 2: Rear Wheel).
+        /// </summary>
+        public static float ZoneDamageMultiplier(int hitZone)
+        {
+            switch (hitZone)
+            {
+                case 1:  return 1.25f; // Handlebar / Fork strike
+                case 2:  return 0.85f; // Rear wheel / swingarm
+                default: return 1.0f;  // Torso
+            }
+        }
+
+        /// <summary>
         /// Whether a hit knocks the victim's weapon loose so the attacker can take it
         /// (GDD: "Weapons can be stolen from opponents during combat").
         ///
@@ -132,3 +159,4 @@ namespace HighwayRenegade.Core.Combat
             => BaseDamage(a) >= BaseDamage(b) ? a : b;
     }
 }
+

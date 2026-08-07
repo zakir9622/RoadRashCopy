@@ -149,6 +149,32 @@ namespace HighwayRenegade.Core.AI
         }
 
         /// <summary>
+        /// Calculates lateral slingshot steering offset when preparing to slingshot out of draft.
+        /// When close behind the target, swinging laterally allows clean acceleration past.
+        /// </summary>
+        public static float SlingshotOffset(float distanceToTarget, float ownLateralOffset)
+        {
+            if (distanceToTarget > DraftMinDistance && distanceToTarget < 9f)
+            {
+                // Break out to the clearer side (opposite to current slight offset)
+                return ownLateralOffset >= 0f ? -3.2f : 3.2f;
+            }
+            return 0f;
+        }
+
+        /// <summary>
+        /// Injects humanized steering variance under racing pressure and high aggression.
+        /// Real riders under combat pressure make subtle cornering errors.
+        /// </summary>
+        public static float PressureSteeringVariance(float aggression, float distanceToThreat, float timeSeed)
+        {
+            if (distanceToThreat > 6f) return 0f;
+            float pressure = (6f - distanceToThreat) / 6f;
+            float wobble = (float)System.Math.Sin(timeSeed * 12.0) * 0.08f;
+            return wobble * pressure * Clamp(aggression, 1f, 2.5f);
+        }
+
+        /// <summary>
         /// Raises aggression after the player lands a hit. The GDD calls for rivals that
         /// hold a grudge — this is what turns "some bikes on the road" into rivalries.
         /// </summary>
@@ -169,5 +195,8 @@ namespace HighwayRenegade.Core.AI
         }
 
         private static float Abs(float v) => v < 0f ? -v : v;
+
+        private static float Clamp(float v, float lo, float hi) => v < lo ? lo : (v > hi ? hi : v);
     }
 }
+

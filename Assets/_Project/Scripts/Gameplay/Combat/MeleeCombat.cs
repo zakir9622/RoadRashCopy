@@ -72,6 +72,13 @@ namespace HighwayRenegade.Gameplay.Combat
             if (!CanSwing) return false;
             _nextSwingTime = Time.time + CombatMath.Cooldown(_weapon);
 
+            // Aerodynamic recoil on the attacker: swinging a bat at 200 km/h creates drag
+            if (TryGetComponent(out Rigidbody selfRb))
+            {
+                float recoilDrag = CombatMath.SwingRecoilDrag(_weapon);
+                selfRb.AddForce(-transform.forward * recoilDrag, ForceMode.Force);
+            }
+
             float reach = CombatMath.Reach(_weapon);
             int count = Physics.OverlapSphereNonAlloc(
                 transform.position, reach, _hitBuffer, _targetMask, QueryTriggerInteraction.Ignore);
@@ -98,13 +105,13 @@ namespace HighwayRenegade.Gameplay.Combat
                 Vector3 sideAxis = local.x >= 0f ? transform.right : -transform.right;
                 if (Vector3.Angle(flat, sideAxis) > _swingArcDegrees) continue;
 
-                ApplyHit(victim);
+                ApplyHit(victim, local);
             }
 
             return true;
         }
 
-        private void ApplyHit(Damageable victim)
+        private void ApplyHit(Damageable victim, Vector3 localOffset)
         {
             float victimSpeed = victim.TryGetComponent(out BikeController victimBike)
                 ? victimBike.ForwardSpeed
@@ -114,11 +121,21 @@ namespace HighwayRenegade.Gameplay.Combat
             // stationary with respect to each other and a punch should feel like a punch.
             float relativeSpeed = _bike.ForwardSpeed - victimSpeed;
 
-            float damage = CombatMath.ComputeDamage(_weapon, relativeSpeed, _aggression);
+            // Hit zone: 1 if hit forward toward forks, 2 if hit rearward toward swingarm, 0 for torso
+            int hitZone = localOffset.z > 0.4f ? 1 : (localOffset.z < -0.4f ? 2 : 0);
+            float zoneMultiplier = CombatMath.ZoneDamageMultiplier(hitZone);
+
+            float damage = CombatMath.ComputeDamage(_weapon, relativeSpeed, _aggression) * zoneMultiplier;
             float impulse = CombatMath.ComputeImpulse(damage);
             Vector3 shove = (victim.transform.position - transform.position);
 
-            if (!victim.ApplyDamage(damage, impulse, shove)) return;   // absorbed by i-frames
+            if (!victim.ApplyDamage(damage, impulse, shove, gameObject)) return;   // absorbed by i-frames
+
+            // Handlebar strike induces steering deflection on victim
+            if (hitZone == 1 && victim.TryGetComponent(out Rigidbody victimRb))
+            {
+                victimRb.AddTorque(transform.up * (Mathf.Sign(localOffset.x) * 45f), ForceMode.Impulse);
+            }
 
             TryStealWeapon(victim, damage);
         }

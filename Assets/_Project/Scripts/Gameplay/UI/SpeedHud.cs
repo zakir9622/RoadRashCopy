@@ -106,15 +106,32 @@ namespace HighwayRenegade.Gameplay.UI
             float scale = Screen.height / 1080f;
             float margin = 32f * scale;
 
-            var speedRect = new Rect(margin, Screen.height - 170f * scale, 420f * scale, 110f * scale);
+            var speedRect = new Rect(margin, Screen.height - 180f * scale, 420f * scale, 100f * scale);
             GUI.Label(speedRect, _kphText, _speedStyle);
 
-            var unitRect = new Rect(speedRect.x, speedRect.yMax - 12f * scale, 260f * scale, 40f * scale);
+            var unitRect = new Rect(speedRect.x, speedRect.yMax - 10f * scale, 160f * scale, 35f * scale);
             GUI.Label(unitRect, "KM/H", _labelStyle);
+
+            // Gear & RPM Tachometer bar
+            var gearRect = new Rect(unitRect.xMax + 10f * scale, unitRect.y, 80f * scale, 35f * scale);
+            GUI.Label(gearRect, "G" + _bike.Gear, _labelStyle);
+
+            // Tachometer RPM visual bar
+            float rpm01 = _bike.RpmFraction;
+            var tachoBack = new Rect(margin, speedRect.y - 18f * scale, 240f * scale, 10f * scale);
+            var tachoFill = new Rect(margin, speedRect.y - 18f * scale, 240f * scale * rpm01, 10f * scale);
+            var prevCol = GUI.color;
+            GUI.color = new Color(0.2f, 0.2f, 0.25f, 0.8f);
+            GUI.DrawTexture(tachoBack, Texture2D.whiteTexture);
+
+            // Redline flash above 90% RPM
+            GUI.color = rpm01 > 0.90f ? (Time.time % 0.1f > 0.05f ? Color.red : Color.white) : new Color(0.2f, 0.8f, 1f);
+            GUI.DrawTexture(tachoFill, Texture2D.whiteTexture);
+            GUI.color = prevCol;
 
             if (_bike.IsDrifting)
             {
-                var driftRect = new Rect(speedRect.x, speedRect.y - 46f * scale, 320f * scale, 44f * scale);
+                var driftRect = new Rect(speedRect.x, speedRect.y - 56f * scale, 320f * scale, 40f * scale);
                 var prev = GUI.color;
                 GUI.color = new Color(1f, 0.72f, 0.15f);
                 GUI.Label(driftRect, "DRIFT", _labelStyle);
@@ -126,9 +143,8 @@ namespace HighwayRenegade.Gameplay.UI
             if (!_showDiagnostics) return;
 
             // Rebuilt only when a displayed value actually changes at display precision.
-            // Slip is rounded to 5 degrees so a constantly-jittering angle does not defeat
-            // the cache and reintroduce a per-frame allocation.
             int slipBucket = Mathf.RoundToInt(_bike.SlipAngle / 5f);
+            int leanBucket = Mathf.RoundToInt(_bike.LeanAngleDeg / 4f) * 4;
             bool grounded = _bike.IsGrounded;
             var tier = _thermal != null ? _thermal.CurrentTier : (ThermalTier)(-1);
 
@@ -143,11 +159,13 @@ namespace HighwayRenegade.Gameplay.UI
                 _diagText = "FPS " + _fpsText
                           + "\nThermal " + (_thermal != null ? tier.ToString() : "n/a")
                           + "\nGrounded " + (grounded ? "yes" : "no")
+                          + "\nLean " + leanBucket + " deg"
                           + "\nSlip " + (slipBucket * 5) + " deg";
             }
 
-            var diagRect = new Rect(Screen.width - 300f * scale, margin, 270f * scale, 130f * scale);
+            var diagRect = new Rect(Screen.width - 300f * scale, margin, 270f * scale, 150f * scale);
             GUI.Label(diagRect, _diagText, _labelStyle);
+
         }
 
         /// <summary>

@@ -42,8 +42,18 @@ namespace HighwayRenegade.Gameplay.CameraRig
         [SerializeField] private float _driftFovBonus = 4f;
         [SerializeField] private float _fovDamping = 4f;
 
+        [Header("Realism Dynamics")]
+        [Tooltip("How far the camera anticipates corner apexes based on bike lean.")]
+        [SerializeField] private float _apexLeadFactor = 0.06f;
+        [Tooltip("Dynamic G-force compression under braking / pullback under acceleration.")]
+        [SerializeField] private float _gForceDamping = 0.35f;
+        [Tooltip("High-speed micro-vibration amplitude.")]
+        [SerializeField] private float _turbulenceStrength = 0.035f;
+
         private Camera _camera;
         private Vector3 _positionVelocity;   // scratch for SmoothDamp; never reallocated
+        private float _previousSpeed;
+        private float _gForceOffset;
 
         private void Awake()
         {
@@ -65,30 +75,50 @@ namespace HighwayRenegade.Gameplay.CameraRig
             if (_target == null) return;
 
             Transform bike = _target.transform;
+            float dt = Time.deltaTime;
+            float speed01 = _target.NormalisedSpeed;
+            float currentSpeed = _target.ForwardSpeed;
 
-            // --- Position: damped follow, but yaw-only so pitch/roll of the bike does
-            //     not tilt the whole world when it lands a jump. ---
+            // --- G-force dynamic pullback & dive compression ---
+            float acceleration = dt > 0.0001f ? (currentSpeed - _previousSpeed) / dt : 0f;
+            _previousSpeed = currentSpeed;
+            float targetGForce = Mathf.Clamp(-acceleration * 0.025f, -0.6f, 0.8f);
+            _gForceOffset = Mathf.Lerp(_gForceOffset, targetGForce, _gForceDamping * 10f * dt);
+
+            // --- Position: damped follow with G-force adjustment ---
             Quaternion yawOnly = Quaternion.Euler(0f, bike.eulerAngles.y, 0f);
-            Vector3 desired = bike.position + yawOnly * _localOffset;
+            Vector3 dynamicLocalOffset = _localOffset + new Vector3(0f, -_target.BrakeDive * 0.25f, _gForceOffset);
+            Vector3 desired = bike.position + yawOnly * dynamicLocalOffset;
+
+            // High-speed aerodynamic turbulence micro-jitter
+            if (speed01 > 0.5f)
+            {
+                float shakeNoise = (Mathf.PerlinNoise(Time.time * 28f, 0f) - 0.5f) * _turbulenceStrength * speed01;
+                desired += yawOnly * new Vector3(shakeNoise, shakeNoise * 0.5f, 0f);
+            }
 
             transform.position = Vector3.SmoothDamp(
                 transform.position, desired, ref _positionVelocity, _positionDamping);
 
-            // --- Rotation: aim ahead of the bike, not at it. ---
+            // --- Rotation: aim ahead of the bike with Apex Anticipation ---
+            // Leaning into a corner shifts the look target laterally toward the apex
+            float apexLead = (_target.SignedSlipAngle + _target.LeanAngleDeg) * _apexLeadFactor;
             Vector3 lookTarget = bike.position
                                  + bike.forward * _lookAheadDistance
+                                 + bike.right * apexLead
                                  + Vector3.up * _lookAheadHeight;
 
             Quaternion desiredRotation = Quaternion.LookRotation(lookTarget - transform.position, Vector3.up);
             transform.rotation = Quaternion.Slerp(
-                transform.rotation, desiredRotation, _rotationDamping * Time.deltaTime);
+                transform.rotation, desiredRotation, _rotationDamping * dt);
 
-            // --- FOV: the speed cue. ---
-            float targetFov = Mathf.Lerp(_baseFov, _maxFov, _target.NormalisedSpeed);
+            // --- FOV: the speed cue ---
+            float targetFov = Mathf.Lerp(_baseFov, _maxFov, speed01);
             if (_target.IsDrifting) targetFov += _driftFovBonus;
 
             _camera.fieldOfView = Mathf.Lerp(
-                _camera.fieldOfView, targetFov, _fovDamping * Time.deltaTime);
+                _camera.fieldOfView, targetFov, _fovDamping * dt);
         }
     }
 }
+

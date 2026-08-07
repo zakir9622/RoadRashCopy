@@ -28,9 +28,9 @@ namespace HighwayRenegade.Gameplay.Bike
                  "of screen height. Left of centre swings left, right swings right.")]
         [Range(0.1f, 0.4f)][SerializeField] private float _attackStripHeight = 0.22f;
 
-        [Header("Smoothing")]
-        [Tooltip("Seconds for keyboard steering to reach full lock. Analogue devices bypass this.")]
-        [SerializeField] private float _keyboardSteerRamp = 0.25f;
+        [Header("Gyroscope Tilt Steering")]
+        [SerializeField] private bool _enableGyro = false;
+        [SerializeField] private float _gyroSensitivity = 2.4f;
 
         private BikeController _bike;
         private HighwayRenegade.Gameplay.Combat.MeleeCombat _combat;
@@ -43,10 +43,24 @@ namespace HighwayRenegade.Gameplay.Bike
         private readonly Vector2[] _touchOrigins = new Vector2[MaxTouches];
         private readonly bool[] _touchActive = new bool[MaxTouches];
 
+        public bool EnableGyro
+        {
+            get => _enableGyro;
+            set
+            {
+                _enableGyro = value;
+                if (SystemInfo.supportsGyroscope)
+                    Input.gyro.enabled = value;
+            }
+        }
+
         private void Awake()
         {
             _bike = GetComponent<BikeController>();
             _combat = GetComponent<HighwayRenegade.Gameplay.Combat.MeleeCombat>();
+
+            if (_enableGyro && SystemInfo.supportsGyroscope)
+                Input.gyro.enabled = true;
         }
 
         private void Update()
@@ -61,7 +75,15 @@ namespace HighwayRenegade.Gameplay.Bike
                     ReadKeyboard();
             }
 
+            // Optional hardware gyroscope tilt steering
+            if (_enableGyro && SystemInfo.supportsGyroscope)
+            {
+                float tiltX = Input.gyro.gravity.x;
+                _input.Steer = Mathf.Clamp(_input.Steer + tiltX * _gyroSensitivity, -1f, 1f);
+            }
+
             _bike.SetInput(_input);
+
 
             // MeleeCombat owns the cooldown, so an unavailable swing is simply ignored.
             if (_input.AttackSide != 0 && _combat != null)

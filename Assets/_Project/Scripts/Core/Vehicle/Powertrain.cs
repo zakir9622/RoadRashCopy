@@ -219,12 +219,36 @@ namespace HighwayRenegade.Core.Vehicle
         /// gearing at author time: if top gear redlines below the target top speed, the
         /// bike is geared too short.
         /// </summary>
-        public static float TopSpeedInGear(in EngineSpec spec, int gear)
+        /// <summary>
+        /// Gearbox tooth mesh frequency (Hz) for procedural transmission whine synthesis.
+        /// Derived from pinion speed and typical gear tooth counts (28-36 teeth).
+        /// </summary>
+        public static float TransmissionWhineFrequency(in EngineSpec spec, float roadSpeedMs, int gear)
         {
-            float ratio = TotalRatio(spec, gear);
-            if (ratio <= 0f) return 0f;
-            float wheelRadPerSec = spec.RedlineRpm / (RadPerSecToRpm * ratio);
-            return wheelRadPerSec * spec.WheelRadius;
+            if (spec.GearRatios == null || spec.GearRatios.Length == 0) return 0f;
+            gear = Clamp(gear, 0, spec.GearRatios.Length - 1);
+            float rpm = EngineRpm(spec, roadSpeedMs, gear);
+            float gearRpm = rpm / (spec.PrimaryReduction > 0.01f ? spec.PrimaryReduction : 1.6f);
+            // Typical 32-tooth pinion mesh count
+            float meshFreq = (gearRpm / 60f) * 32f;
+            return meshFreq < 20f ? 20f : meshFreq;
+        }
+
+        /// <summary>
+        /// Applies performance upgrade stages to a base engine specification.
+        /// Pure function: returns a new upgraded EngineSpec without modifying the base.
+        /// </summary>
+        public static EngineSpec ApplyUpgrades(in EngineSpec baseSpec, int engineStage, int exhaustStage)
+        {
+            EngineSpec upgraded = baseSpec;
+            float torqueBoost = 1f + (Clamp(engineStage, 0, 5) * 0.09f) + (Clamp(exhaustStage, 0, 5) * 0.04f);
+            float rpmBoost = Clamp(engineStage, 0, 5) * 400f + Clamp(exhaustStage, 0, 5) * 200f;
+
+            upgraded.PeakTorqueNm = baseSpec.PeakTorqueNm * torqueBoost;
+            upgraded.RedlineRpm = baseSpec.RedlineRpm + rpmBoost;
+            upgraded.PeakTorqueRpm = baseSpec.PeakTorqueRpm + (rpmBoost * 0.5f);
+            upgraded.Efficiency = Clamp(baseSpec.Efficiency + (engineStage * 0.01f), 0.85f, 0.98f);
+            return upgraded;
         }
 
         private static float Abs(float v) => v < 0f ? -v : v;

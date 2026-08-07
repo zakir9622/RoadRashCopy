@@ -73,14 +73,14 @@ namespace HighwayRenegade.Core.Vehicle
         }
 
         /// <summary>
-        /// Effective friction coefficient at a given normal load.
+        /// Effective friction coefficient at a given normal load and surface multiplier.
         ///
         /// Tyres are load-sensitive: grip rises sub-linearly with load, so a heavily loaded
         /// tyre has a lower coefficient than a lightly loaded one. This is why weight
         /// transfer matters - shifting load onto one end costs more grip there than it
         /// gains, which is the mechanism behind braking-induced understeer.
         /// </summary>
-        public static float FrictionAtLoad(in TyreSpec spec, float normalLoadN)
+        public static float FrictionAtLoad(in TyreSpec spec, float normalLoadN, float surfaceMultiplier = 1f)
         {
             if (normalLoadN <= 0f) return 0f;
 
@@ -90,17 +90,19 @@ namespace HighwayRenegade.Core.Vehicle
             float ratio = normalLoadN / reference;
             // mu = mu0 * (1 - k * (load/ref - 1)), floored so it can never invert.
             float mu = spec.PeakFriction * (1f - sensitivity * (ratio - 1f));
-            return mu < spec.PeakFriction * 0.25f ? spec.PeakFriction * 0.25f : mu;
+            float baseMu = mu < spec.PeakFriction * 0.25f ? spec.PeakFriction * 0.25f : mu;
+            float surface = surfaceMultiplier > 0.05f ? surfaceMultiplier : 0.05f;
+            return baseMu * surface;
         }
 
         /// <summary>
         /// Maximum lateral force this tyre can produce right now, newtons.
         /// </summary>
-        public static float LateralForce(in TyreSpec spec, float slipAngleDeg, float normalLoadN)
+        public static float LateralForce(in TyreSpec spec, float slipAngleDeg, float normalLoadN, float surfaceMultiplier = 1f)
         {
             if (normalLoadN <= 0f) return 0f;
 
-            float mu = FrictionAtLoad(spec, normalLoadN);
+            float mu = FrictionAtLoad(spec, normalLoadN, surfaceMultiplier);
             float grip = GripFactor(slipAngleDeg, spec.PeakSlipAngleDeg);
 
             // Past the peak the tyre is sliding, but a sliding tyre still resists - it
@@ -113,6 +115,17 @@ namespace HighwayRenegade.Core.Vehicle
             }
 
             return mu * normalLoadN * grip;
+        }
+
+        /// <summary>
+        /// Friction energy dissipated per second (Watts), representing tyre scrub intensity.
+        /// Used by audio synthesis and particle systems to scale squeal and smoke without
+        /// allocating extra telemetry objects.
+        /// </summary>
+        public static float ScrubPower(float lateralVelocity, float lateralForce)
+        {
+            float power = Abs(lateralVelocity) * Abs(lateralForce);
+            return power < 0f ? 0f : power;
         }
 
         /// <summary>
@@ -150,3 +163,4 @@ namespace HighwayRenegade.Core.Vehicle
         private static float Clamp(float v, float lo, float hi) => v < lo ? lo : (v > hi ? hi : v);
     }
 }
+

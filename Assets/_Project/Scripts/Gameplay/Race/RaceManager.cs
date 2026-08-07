@@ -156,7 +156,15 @@ namespace HighwayRenegade.Gameplay.Race
         {
             for (int i = 0; i < _racers.Length; i++)
             {
-                float distance = _racers[i] != null ? _racers[i].transform.position.z : 0f;
+                float distance = 0f;
+                if (_racers[i] != null)
+                {
+                    if (_racers[i].TryGetComponent(out TrackProgress tp))
+                        distance = tp.DistanceAlongTrack;
+                    else
+                        distance = _racers[i].transform.position.z;
+                }
+
                 bool active = _health[i] == null || _health[i].IsAlive;
                 _snapshots[i] = new RacerSnapshot(i, distance, _finished[i], _finishTimes[i], active);
             }
@@ -189,7 +197,12 @@ namespace HighwayRenegade.Gameplay.Race
         public float PlayerDistanceRemaining()
         {
             if (_playerIndex < 0 || _racers[_playerIndex] == null) return 0f;
-            return Mathf.Max(0f, _finishLineZ - _racers[_playerIndex].transform.position.z);
+            float currentPos = _racers[_playerIndex].TryGetComponent(out TrackProgress tp)
+                ? tp.DistanceAlongTrack
+                : _racers[_playerIndex].transform.position.z;
+
+            return Mathf.Max(0f, _finishLineZ - currentPos);
         }
     }
 }
+
