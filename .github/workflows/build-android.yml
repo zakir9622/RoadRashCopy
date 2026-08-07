@@ -92,7 +92,7 @@ jobs:
           ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
         with:
           targetPlatform: Android
-          androidExportType: ${{ (github.event_name == 'workflow_dispatch' && inputs.buildApk) && 'androidPackage' || 'androidAppBundle' }}
+          androidExportType: androidPackage
           androidKeystoreName: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && 'release.keystore' || '' }}
           androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
