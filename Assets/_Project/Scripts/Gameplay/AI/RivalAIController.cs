@@ -85,6 +85,34 @@ namespace HighwayRenegade.Gameplay.AI
             }
         }
 
+        /// <summary>
+        /// Applies a persistent rival profile loaded from the save.
+        ///
+        /// This is where a stored grudge becomes behaviour: seeding aggression from what
+        /// the player did in previous races means a rider who was wrecked last time comes
+        /// off the grid already hunting, with no scripting involved.
+        /// </summary>
+        /// <param name="displayName">Rival's name, used for the GameObject and UI.</param>
+        /// <param name="skill">Fraction of top speed they will use, 0..1.</param>
+        /// <param name="startingAggression">Carried grudge; 1 is neutral.</param>
+        /// <param name="huntsPlayer">
+        /// True for a nemesis. Forces aggression to at least the attack threshold so they
+        /// pick fights from the start rather than waiting to be provoked.
+        /// </param>
+        public void ApplyProfile(string displayName, float skill, float startingAggression, bool huntsPlayer)
+        {
+            if (!string.IsNullOrEmpty(displayName)) gameObject.name = displayName;
+
+            _skill = Mathf.Clamp(skill, 0.5f, 1f);
+            _baseAggression = Mathf.Clamp(startingAggression, 1f, RivalBrain.MaxAggression);
+
+            if (huntsPlayer && _baseAggression < RivalBrain.AggressionAttackThreshold)
+                _baseAggression = RivalBrain.AggressionAttackThreshold;
+
+            // Awake may already have run and copied the old value.
+            _aggression = _baseAggression;
+        }
+
         private void Update()
         {
             // Aggression bleeds off continuously, not just at decision ticks, so the

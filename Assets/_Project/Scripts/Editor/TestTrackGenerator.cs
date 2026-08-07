@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using HighwayRenegade.Core.Combat;
 using HighwayRenegade.Gameplay.AI;
+using HighwayRenegade.Gameplay.Audio;
 using HighwayRenegade.Gameplay.Bike;
 using HighwayRenegade.Gameplay.Combat;
 using HighwayRenegade.Gameplay.CameraRig;
@@ -217,6 +218,11 @@ namespace HighwayRenegade.Editor
             root.AddComponent<Damageable>();
             root.AddComponent<MeleeCombat>();
             root.AddComponent<BikeCrashHandler>();
+
+            // Engine note is synthesised from the bike's own RPM, so it needs no audio
+            // asset and always matches the physics. 3D so rivals are audible in position.
+            root.AddComponent<AudioSource>();
+            root.AddComponent<EngineAudio>();
 
             return controller;
         }
