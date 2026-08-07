@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ui="UnityEngine.UIElements"
+    xmlns:editor="UnityEditor.UIElements"
+    xsi:noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd">
+
+    <ui:Style src="MainMenu.uss" />
+
+    <ui:VisualElement class="menu-container">
+        <!-- The background image (set in the USS) -->
+        <ui:VisualElement class="background-image" />
+        
+        <!-- Left side navigation panel -->
+        <ui:VisualElement class="nav-panel">
+            <ui:Label text="HIGHWAY RENEGADE" class="title-label" />
+            
+            <ui:Button name="BtnCampaign" text="CAMPAIGN" class="menu-button" />
+            <ui:Button name="BtnGarage" text="GARAGE" class="menu-button" />
+            <ui:Button name="BtnSettings" text="SETTINGS" class="menu-button" />
+            <ui:Button name="BtnExit" text="EXIT" class="menu-button" />
+        </ui:VisualElement>
+        
+        <!-- Optional overlay gradient for readability -->
+        <ui:VisualElement class="vignette-overlay" />
+    </ui:VisualElement>
+
+</ui:UXML>

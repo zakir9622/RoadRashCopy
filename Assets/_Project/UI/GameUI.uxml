@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:ui="UnityEngine.UIElements"
+    xmlns:editor="UnityEditor.UIElements"
+    xsi:noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd">
+    
+    <ui:Style src="GameUI.uss" />
+
+    <ui:VisualElement class="hud-container">
+        <!-- Top Left: Position & Lap -->
+        <ui:VisualElement class="top-left-panel panel">
+            <ui:Label text="POS" class="label-small" />
+            <ui:Label name="PositionLabel" text="1 / 8" class="label-large accent-color" />
+            <ui:Label text="LAP" class="label-small mt-2" />
+            <ui:Label name="LapLabel" text="1 / 3" class="label-medium" />
+        </ui:VisualElement>
+
+        <!-- Top Right: Score / Bounty -->
+        <ui:VisualElement class="top-right-panel panel">
+            <ui:Label text="BOUNTY" class="label-small" />
+            <ui:Label name="BountyLabel" text="$0" class="label-medium text-right" />
+        </ui:VisualElement>
+
+        <!-- Bottom Right: Speedometer -->
+        <ui:VisualElement class="bottom-right-panel panel">
+            <ui:Label name="SpeedLabel" text="0" class="label-xlarge" />
+            <ui:Label text="KM/H" class="label-small text-right" />
+            <ui:Label name="GearLabel" text="N" class="label-medium text-right mt-1 accent-color" />
+        </ui:VisualElement>
+
+        <!-- Bottom Left: Health -->
+        <ui:VisualElement class="bottom-left-panel panel">
+            <ui:Label text="BIKE CONDITION" class="label-small" />
+            <ui:VisualElement class="health-bar-bg mt-1">
+                <ui:VisualElement name="HealthBarFill" class="health-bar-fill" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Center: Rear View Mirror (Placeholder for render texture) -->
+        <ui:VisualElement class="rear-view-mirror panel">
+            <ui:Label text="REAR VIEW" class="label-small center-text" />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>
