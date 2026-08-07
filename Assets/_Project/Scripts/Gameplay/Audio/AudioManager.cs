@@ -62,6 +62,7 @@ namespace HighwayRenegade.Gameplay.Audio
             _engineSource.clip = _engineClip;
             _engineSource.spatialBlend = 0f;
             if (_engineClip != null) _engineSource.Play();
+        }
 
         public void PlaySfx(AudioClip clip, Vector3 position, float volume = 1f, float pitch = 1f)
         {

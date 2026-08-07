@@ -15,7 +15,9 @@ namespace HighwayRenegade.Platform
         private static AndroidHaptics _instance;
         public static AndroidHaptics Instance => _instance;
 
+#pragma warning disable 0414
         private bool _isAndroid;
+#pragma warning restore 0414
 #if UNITY_ANDROID && !UNITY_EDITOR
         private AndroidJavaObject _vibrator;
         private AndroidJavaClass _vibrationEffectClass;
