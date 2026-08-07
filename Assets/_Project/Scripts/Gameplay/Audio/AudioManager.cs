@@ -14,6 +14,12 @@ namespace HighwayRenegade.Gameplay.Audio
         private const int PoolSize = 20;
         private List<AudioSource> _sfxPool;
         private AudioSource _musicSource;
+        private AudioSource _engineSource;
+        
+        [Header("Engine Audio Settings")]
+        [SerializeField] private AudioClip _engineClip;
+        [SerializeField] private float _basePitch = 0.5f;
+        [SerializeField] private float _pitchMultiplier = 1.2f;
 
         private void Awake()
         {
@@ -47,7 +53,15 @@ namespace HighwayRenegade.Gameplay.Audio
             _musicSource.playOnAwake = false;
             _musicSource.spatialBlend = 0f; // 2D sound
             _musicSource.loop = true;
-        }
+
+            var engineGo = new GameObject("Engine_Source");
+            engineGo.transform.SetParent(transform);
+            _engineSource = engineGo.AddComponent<AudioSource>();
+            _engineSource.playOnAwake = true;
+            _engineSource.loop = true;
+            _engineSource.clip = _engineClip;
+            _engineSource.spatialBlend = 0f;
+            if (_engineClip != null) _engineSource.Play();
 
         public void PlaySfx(AudioClip clip, Vector3 position, float volume = 1f, float pitch = 1f)
         {
@@ -82,6 +96,19 @@ namespace HighwayRenegade.Gameplay.Audio
         public void StopMusic()
         {
             _musicSource.Stop();
+        }
+
+        public void UpdateEngineAudio(float rpmFraction, int gear)
+        {
+            if (_engineSource == null || !_engineSource.isPlaying) return;
+
+            // Simulate transmission: pitch drops when shifting up, rises with RPM
+            float gearFactor = 1f + (gear * 0.1f);
+            float targetPitch = _basePitch + (rpmFraction * _pitchMultiplier * gearFactor);
+            
+            // Smoothly interpolate pitch to simulate engine inertia
+            _engineSource.pitch = Mathf.Lerp(_engineSource.pitch, targetPitch, Time.deltaTime * 10f);
+            _engineSource.volume = Core.App.SettingsManager.Current.SfxVolume * (0.5f + (rpmFraction * 0.5f));
         }
     }
 }

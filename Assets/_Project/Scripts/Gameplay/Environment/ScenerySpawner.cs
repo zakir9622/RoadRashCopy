@@ -16,6 +16,9 @@ namespace HighwayRenegade.Gameplay.Environment
         [Tooltip("Prefab for road signs or barriers.")]
         [SerializeField] private GameObject _signPrefab;
 
+        [Tooltip("Prefab for dynamic biological obstacles (Cows, Pedestrians).")]
+        [SerializeField] private GameObject _livestockPrefab;
+
         [Tooltip("Density of scenery objects per 100 meters of track.")]
         [SerializeField] private int _densityPer100m = 15;
 
@@ -53,9 +56,18 @@ namespace HighwayRenegade.Gameplay.Environment
 
                 Vector3 finalPos = pos + (right * lateralOffset);
 
-                // Alternate between tree and sign if both exist
-                GameObject prefab = (_treePrefab != null && Random.value > 0.2f) ? _treePrefab : _signPrefab;
-                if (prefab == null) prefab = _treePrefab != null ? _treePrefab : _signPrefab;
+                // Alternate between tree, sign, and livestock
+                GameObject prefab = null;
+                float rnd = Random.value;
+                if (rnd > 0.9f && _livestockPrefab != null)
+                {
+                    prefab = _livestockPrefab;
+                    // Livestock might wander onto the track slightly
+                    finalPos = pos + (right * (isRightSide ? 3f : -3f));
+                }
+                else if (rnd > 0.2f && _treePrefab != null) prefab = _treePrefab;
+                else if (_signPrefab != null) prefab = _signPrefab;
+                else prefab = _treePrefab;
 
                 if (prefab != null)
                 {

@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using UnityEngine;
 using HighwayRenegade.Core.Progression;
 
@@ -74,10 +76,11 @@ namespace HighwayRenegade.Gameplay.Progression
 
             try
             {
-                string json = JsonUtility.ToJson(data, prettyPrint: true);
+                string json = JsonUtility.ToJson(data, prettyPrint: false);
+                string encrypted = Encrypt(json);
 
                 // 1. Write to a temp file. A crash here loses nothing.
-                File.WriteAllText(TempPath, json);
+                File.WriteAllText(TempPath, encrypted);
 
                 // 2. Keep the previous save as a backup before replacing it.
                 if (File.Exists(SavePath))
@@ -113,8 +116,11 @@ namespace HighwayRenegade.Gameplay.Progression
             {
                 if (!File.Exists(path)) return null;
 
-                string json = File.ReadAllText(path);
-                if (string.IsNullOrWhiteSpace(json)) return null;
+                string encrypted = File.ReadAllText(path);
+                if (string.IsNullOrWhiteSpace(encrypted)) return null;
+
+                string json = Decrypt(encrypted);
+                if (string.IsNullOrEmpty(json)) return null; // Decryption failed
 
                 return JsonUtility.FromJson<SaveData>(json);
             }
@@ -129,6 +135,62 @@ namespace HighwayRenegade.Gameplay.Progression
         {
             try { if (File.Exists(path)) File.Delete(path); }
             catch (Exception e) { Debug.LogWarning($"[Save] Could not delete '{path}': {e.Message}"); }
+        }
+
+        // --- AES Encryption ---
+        private static readonly byte[] Key = Encoding.UTF8.GetBytes("HR3n3g4d3_K3y_1234567890123456"); // 32 bytes
+        private static readonly byte[] IV = Encoding.UTF8.GetBytes("HR3n3g4d3_IV_123"); // 16 bytes
+
+        private static string Encrypt(string plainText)
+        {
+            using (Aes aesAlg = Aes.Create())
+            {
+                aesAlg.Key = Key;
+                aesAlg.IV = IV;
+                ICryptoTransform encryptor = aesAlg.CreateEncryptor(aesAlg.Key, aesAlg.IV);
+                using (MemoryStream msEncrypt = new MemoryStream())
+                {
+                    using (CryptoStream csEncrypt = new CryptoStream(msEncrypt, encryptor, CryptoStreamMode.Write))
+                    {
+                        using (StreamWriter swEncrypt = new StreamWriter(csEncrypt))
+                        {
+                            swEncrypt.Write(plainText);
+                        }
+                        return Convert.ToBase64String(msEncrypt.ToArray());
+                    }
+                }
+            }
+        }
+
+        private static string Decrypt(string cipherText)
+        {
+            try 
+            {
+                // Simple check if it's already plain JSON (migration fallback)
+                if (cipherText.TrimStart().StartsWith("{")) return cipherText;
+
+                byte[] cipherBytes = Convert.FromBase64String(cipherText);
+                using (Aes aesAlg = Aes.Create())
+                {
+                    aesAlg.Key = Key;
+                    aesAlg.IV = IV;
+                    ICryptoTransform decryptor = aesAlg.CreateDecryptor(aesAlg.Key, aesAlg.IV);
+                    using (MemoryStream msDecrypt = new MemoryStream(cipherBytes))
+                    {
+                        using (CryptoStream csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read))
+                        {
+                            using (StreamReader srDecrypt = new StreamReader(csDecrypt))
+                            {
+                                return srDecrypt.ReadToEnd();
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }

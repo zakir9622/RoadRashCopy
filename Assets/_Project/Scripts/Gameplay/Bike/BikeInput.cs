@@ -29,6 +29,9 @@ namespace HighwayRenegade.Gameplay.Bike
         /// </summary>
         public int AttackSide;
 
+        /// <summary>Nitrous Oxide boost requested this frame.</summary>
+        public bool Nitrous;
+
         public static readonly BikeInput Neutral = default;
     }
 }

@@ -50,6 +50,12 @@ namespace HighwayRenegade.Gameplay.Bike
         [Tooltip("Real engine and gearbox data. Torque comes from RPM, not from speed.")]
         [SerializeField] private EngineSpec _engine = EngineSpec.Superbike;
         [SerializeField] private bool _automaticGearbox = true;
+        
+        [Header("Nitrous Oxide")]
+        [SerializeField] private float _nitrousForce = 20000f;
+        [SerializeField] private float _maxNitrousTime = 3f;
+        private float _remainingNitrous;
+        private bool _isNitrousActive;
 
         [Header("Tyres")]
         [SerializeField] private TyreSpec _frontTyre = TyreSpec.SportRoad;
@@ -203,6 +209,7 @@ namespace HighwayRenegade.Gameplay.Bike
                 _engine = EngineSpec.Superbike;
 
             _topSpeed = Mathf.Max(10f, Powertrain.TopSpeedInGear(_engine, _engine.GearRatios.Length - 1));
+            _remainingNitrous = _maxNitrousTime;
 
             if (_frontWheel == null || _rearWheel == null)
                 Debug.LogError("[Bike] Front and rear wheel transforms must be assigned.", this);
@@ -217,6 +224,16 @@ namespace HighwayRenegade.Gameplay.Bike
 
             Vector3 velocity = _rb.linearVelocity;
             _forwardSpeed = Vector3.Dot(transform.forward, velocity);
+
+            if (_input.Nitrous && _remainingNitrous > 0f)
+            {
+                _isNitrousActive = true;
+                _remainingNitrous -= dt;
+            }
+            else
+            {
+                _isNitrousActive = false;
+            }
 
             UpdatePowertrain();
             UpdateSteering(NormalisedSpeed, dt);
@@ -416,6 +433,11 @@ namespace HighwayRenegade.Gameplay.Bike
 
                 float driveForce = Powertrain.DriveForce(_engine, _forwardSpeed, _gear, _input.Throttle);
 
+                if (_isNitrousActive)
+                {
+                    driveForce += _nitrousForce;
+                }
+
                 if (_input.Brake > 0.01f && Mathf.Abs(_forwardSpeed) > 0.4f)
                     driveForce -= Mathf.Sign(_forwardSpeed) * _maxBrakeForce
                                   * (1f - _frontBrakeBias) * _input.Brake;
@@ -424,6 +446,10 @@ namespace HighwayRenegade.Gameplay.Bike
                 // or lock-up, not extra thrust. Traction control then caps it further -
                 // strictly below the physical limit, never above.
                 float maxLongitudinal = TyreModel.FrictionAtLoad(tyre, normalLoad, _surfaceMu) * normalLoad;
+                
+                // Allow nitrous to slightly exceed normal friction limits for arcade feel
+                if (_isNitrousActive) maxLongitudinal *= 2f; 
+                
                 float clamped = RidingAssists.LimitDriveForce(driveForce, maxLongitudinal, _assists);
 
                 longitudinalUsage = maxLongitudinal > 1f ? Mathf.Abs(clamped) / maxLongitudinal : 0f;
