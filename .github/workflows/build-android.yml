@@ -52,14 +52,44 @@ jobs:
             Library-android-
             Library-
 
+      - name: Verify Secret Availability
+        run: |
+          echo "=========================================="
+          echo "   GAME-CI LICENSE SECRET DIAGNOSTICS     "
+          echo "=========================================="
+          if [ -n "${{ secrets.UNITY_LICENSE || secrets.UNITY_LICENCE || secrets.UNITY_LICENSE_FILE }}" ]; then
+            echo "✅ UNITY_LICENSE: FOUND (Personal/Plus .ulf XML string)"
+          else
+            echo "❌ UNITY_LICENSE: NOT FOUND in Repository Secrets"
+          fi
+          
+          if [ -n "${{ secrets.UNITY_SERIAL || secrets.UNITY_SERIAL_KEY || secrets.UNITY_KEY }}" ]; then
+            echo "✅ UNITY_SERIAL: FOUND"
+          else
+            echo "❌ UNITY_SERIAL: NOT FOUND in Repository Secrets"
+          fi
+          
+          if [ -n "${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}" ]; then
+            echo "✅ UNITY_EMAIL: FOUND"
+          else
+            echo "❌ UNITY_EMAIL: NOT FOUND in Repository Secrets"
+          fi
+
+          if [ -n "${{ secrets.UNITY_PASSWORD }}" ]; then
+            echo "✅ UNITY_PASSWORD: FOUND"
+          else
+            echo "❌ UNITY_PASSWORD: NOT FOUND in Repository Secrets"
+          fi
+          echo "=========================================="
+
       - name: Unity Android Builder
         uses: game-ci/unity-builder@v4
         id: unity_builder
         env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE || secrets.UNITY_LICENCE || secrets.UNITY_LICENSE_FILE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL || secrets.UNITY_SERIAL_KEY || secrets.UNITY_KEY }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
           ANDROID_KEYALIAS_NAME: ${{ secrets.ANDROID_KEYALIAS_NAME }}
