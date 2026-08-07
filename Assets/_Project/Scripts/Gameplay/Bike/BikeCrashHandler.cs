@@ -162,9 +162,13 @@ namespace HighwayRenegade.Gameplay.Bike
             // Play massive sparks & debris on crash
             HighwayRenegade.Gameplay.Environment.VFXManager.Instance?.PlaySparks(transform.position, Vector3.up);
 
-            // Play sound effect
-            // If audio manager is available, trigger impact SFX
-            
+            // Impact audio. Scaled by severity so a tip-over and a wipeout do not land
+            // with identical weight - the sound is the fastest read the player gets on how
+            // badly that went.
+            float loudness = severity == CrashSeverity.Wipeout ? 1f
+                           : (severity == CrashSeverity.Major ? 0.65f : 0.35f);
+            HighwayRenegade.Gameplay.Audio.AudioManager.Instance?.PlayCrash(transform.position, loudness);
+
             // Micro-freeze hit-stop for impactful feeling
             StartCoroutine(DoHitStop(severity));
 

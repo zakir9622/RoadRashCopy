@@ -138,6 +138,10 @@ namespace HighwayRenegade.Gameplay.Combat
             Vector3 impactPoint = (transform.position + victim.transform.position) * 0.5f;
             HighwayRenegade.Gameplay.Environment.VFXManager.Instance?.PlaySparks(impactPoint, -shove.normalized);
 
+            // Landing a blow was previously silent, which left combat with no audible
+            // confirmation at all - at speed the sparks alone are easy to miss.
+            HighwayRenegade.Gameplay.Audio.AudioManager.Instance?.PlayHit(impactPoint);
+
             // Handlebar strike induces steering deflection on victim
             if (hitZone == 1 && victim.TryGetComponent(out Rigidbody victimRb))
             {
