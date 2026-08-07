@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using UnityEditor;
+using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -96,9 +97,11 @@ namespace HighwayRenegade.Editor
             PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel35;
 
             // Play Store requires a 64-bit binary; IL2CPP is required for ARM64.
+            // NamedBuildTarget is the Unity 6 API — the BuildTargetGroup overloads are obsolete.
+            var androidTarget = NamedBuildTarget.Android;
             PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-            PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
-            PlayerSettings.SetIl2CppCompilerConfiguration(BuildTargetGroup.Android, Il2CppCompilerConfiguration.Release);
+            PlayerSettings.SetScriptingBackend(androidTarget, ScriptingImplementation.IL2CPP);
+            PlayerSettings.SetIl2CppCompilerConfiguration(androidTarget, Il2CppCompilerConfiguration.Release);
 
             EditorUserBuildSettings.buildAppBundle = appBundle;
             EditorUserBuildSettings.androidBuildSubtarget = MobileTextureSubtarget.ASTC;
