@@ -151,6 +151,29 @@ namespace HighwayRenegade.Gameplay.Progression
             SaveService.Save(_save);
         }
 
+        public void OnPlayerBusted()
+        {
+            SaveData save = SaveService.Load();
+            int fine = 200;
+            
+            save.PlayerCash -= fine;
+            if (save.PlayerCash < 0)
+            {
+                save.PlayerCash = 0;
+                Debug.LogError("[CampaignSession] GAME OVER! Player couldn't pay the police fine.");
+                // Transition to Game Over screen in real implementation
+            }
+            else
+            {
+                Debug.Log($"[CampaignSession] Player BUSTED! Paid ${fine} fine. Remaining cash: ${save.PlayerCash}");
+            }
+            
+            SaveService.Save(save);
+            
+            // End race
+            HighwayRenegade.Core.App.GameStateManager.ChangeState(HighwayRenegade.Core.App.GameState.PostRace);
+        }
+
         /// <summary>
         /// Folds the race into every rival's permanent record, then advances the campaign
         /// if this event was won.
