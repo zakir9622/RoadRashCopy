@@ -10,7 +10,13 @@ namespace HighwayRenegade.Core.App
         Garage,
         LoadingRace,
         Racing,
-        PostRace
+        PostRace,
+
+        /// <summary>
+        /// The run is over: the bike is wrecked and the repair is unaffordable. Distinct
+        /// from PostRace because it is terminal - there is no "next race" to go to.
+        /// </summary>
+        GameOver
     }
 
     /// <summary>

@@ -96,6 +96,12 @@ namespace HighwayRenegade.Core.Progression
         /// <summary>Whether gyroscope tilt steering is enabled.</summary>
         public bool GyroSteering = false;
 
+        /// <summary>
+        /// Condition of the current bike, 0..1. Crashing degrades it, repairs cost money,
+        /// and a wrecked bike you cannot afford to fix ends the run. See RepairRules.
+        /// </summary>
+        public float BikeCondition = RepairRules.PristineCondition;
+
         /// <summary>Cost to purchase the next stage of an upgrade (0-5).</summary>
         public static int UpgradeCost(int currentStage) => (currentStage + 1) * 600;
 
@@ -184,6 +190,12 @@ namespace HighwayRenegade.Core.Progression
             data.ArmorStage = Math.Max(0, Math.Min(5, data.ArmorStage));
             data.EquippedWeapon = Math.Max(0, Math.Min(2, data.EquippedWeapon));
             data.AssistSetting = Math.Max(0, Math.Min(2, data.AssistSetting));
+
+            // A save written before bike condition existed deserialises the field as 0,
+            // which would read as a wrecked bike and strand the player behind a repair
+            // bill for damage they never did. Treat "absent" as pristine.
+            if (data.BikeCondition <= 0f) data.BikeCondition = RepairRules.PristineCondition;
+            else if (data.BikeCondition > 1f) data.BikeCondition = RepairRules.PristineCondition;
 
             for (int i = 0; i < data.Rivals.Count; i++)
             {

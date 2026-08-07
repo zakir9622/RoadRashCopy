@@ -28,9 +28,12 @@ namespace HighwayRenegade.Gameplay.Environment
             _highwayGenerator = GetComponent<SplineHighwayGenerator>();
         }
 
+        // NOTE: this duplicates ScenerySpawner, which scatters the same kind of props
+        // along the same spline. Running both on one track double-populates the shoulders.
+        // Left in place because scenes may reference either, but they should be merged.
         private void Update()
         {
-            if (_highwayGenerator.Spline == null || _sceneryPrefabs == null || _sceneryPrefabs.Length == 0) return;
+            if (_highwayGenerator.Spline == null) return;
 
             // Basic implementation: spawn props along the generated spline
             // In a real scenario, this would chunk the terrain and use object pooling.
@@ -58,8 +61,13 @@ namespace HighwayRenegade.Gameplay.Environment
         {
             if (_activeScenery.ContainsKey(id)) return;
 
-            GameObject prefab = _sceneryPrefabs[Random.Range(0, _sceneryPrefabs.Length)];
+            GameObject prefab = _sceneryPrefabs != null && _sceneryPrefabs.Length > 0
+                ? _sceneryPrefabs[Random.Range(0, _sceneryPrefabs.Length)]
+                : PlaceholderArt.CreateTreeTemplate();
+            if (prefab == null) return;
+
             GameObject prop = Instantiate(prefab, position, Quaternion.Euler(0, Random.Range(0f, 360f), 0));
+            prop.SetActive(true);   // templates are inactive by design
             _activeScenery.Add(id, prop);
         }
     }

@@ -29,7 +29,14 @@ namespace HighwayRenegade.Gameplay.Environment
 
         private void SpawnInitialTraffic()
         {
-            if (_vehiclePrefab == null || _spline == null) return;
+            if (_spline == null) return;
+
+            // No prefab assigned is the normal case until real art exists, and returning
+            // early here used to leave the road completely empty with no warning.
+            TrafficVehicle prefab = _vehiclePrefab != null
+                ? _vehiclePrefab
+                : PlaceholderArt.CreateTrafficVehicleTemplate();
+            if (prefab == null) return;
 
             // Simple distribution along the track
             float interval = _spline.TotalLength / (float)_initialVehicleCount;
@@ -44,7 +51,8 @@ namespace HighwayRenegade.Gameplay.Environment
                 float laneOffset = oncoming ? _laneOffsets[0] : _laneOffsets[1];
                 float speed = Random.Range(10f, 20f);
 
-                var instance = Instantiate(_vehiclePrefab, transform);
+                var instance = Instantiate(prefab, transform);
+                instance.gameObject.SetActive(true);   // templates are inactive by design
                 instance.Initialize(_spline, distance, oncoming, laneOffset, speed);
                 _vehicles.Add(instance);
             }

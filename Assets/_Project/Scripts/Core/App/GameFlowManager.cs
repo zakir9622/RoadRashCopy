@@ -14,9 +14,11 @@ namespace HighwayRenegade.Core.App
         public static GameFlowManager Instance { get; private set; }
 
         [Header("Scenes")]
-        [SerializeField] private string _mainMenuScene = "MainMenu";
-        [SerializeField] private string _garageScene = "Garage";
-        [SerializeField] private string _raceScene = "TestRace"; // Using placeholder for now
+        [Tooltip("Defaults come from SceneNames so they cannot drift from the scenes that " +
+                 "actually exist. Override only to point at a different build.")]
+        [SerializeField] private string _mainMenuScene = SceneNames.MainMenu;
+        [SerializeField] private string _garageScene = SceneNames.Garage;
+        [SerializeField] private string _raceScene = SceneNames.Race;
 
         private void Awake()
         {
@@ -80,12 +82,25 @@ namespace HighwayRenegade.Core.App
                 yield break;
             }
 
-            // Could transition to a loading screen UI here
-            var asyncLoad = SceneManager.LoadSceneAsync(sceneName);
-            while (asyncLoad != null && !asyncLoad.isDone)
+            // A scene missing from the build settings makes LoadSceneAsync return null
+            // after logging its own error. The old code then fell straight through to
+            // ChangeState, so the game believed it was in the menu while the previous
+            // scene was still loaded and running - a desync with no obvious cause.
+            if (!Application.CanStreamedLevelBeLoaded(sceneName))
             {
-                yield return null;
+                Debug.LogError($"[GameFlow] Scene '{sceneName}' is not in the build settings. " +
+                               "Staying put rather than desyncing game state from the loaded scene.", this);
+                yield break;
             }
+
+            var asyncLoad = SceneManager.LoadSceneAsync(sceneName);
+            if (asyncLoad == null)
+            {
+                Debug.LogError($"[GameFlow] Failed to begin loading '{sceneName}'.", this);
+                yield break;
+            }
+
+            while (!asyncLoad.isDone) yield return null;
 
             GameStateManager.ChangeState(targetState);
         }

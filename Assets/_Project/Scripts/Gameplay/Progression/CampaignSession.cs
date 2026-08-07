@@ -78,6 +78,10 @@ namespace HighwayRenegade.Gameplay.Progression
             if (player != null && player.TryGetComponent(out BikeCrashHandler playerCrash))
             {
                 playerCrash.Crashed += (severity, source) => {
+                    // Going down costs the bike, not just time. This is what makes a race
+                    // a wager rather than a free attempt.
+                    _save.BikeCondition = RepairRules.ApplyCrashDamage(_save.BikeCondition, severity);
+
                     if (source != null)
                     {
                         var rival = source.GetComponentInParent<RivalAIController>();
@@ -156,27 +160,73 @@ namespace HighwayRenegade.Gameplay.Progression
             SaveService.Save(_save);
         }
 
+        /// <summary>
+        /// Busted by the police: the race ends and the fine comes out of the balance.
+        ///
+        /// Operates on the live session save rather than reloading from disk. The old code
+        /// called SaveService.Load(), fined that copy and wrote it back, which silently
+        /// discarded everything this race had accumulated - grudges, wreck counts, bike
+        /// damage - because the in-memory _save was never the object being saved.
+        /// </summary>
         public void OnPlayerBusted()
         {
-            SaveData save = SaveService.Load();
-            int fine = 200;
-            
-            save.Currency -= fine;
-            if (save.Currency < 0)
+            int fine = RaceRules.BustedPenalty(_save.Currency);
+            _save.Currency -= fine;
+            if (_save.Currency < 0) _save.Currency = 0;
+
+            Debug.Log($"[CampaignSession] Player BUSTED. Fine ${fine}. Remaining: ${_save.Currency}.");
+
+            _resultRecorded = true;      // a bust is a result: no prize money, no re-entry
+            SaveService.Save(_save);
+
+            HighwayRenegade.Core.App.GameStateManager.ChangeState(
+                IsGameOver ? HighwayRenegade.Core.App.GameState.GameOver
+                           : HighwayRenegade.Core.App.GameState.PostRace);
+        }
+
+        /// <summary>
+        /// True when the player cannot get back on the road: the bike is wrecked and the
+        /// repair is unaffordable. This is Road Rash's actual fail state - you lose by
+        /// going broke, not by losing a race.
+        /// </summary>
+        public bool IsGameOver =>
+            _save != null && RepairRules.IsGameOver(_save.Currency, _save.BikeCondition, CurrentBikeValue);
+
+        /// <summary>Shop price of the bike currently being ridden, for scaling repairs.</summary>
+        public int CurrentBikeValue
+        {
+            get
             {
-                save.Currency = 0;
-                Debug.LogError("[CampaignSession] GAME OVER! Player couldn't pay the police fine.");
-                // Transition to Game Over screen in real implementation
+                BikeDef def = _save != null ? BikeShop.GetBike(_save.BikeId) : null;
+                return def != null ? def.Price : 0;
             }
-            else
-            {
-                Debug.Log($"[CampaignSession] Player BUSTED! Paid ${fine} fine. Remaining cash: ${save.Currency}");
-            }
-            
-            SaveService.Save(save);
-            
-            // End race
-            HighwayRenegade.Core.App.GameStateManager.ChangeState(HighwayRenegade.Core.App.GameState.PostRace);
+        }
+
+        /// <summary>Cost to restore the current bike to pristine.</summary>
+        public int RepairCost => _save != null
+            ? RepairRules.RepairCost(_save.BikeCondition, CurrentBikeValue)
+            : 0;
+
+        /// <summary>
+        /// Buys as much repair as the player can afford and returns what it cost. A player
+        /// who cannot cover a full repair still gets partial value rather than a hard wall.
+        /// </summary>
+        public int RepairBike()
+        {
+            if (_save == null) return 0;
+
+            float target = RepairRules.AffordableCondition(_save.Currency, _save.BikeCondition, CurrentBikeValue);
+            if (target <= _save.BikeCondition) return 0;
+
+            // Charge for the repair actually performed, not the full bill.
+            int spent = RepairRules.RepairCost(_save.BikeCondition, CurrentBikeValue)
+                      - RepairRules.RepairCost(target, CurrentBikeValue);
+            if (spent > _save.Currency) spent = _save.Currency;
+
+            _save.Currency -= spent;
+            _save.BikeCondition = target;
+            SaveService.Save(_save);
+            return spent;
         }
 
         /// <summary>

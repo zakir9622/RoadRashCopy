@@ -24,7 +24,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             // Transition to Race Scene
             if (SceneLoader.Instance != null)
             {
-                SceneLoader.Instance.LoadSceneAsync("TestTrack", GameState.Racing);
+                SceneLoader.Instance.LoadSceneAsync(SceneNames.Race, GameState.Racing);
             }
         }
 
