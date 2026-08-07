@@ -36,6 +36,27 @@ namespace HighwayRenegade.Gameplay.UI
         private int _lastFps = int.MinValue;
         private string _fpsText = "";
 
+        // Race overlay strings, cached on the same principle as speed and FPS. The first
+        // version of DrawRaceOverlay built these with string interpolation every OnGUI
+        // call; a PlayMode allocation test caught it producing megabytes per few seconds.
+        private int _lastPosition = int.MinValue;
+        private int _lastRacerCount = int.MinValue;
+        private string _positionText = "";
+
+        private int _lastMetres = int.MinValue;
+        private string _distanceText = "";
+
+        private int _lastCountdown = int.MinValue;
+        private string _countdownText = "";
+
+        private string _resultsText;
+
+        private string _diagText;
+        private int _lastSlipBucket = int.MinValue;
+        private bool _lastGrounded;
+        private ThermalTier _lastTier = (ThermalTier)(-1);
+        private string _lastDiagFps = "";
+
         private float _fpsAccumulator;
         private int _fpsFrames;
         private float _fpsTimer;
@@ -104,11 +125,29 @@ namespace HighwayRenegade.Gameplay.UI
 
             if (!_showDiagnostics) return;
 
+            // Rebuilt only when a displayed value actually changes at display precision.
+            // Slip is rounded to 5 degrees so a constantly-jittering angle does not defeat
+            // the cache and reintroduce a per-frame allocation.
+            int slipBucket = Mathf.RoundToInt(_bike.SlipAngle / 5f);
+            bool grounded = _bike.IsGrounded;
+            var tier = _thermal != null ? _thermal.CurrentTier : (ThermalTier)(-1);
+
+            if (_diagText == null || slipBucket != _lastSlipBucket
+                || grounded != _lastGrounded || tier != _lastTier || _fpsText != _lastDiagFps)
+            {
+                _lastSlipBucket = slipBucket;
+                _lastGrounded = grounded;
+                _lastTier = tier;
+                _lastDiagFps = _fpsText;
+
+                _diagText = "FPS " + _fpsText
+                          + "\nThermal " + (_thermal != null ? tier.ToString() : "n/a")
+                          + "\nGrounded " + (grounded ? "yes" : "no")
+                          + "\nSlip " + (slipBucket * 5) + " deg";
+            }
+
             var diagRect = new Rect(Screen.width - 300f * scale, margin, 270f * scale, 130f * scale);
-            string thermal = _thermal != null ? _thermal.CurrentTier.ToString() : "n/a";
-            GUI.Label(diagRect,
-                $"FPS {_fpsText}\nThermal {thermal}\nGrounded {(_bike.IsGrounded ? "yes" : "no")}\nSlip {_bike.SlipAngle:F0}°",
-                _labelStyle);
+            GUI.Label(diagRect, _diagText, _labelStyle);
         }
 
         /// <summary>
@@ -123,36 +162,64 @@ namespace HighwayRenegade.Gameplay.UI
 
             if (phase == HighwayRenegade.Core.Race.RacePhase.Racing && _race.PlayerPosition > 0)
             {
+                int pos = _race.PlayerPosition;
+                int count = _race.RacerCount;
+                if (pos != _lastPosition || count != _lastRacerCount)
+                {
+                    _lastPosition = pos;
+                    _lastRacerCount = count;
+                    _positionText = "P" + pos + "/" + count;
+                }
+
+                int metres = Mathf.RoundToInt(_race.PlayerDistanceRemaining());
+                if (metres != _lastMetres)
+                {
+                    _lastMetres = metres;
+                    _distanceText = metres + " m to go";
+                }
+
                 var posRect = new Rect(Screen.width * 0.5f - 150f * scale, margin, 300f * scale, 70f * scale);
                 var prev = GUI.color;
                 GUI.color = new Color(0.95f, 0.95f, 1f);
-                GUI.Label(posRect, $"P{_race.PlayerPosition}/{_race.RacerCount}", _speedStyle);
+                GUI.Label(posRect, _positionText, _speedStyle);
                 GUI.color = prev;
 
                 var distRect = new Rect(posRect.x, posRect.yMax + 4f * scale, 320f * scale, 40f * scale);
-                GUI.Label(distRect, $"{Mathf.RoundToInt(_race.PlayerDistanceRemaining())} m to go", _labelStyle);
+                GUI.Label(distRect, _distanceText, _labelStyle);
             }
 
             if (phase == HighwayRenegade.Core.Race.RacePhase.Countdown)
             {
                 int n = _race.CountdownRemaining;
+                if (n != _lastCountdown)
+                {
+                    _lastCountdown = n;
+                    _countdownText = n > 0 ? n.ToString() : "GO";
+                }
+
                 var rect = new Rect(Screen.width * 0.5f - 200f * scale,
                                     Screen.height * 0.5f - 90f * scale, 400f * scale, 180f * scale);
                 var prev = GUI.color;
                 GUI.color = n > 0 ? new Color(1f, 0.85f, 0.2f) : new Color(0.3f, 1f, 0.35f);
-                GUI.Label(rect, n > 0 ? n.ToString() : "GO", _speedStyle);
+                GUI.Label(rect, _countdownText, _speedStyle);
                 GUI.color = prev;
             }
 
             if (phase == HighwayRenegade.Core.Race.RacePhase.Finished)
             {
+                // Results are fixed the moment the race ends, so build the string once.
+                if (_resultsText == null)
+                {
+                    _resultsText = "FINISHED   P" + _race.PlayerPosition
+                                 + "\n" + _race.RaceTime.ToString("F1") + " s"
+                                 + "\nPrize $" + _race.PlayerPrize;
+                }
+
                 var rect = new Rect(Screen.width * 0.5f - 260f * scale,
                                     Screen.height * 0.4f, 520f * scale, 220f * scale);
                 var prev = GUI.color;
                 GUI.color = new Color(1f, 0.9f, 0.4f);
-                GUI.Label(rect,
-                    $"FINISHED   P{_race.PlayerPosition}\n{_race.RaceTime:F1} s\nPrize ${_race.PlayerPrize}",
-                    _labelStyle);
+                GUI.Label(rect, _resultsText, _labelStyle);
                 GUI.color = prev;
             }
         }

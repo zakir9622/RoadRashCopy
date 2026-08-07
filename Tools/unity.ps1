@@ -24,6 +24,9 @@ param(
     [string]$EditorRoot  = 'D:\Unity\Editors',
     [string]$Version     = '6000.0.81f1',
 
+    [ValidateSet('EditMode', 'PlayMode')]
+    [string]$TestPlatform = 'EditMode',
+
     [switch]$Apk,
     [string]$LicenseFile,
     [int]$TimeoutMinutes = 60
@@ -123,19 +126,24 @@ if ($Mode -eq 'compile') {
 }
 
 if ($Mode -eq 'test') {
-    $log = Join-Path $logDir 'test.log'
-    $results = Join-Path $logDir 'editmode-results.xml'
+    $log = Join-Path $logDir ($TestPlatform.ToLower() + '-test.log')
+    $results = Join-Path $logDir ($TestPlatform.ToLower() + '-results.xml')
     if (Test-Path $results) { Remove-Item $results -Force }
+
+    # PlayMode tests need a real player loop, so -nographics is omitted for them.
+    # Under -nographics the editor skips rendering and some PlayMode setup, which makes
+    # scene-loading tests behave differently from a real run.
+    $baseArgs = @('-batchmode')
+    if ($TestPlatform -eq 'EditMode') { $baseArgs += '-nographics' }
 
     # No -quit here. It would terminate the editor before the test runner writes
     # results, producing an empty file and a silent false pass.
-    $code = Invoke-Unity @(
-        '-batchmode', '-nographics',
+    $code = Invoke-Unity ($baseArgs + @(
         '-projectPath', $ProjectPath,
-        '-runTests', '-testPlatform', 'EditMode',
+        '-runTests', '-testPlatform', $TestPlatform,
         '-testResults', $results,
         '-logFile', $log
-    ) $log
+    )) $log
 
     Show-LogDiagnostics $log | Out-Null
 
