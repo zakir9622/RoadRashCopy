@@ -4,8 +4,10 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using HighwayRenegade.Gameplay.AI;
 using HighwayRenegade.Gameplay.Bike;
 using HighwayRenegade.Gameplay.CameraRig;
+using HighwayRenegade.Gameplay.UI;
 using HighwayRenegade.Performance;
 
 namespace HighwayRenegade.Editor
@@ -45,9 +47,14 @@ namespace HighwayRenegade.Editor
             BuildLighting();
             BuildRoad();
             BuildObstacleCourse();
-            BikeController bike = BuildBike();
-            BuildCamera(bike);
-            BuildManagers();
+
+            BikeController player = BuildBike("Bike (Player)", new Vector3(0f, 1f, 0f),
+                                              new Color(0.75f, 0.18f, 0.12f));
+            player.gameObject.AddComponent<PlayerBikeInput>();
+
+            BuildRivals(player);
+            BuildCamera(player);
+            BuildManagers(player);
 
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -160,10 +167,10 @@ namespace HighwayRenegade.Editor
             }
         }
 
-        private static BikeController BuildBike()
+        private static BikeController BuildBike(string name, Vector3 position, Color colour)
         {
-            var root = new GameObject("Bike");
-            root.transform.position = new Vector3(0f, 1.0f, 0f);
+            var root = new GameObject(name);
+            root.transform.position = position;
 
             var rb = root.AddComponent<Rigidbody>();
             rb.mass = BikeMass;
@@ -187,17 +194,46 @@ namespace HighwayRenegade.Editor
             rear.SetParent(root.transform);
             rear.localPosition = new Vector3(0f, 0.15f, -0.72f);
 
-            BuildBikeVisual(root.transform, front, rear);
+            BuildBikeVisual(root.transform, front, rear, colour);
 
             var controller = root.AddComponent<BikeController>();
             AssignPrivateReferences(controller, front, rear);
-            root.AddComponent<PlayerBikeInput>();
 
             return controller;
         }
 
+        /// <summary>
+        /// Spawns the rival grid. Skill and aggression are varied per rider so the field
+        /// does not feel like three copies of one opponent — one cautious, one fast and
+        /// clean, one that starts fights unprompted.
+        /// </summary>
+        private static void BuildRivals(BikeController player)
+        {
+            var colours = new[]
+            {
+                new Color(0.20f, 0.42f, 0.80f),
+                new Color(0.92f, 0.74f, 0.16f),
+                new Color(0.34f, 0.68f, 0.32f)
+            };
+            var skills = new[] { 0.86f, 0.95f, 0.90f };
+            var aggression = new[] { 1.0f, 1.15f, 1.6f };
+
+            for (int i = 0; i < colours.Length; i++)
+            {
+                var pos = new Vector3(-6f + i * 6f, 1f, 12f + i * 5f);
+                BikeController rival = BuildBike($"Rival {i + 1}", pos, colours[i]);
+
+                var ai = rival.gameObject.AddComponent<RivalAIController>();
+                var so = new SerializedObject(ai);
+                so.FindProperty("_target").objectReferenceValue = player.transform;
+                so.FindProperty("_skill").floatValue = skills[i];
+                so.FindProperty("_baseAggression").floatValue = aggression[i];
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
+        }
+
         /// <summary>Placeholder art: a chassis block and two wheel discs.</summary>
-        private static void BuildBikeVisual(Transform root, Transform front, Transform rear)
+        private static void BuildBikeVisual(Transform root, Transform front, Transform rear, Color colour)
         {
             GameObject chassis = GameObject.CreatePrimitive(PrimitiveType.Cube);
             chassis.name = "Visual_Chassis";
@@ -205,7 +241,7 @@ namespace HighwayRenegade.Editor
             chassis.transform.localPosition = new Vector3(0f, 0.3f, 0f);
             chassis.transform.localScale = new Vector3(0.42f, 0.5f, 1.7f);
             Object.DestroyImmediate(chassis.GetComponent<BoxCollider>());
-            Paint(chassis, new Color(0.75f, 0.18f, 0.12f));
+            Paint(chassis, colour);
 
             GameObject rider = GameObject.CreatePrimitive(PrimitiveType.Capsule);
             rider.name = "Visual_Rider";
@@ -257,10 +293,16 @@ namespace HighwayRenegade.Editor
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
-        private static void BuildManagers()
+        private static void BuildManagers(BikeController player)
         {
             var go = new GameObject("Managers");
-            go.AddComponent<ThermalManager>();
+            ThermalManager thermal = go.AddComponent<ThermalManager>();
+
+            SpeedHud hud = go.AddComponent<SpeedHud>();
+            var so = new SerializedObject(hud);
+            so.FindProperty("_bike").objectReferenceValue = player;
+            so.FindProperty("_thermal").objectReferenceValue = thermal;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static void Paint(GameObject go, Color color)

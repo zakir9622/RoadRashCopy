@@ -1,0 +1,139 @@
+using UnityEngine;
+using HighwayRenegade.Gameplay.Bike;
+using HighwayRenegade.Performance;
+
+namespace HighwayRenegade.Gameplay.UI
+{
+    /// <summary>
+    /// Minimal on-screen readout: speed, drift state, thermal tier, frame rate.
+    ///
+    /// Deliberately IMGUI. A production HUD belongs in UI Toolkit with authored assets
+    /// (Phase 6), but IMGUI needs no canvas, no prefab, and no atlas — which means the
+    /// placeholder build has a working speedometer without blocking on art.
+    ///
+    /// IMGUI allocates when it builds strings, so the displayed text is cached and only
+    /// rebuilt when a value actually changes at display precision. That keeps steady-state
+    /// allocation at zero, which matters because the frame-rate readout below is the very
+    /// thing used to detect GC hitches.
+    /// </summary>
+    [DisallowMultipleComponent]
+    public sealed class SpeedHud : MonoBehaviour
+    {
+        [SerializeField] private BikeController _bike;
+        [SerializeField] private ThermalManager _thermal;
+        [SerializeField] private bool _showDiagnostics = true;
+
+        private GUIStyle _speedStyle;
+        private GUIStyle _labelStyle;
+        private bool _stylesReady;
+
+        // Cached display strings. Rebuilt only when the rounded value changes, so a bike
+        // held at a steady speed produces no per-frame string garbage.
+        private int _lastKph = int.MinValue;
+        private string _kphText = "0";
+
+        private int _lastFps = int.MinValue;
+        private string _fpsText = "";
+
+        private float _fpsAccumulator;
+        private int _fpsFrames;
+        private float _fpsTimer;
+
+        private void Awake()
+        {
+            if (_bike == null) _bike = FindFirstObjectByType<BikeController>();
+            if (_thermal == null) _thermal = FindFirstObjectByType<ThermalManager>();
+        }
+
+        private void Update()
+        {
+            // Averaged over half a second: an instantaneous 1/deltaTime readout is too
+            // noisy to spot the intermittent hitches we actually care about.
+            _fpsAccumulator += Time.unscaledDeltaTime;
+            _fpsFrames++;
+            _fpsTimer += Time.unscaledDeltaTime;
+
+            if (_fpsTimer >= 0.5f)
+            {
+                int fps = Mathf.RoundToInt(_fpsFrames / Mathf.Max(_fpsAccumulator, 0.0001f));
+                if (fps != _lastFps)
+                {
+                    _lastFps = fps;
+                    _fpsText = fps.ToString();
+                }
+                _fpsAccumulator = 0f;
+                _fpsFrames = 0;
+                _fpsTimer = 0f;
+            }
+        }
+
+        private void OnGUI()
+        {
+            if (_bike == null) return;
+            EnsureStyles();
+
+            // 3.6 converts m/s to km/h.
+            int kph = Mathf.Abs(Mathf.RoundToInt(_bike.ForwardSpeed * 3.6f));
+            if (kph != _lastKph)
+            {
+                _lastKph = kph;
+                _kphText = kph.ToString();
+            }
+
+            float scale = Screen.height / 1080f;
+            float margin = 32f * scale;
+
+            var speedRect = new Rect(margin, Screen.height - 170f * scale, 420f * scale, 110f * scale);
+            GUI.Label(speedRect, _kphText, _speedStyle);
+
+            var unitRect = new Rect(speedRect.x, speedRect.yMax - 12f * scale, 260f * scale, 40f * scale);
+            GUI.Label(unitRect, "KM/H", _labelStyle);
+
+            if (_bike.IsDrifting)
+            {
+                var driftRect = new Rect(speedRect.x, speedRect.y - 46f * scale, 320f * scale, 44f * scale);
+                var prev = GUI.color;
+                GUI.color = new Color(1f, 0.72f, 0.15f);
+                GUI.Label(driftRect, "DRIFT", _labelStyle);
+                GUI.color = prev;
+            }
+
+            if (!_showDiagnostics) return;
+
+            var diagRect = new Rect(Screen.width - 300f * scale, margin, 270f * scale, 130f * scale);
+            string thermal = _thermal != null ? _thermal.CurrentTier.ToString() : "n/a";
+            GUI.Label(diagRect,
+                $"FPS {_fpsText}\nThermal {thermal}\nGrounded {(_bike.IsGrounded ? "yes" : "no")}\nSlip {_bike.SlipAngle:F0}°",
+                _labelStyle);
+        }
+
+        /// <summary>
+        /// GUIStyle cannot be constructed before OnGUI — GUI.skin is null outside the
+        /// IMGUI callback — so styles are built lazily on first draw rather than in Awake.
+        /// </summary>
+        private void EnsureStyles()
+        {
+            if (_stylesReady) return;
+
+            float scale = Screen.height / 1080f;
+
+            _speedStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = Mathf.RoundToInt(96f * scale),
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.LowerLeft
+            };
+            _speedStyle.normal.textColor = Color.white;
+
+            _labelStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = Mathf.RoundToInt(26f * scale),
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.UpperLeft
+            };
+            _labelStyle.normal.textColor = new Color(0.85f, 0.87f, 0.92f);
+
+            _stylesReady = true;
+        }
+    }
+}
