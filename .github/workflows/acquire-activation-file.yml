@@ -7,16 +7,17 @@ jobs:
   activation:
     name: Request .alf Activation File
     runs-on: ubuntu-latest
+    container:
+      image: unityci/editor:ubuntu-6000.0.38f1-android-3.3.0
     steps:
-      - name: Request activation file
-        uses: game-ci/unity-request-activation-file@v2
-        id: get_alf
-        with:
-          unityVersion: 6000.0.38f1
+      - name: Generate Manual Activation File
+        run: |
+          /opt/unity/Editor/Unity -quit -batchmode -nographics -createManualActivationFile -logfile /dev/stdout || true
+          find . -name "*.alf" -exec cp {} ./Unity_v6000.alf \;
 
-      - name: Upload .alf as Artifact
+      - name: Upload .alf Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Unity-Activation-File
-          path: ${{ steps.get_alf.outputs.filePath }}
+          path: Unity_v6000.alf
           retention-days: 1
