@@ -39,9 +39,18 @@ namespace HighwayRenegade.Editor
             string[] scenes = EnabledScenes();
             if (scenes.Length == 0)
             {
-                // A build with no scenes produces a black app that "succeeds" — fail loudly instead.
-                Fail("No enabled scenes in Build Settings. Add at least one scene.");
-                return;
+                // A build with no scenes "succeeds" and produces a black app. While the
+                // project is still on placeholder art, generate the test track rather than
+                // failing — this is what lets CI produce a runnable APK on a clean clone.
+                Debug.Log("[Build] No scenes registered — generating the placeholder test track.");
+                TestTrackGenerator.Generate();
+                scenes = EnabledScenes();
+
+                if (scenes.Length == 0)
+                {
+                    Fail("Scene generation produced no enabled scenes.");
+                    return;
+                }
             }
 
             Debug.Log($"[Build] {ext.ToUpperInvariant()} -> {file}");

@@ -41,6 +41,10 @@ namespace HighwayRenegade.Performance
         [Header("Render Pipeline")]
         [SerializeField] private UniversalRenderPipelineAsset _urpAsset;
 
+        [Header("Frame Rate")]
+        [Tooltip("Preferred frame rate when thermals allow it. 120 on capable panels, else 60.")]
+        [SerializeField] private int _preferredFrameRate = 120;
+
         private ThermalTier _currentTier = ThermalTier.Nominal;
         private ThermalTier _candidateTier = ThermalTier.Nominal;
         private int _candidateStreak;
@@ -58,7 +62,12 @@ namespace HighwayRenegade.Performance
             if (_urpAsset == null)
                 _urpAsset = UniversalRenderPipeline.asset;
 
-            ApplyThermalPolicy(ThermalTier.Nominal, _urpAsset);
+            // Never request more than the panel can show — asking for 120 on a 60 Hz
+            // screen just burns battery and heat for frames nobody sees.
+            int panelHz = Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value);
+            if (panelHz > 0) _preferredFrameRate = Mathf.Min(_preferredFrameRate, panelHz);
+
+            ApplyThermalPolicy(ThermalTier.Nominal);
         }
 
         private void Update()
@@ -90,7 +99,7 @@ namespace HighwayRenegade.Performance
 
             _currentTier = _candidateTier;
             _candidateStreak = 0;
-            ApplyThermalPolicy(_currentTier, _urpAsset);
+            ApplyThermalPolicy(_currentTier);
             TierChanged?.Invoke(_currentTier);
             Debug.Log($"[Thermal] Tier -> {_currentTier}");
         }
@@ -122,42 +131,57 @@ namespace HighwayRenegade.Performance
 #endif
         }
 
-        // =====================================================================================
-        // TODO(zakir): Implement the quality ladder.
-        //
-        // This is the one genuinely opinionated part of thermal management, which is why
-        // I've left it to you rather than guessing.
-        //
-        // You have four levers, roughly cheapest-to-most-visible:
-        //   1. urpAsset.renderScale        (1.0 -> 0.7)  huge GPU win, softens the image
-        //   2. Application.targetFrameRate (120 -> 60 -> 30)  huge win, hurts "feel" most
-        //   3. QualitySettings.SetQualityLevel(int)  drops shadows/LOD wholesale
-        //   4. urpAsset.shadowDistance     (150 -> 50)  cheap win, rarely noticed
-        //
-        // ARCHITECTURE.md §2 already commits to: Moderate = kill post-processing,
-        // Severe = step down resolution. You need to decide the rest.
-        //
-        // The real trade-off: for a high-speed racing game, frame rate IS the feel.
-        // Dropping 120 -> 60 FPS is far more damaging to a racer than rendering at 0.7
-        // scale, even though players "notice" blur more in a screenshot. My instinct is
-        // to sacrifice resolution and shadows aggressively before ever touching frame rate,
-        // and only drop to 30 FPS at Critical as a last resort before the OS kills you.
-        // But that's a design call about your game — you may disagree.
-        //
-        // Write roughly 5-10 lines: a switch on `tier` setting the levers per tier.
-        // =====================================================================================
-
         /// <summary>
-        /// Applies the quality ladder for a given thermal tier.
-        /// Must not allocate — it is called from Update.
+        /// The quality ladder.
+        ///
+        /// Ordering principle: <b>frame rate is the last thing we give up.</b> In a
+        /// high-speed racer the frame rate *is* the handling feel — input latency and
+        /// motion clarity both scale with it. A softer image at 120 FPS plays better than
+        /// a crisp one at 30, even though a still screenshot suggests the opposite.
+        /// So resolution and shadows get spent aggressively first, and frame rate is only
+        /// cut at Severe, then again at Critical as a last resort before Android kills us.
+        ///
+        /// Post-processing is not touched here — <see cref="TierChanged"/> listeners own
+        /// their own volumes, so the rendering feature and the policy stay decoupled.
+        ///
+        /// Must not allocate: called from Update (ARCHITECTURE.md §4).
         /// </summary>
         /// <param name="tier">The confirmed thermal tier to apply settings for.</param>
-        /// <param name="urp">The active URP asset whose render settings should be adjusted.</param>
-        private static void ApplyThermalPolicy(ThermalTier tier, UniversalRenderPipelineAsset urp)
+        private void ApplyThermalPolicy(ThermalTier tier)
         {
-            if (urp == null) return;
+            if (_urpAsset == null) return;
 
-            // TODO(zakir): implement per-tier quality settings here.
+            switch (tier)
+            {
+                case ThermalTier.Nominal:
+                case ThermalTier.Light:
+                    _urpAsset.renderScale = 1.0f;
+                    _urpAsset.shadowDistance = 150f;
+                    Application.targetFrameRate = _preferredFrameRate;
+                    break;
+
+                case ThermalTier.Moderate:
+                    // Shadows are the cheapest thing to lose at speed — the player is
+                    // looking at the road ahead, not at shadow detail behind them.
+                    _urpAsset.renderScale = 0.85f;
+                    _urpAsset.shadowDistance = 60f;
+                    Application.targetFrameRate = _preferredFrameRate;
+                    break;
+
+                case ThermalTier.Severe:
+                    _urpAsset.renderScale = 0.7f;
+                    _urpAsset.shadowDistance = 25f;
+                    // First frame-rate concession, and only down to 60 — still fluid.
+                    Application.targetFrameRate = Mathf.Min(_preferredFrameRate, 60);
+                    break;
+
+                case ThermalTier.Critical:
+                    // Survival mode. 30 FPS is bad, but being killed by the OS is worse.
+                    _urpAsset.renderScale = 0.6f;
+                    _urpAsset.shadowDistance = 0f;
+                    Application.targetFrameRate = 30;
+                    break;
+            }
         }
     }
 }
