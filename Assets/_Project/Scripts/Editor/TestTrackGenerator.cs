@@ -124,6 +124,10 @@ namespace HighwayRenegade.Editor
             BuildCamera(player);
             BuildManagers(player);
 
+            // Add VFXManager to Managers
+            var managers = GameObject.Find("Managers");
+            if (managers != null) managers.AddComponent<VFXManager>();
+
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
             EditorSceneManager.SaveScene(scene, ScenePath);
             RegisterInBuildSettings(ScenePath);
@@ -392,6 +396,7 @@ namespace HighwayRenegade.Editor
             cam.nearClipPlane = 0.15f;
             cam.farClipPlane = 600f;
             go.AddComponent<AudioListener>();
+            go.AddComponent<HighwayRenegade.Gameplay.CameraRig.PostProcessingSetup>();
 
             var chase = go.AddComponent<ChaseCamera>();
             var so = new SerializedObject(chase);

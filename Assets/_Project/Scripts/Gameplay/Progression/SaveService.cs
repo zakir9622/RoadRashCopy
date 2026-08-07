@@ -19,11 +19,15 @@ namespace HighwayRenegade.Gameplay.Progression
     /// </summary>
     public static class SaveService
     {
-        private const string FileName = "highwayrenegade.save.json";
-        private const string TempName = "highwayrenegade.save.tmp";
-        private const string BackupName = "highwayrenegade.save.bak";
+        private static string BaseName => $"highwayrenegade.save.{CurrentSlot}";
+
+        private static string FileName => $"{BaseName}.json";
+        private static string TempName => $"{BaseName}.tmp";
+        private static string BackupName => $"{BaseName}.bak";
 
         private static string Dir => Application.persistentDataPath;
+
+        public static int CurrentSlot { get; set; } = 0;
 
         public static string SavePath => Path.Combine(Dir, FileName);
         private static string TempPath => Path.Combine(Dir, TempName);

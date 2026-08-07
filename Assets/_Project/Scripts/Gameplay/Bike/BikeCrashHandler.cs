@@ -155,6 +155,9 @@ namespace HighwayRenegade.Gameplay.Bike
 
             _damageable?.ApplyDamage(CrashRules.CrashDamage(severity), 0f, Vector3.zero);
 
+            // Play massive sparks on crash
+            HighwayRenegade.Gameplay.Environment.VFXManager.Instance?.PlaySparks(transform.position, Vector3.up);
+
             GameObject responsibleSource = (Time.time - _lastAttackTime < 2.5f) ? _lastAttacker : null;
             Crashed?.Invoke(severity, responsibleSource);
         }

@@ -134,6 +134,10 @@ namespace HighwayRenegade.Gameplay.Combat
 
             if (!victim.ApplyDamage(damage, impulse, shove, gameObject)) return;   // absorbed by i-frames
 
+            // Play impact sparks at the point between attacker and victim
+            Vector3 impactPoint = (transform.position + victim.transform.position) * 0.5f;
+            HighwayRenegade.Gameplay.Environment.VFXManager.Instance?.PlaySparks(impactPoint, -shove.normalized);
+
             // Handlebar strike induces steering deflection on victim
             if (hitZone == 1 && victim.TryGetComponent(out Rigidbody victimRb))
             {
