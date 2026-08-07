@@ -9,6 +9,7 @@ using HighwayRenegade.Gameplay.AI;
 using HighwayRenegade.Gameplay.Bike;
 using HighwayRenegade.Gameplay.Combat;
 using HighwayRenegade.Gameplay.CameraRig;
+using HighwayRenegade.Gameplay.Race;
 using HighwayRenegade.Gameplay.UI;
 using HighwayRenegade.Performance;
 
@@ -323,10 +324,17 @@ namespace HighwayRenegade.Editor
             var go = new GameObject("Managers");
             ThermalManager thermal = go.AddComponent<ThermalManager>();
 
+            RaceManager race = go.AddComponent<RaceManager>();
+            var rso = new SerializedObject(race);
+            // Finish just short of the road's end so the line is never past the geometry.
+            rso.FindProperty("_finishLineZ").floatValue = RoadLength - 120f;
+            rso.ApplyModifiedPropertiesWithoutUndo();
+
             SpeedHud hud = go.AddComponent<SpeedHud>();
             var so = new SerializedObject(hud);
             so.FindProperty("_bike").objectReferenceValue = player;
             so.FindProperty("_thermal").objectReferenceValue = thermal;
+            so.FindProperty("_race").objectReferenceValue = race;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

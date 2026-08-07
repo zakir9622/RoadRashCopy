@@ -21,6 +21,7 @@ namespace HighwayRenegade.Gameplay.UI
     {
         [SerializeField] private BikeController _bike;
         [SerializeField] private ThermalManager _thermal;
+        [SerializeField] private HighwayRenegade.Gameplay.Race.RaceManager _race;
         [SerializeField] private bool _showDiagnostics = true;
 
         private GUIStyle _speedStyle;
@@ -43,6 +44,7 @@ namespace HighwayRenegade.Gameplay.UI
         {
             if (_bike == null) _bike = FindFirstObjectByType<BikeController>();
             if (_thermal == null) _thermal = FindFirstObjectByType<ThermalManager>();
+            if (_race == null) _race = FindFirstObjectByType<HighwayRenegade.Gameplay.Race.RaceManager>();
         }
 
         private void Update()
@@ -98,6 +100,8 @@ namespace HighwayRenegade.Gameplay.UI
                 GUI.color = prev;
             }
 
+            DrawRaceOverlay(scale, margin);
+
             if (!_showDiagnostics) return;
 
             var diagRect = new Rect(Screen.width - 300f * scale, margin, 270f * scale, 130f * scale);
@@ -105,6 +109,52 @@ namespace HighwayRenegade.Gameplay.UI
             GUI.Label(diagRect,
                 $"FPS {_fpsText}\nThermal {thermal}\nGrounded {(_bike.IsGrounded ? "yes" : "no")}\nSlip {_bike.SlipAngle:F0}°",
                 _labelStyle);
+        }
+
+        /// <summary>
+        /// Countdown, position and remaining distance. Drawn only when a RaceManager
+        /// exists, so the scene still runs as a free-roam sandbox without one.
+        /// </summary>
+        private void DrawRaceOverlay(float scale, float margin)
+        {
+            if (_race == null) return;
+
+            var phase = _race.Phase;
+
+            if (phase == HighwayRenegade.Core.Race.RacePhase.Racing && _race.PlayerPosition > 0)
+            {
+                var posRect = new Rect(Screen.width * 0.5f - 150f * scale, margin, 300f * scale, 70f * scale);
+                var prev = GUI.color;
+                GUI.color = new Color(0.95f, 0.95f, 1f);
+                GUI.Label(posRect, $"P{_race.PlayerPosition}/{_race.RacerCount}", _speedStyle);
+                GUI.color = prev;
+
+                var distRect = new Rect(posRect.x, posRect.yMax + 4f * scale, 320f * scale, 40f * scale);
+                GUI.Label(distRect, $"{Mathf.RoundToInt(_race.PlayerDistanceRemaining())} m to go", _labelStyle);
+            }
+
+            if (phase == HighwayRenegade.Core.Race.RacePhase.Countdown)
+            {
+                int n = _race.CountdownRemaining;
+                var rect = new Rect(Screen.width * 0.5f - 200f * scale,
+                                    Screen.height * 0.5f - 90f * scale, 400f * scale, 180f * scale);
+                var prev = GUI.color;
+                GUI.color = n > 0 ? new Color(1f, 0.85f, 0.2f) : new Color(0.3f, 1f, 0.35f);
+                GUI.Label(rect, n > 0 ? n.ToString() : "GO", _speedStyle);
+                GUI.color = prev;
+            }
+
+            if (phase == HighwayRenegade.Core.Race.RacePhase.Finished)
+            {
+                var rect = new Rect(Screen.width * 0.5f - 260f * scale,
+                                    Screen.height * 0.4f, 520f * scale, 220f * scale);
+                var prev = GUI.color;
+                GUI.color = new Color(1f, 0.9f, 0.4f);
+                GUI.Label(rect,
+                    $"FINISHED   P{_race.PlayerPosition}\n{_race.RaceTime:F1} s\nPrize ${_race.PlayerPrize}",
+                    _labelStyle);
+                GUI.color = prev;
+            }
         }
 
         /// <summary>
