@@ -41,7 +41,9 @@ ok()  { printf '\033[1;32m    ok\033[0m %s\n' "$*"; }
 fetch_nupkg() {
   local id="$1" version="$2" dest="$3"
   local lower; lower="$(echo "$id" | tr '[:upper:]' '[:lower:]')"
-  [[ -d "$dest" ]] && return 0
+  # Also runs on a cache hit: a cache saved before this fix existed would otherwise
+  # restore the unreadable files and skip straight past the chmod below.
+  if [[ -d "$dest" ]]; then chmod -R u+rwX "$dest"; return 0; fi
   log "Fetching $id $version from NuGet"
   local tmp="$WORK/$lower.nupkg"
   curl -sSfL -o "$tmp" \
@@ -50,6 +52,10 @@ fetch_nupkg() {
   mkdir -p "$dest"
   unzip -oq "$tmp" -d "$dest"
   rm -f "$tmp"
+  # NuGet packages carry Unix permission bits, and UnityEngine.Modules ships its DLLs
+  # unreadable by the owner. That goes unnoticed when running as root and fails every
+  # reference with "Access to the path is denied" on a normal CI runner.
+  chmod -R u+rwX "$dest"
 }
 
 fetch_nupkg "UnityEngine.Modules" "$UNITY_MODULES_VERSION" "$REFS/unity" || exit 1
