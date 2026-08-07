@@ -24,11 +24,16 @@ namespace HighwayRenegade.Gameplay.Bike
         [Tooltip("Horizontal drag distance, in fraction of screen width, for full steering lock.")]
         [Range(0.05f, 0.5f)][SerializeField] private float _steerDragRange = 0.18f;
 
+        [Tooltip("Height of the attack strip along the top of the screen, as a fraction " +
+                 "of screen height. Left of centre swings left, right swings right.")]
+        [Range(0.1f, 0.4f)][SerializeField] private float _attackStripHeight = 0.22f;
+
         [Header("Smoothing")]
         [Tooltip("Seconds for keyboard steering to reach full lock. Analogue devices bypass this.")]
         [SerializeField] private float _keyboardSteerRamp = 0.25f;
 
         private BikeController _bike;
+        private HighwayRenegade.Gameplay.Combat.MeleeCombat _combat;
         private BikeInput _input;
         private float _keyboardSteer;
 
@@ -38,7 +43,11 @@ namespace HighwayRenegade.Gameplay.Bike
         private readonly Vector2[] _touchOrigins = new Vector2[MaxTouches];
         private readonly bool[] _touchActive = new bool[MaxTouches];
 
-        private void Awake() => _bike = GetComponent<BikeController>();
+        private void Awake()
+        {
+            _bike = GetComponent<BikeController>();
+            _combat = GetComponent<HighwayRenegade.Gameplay.Combat.MeleeCombat>();
+        }
 
         private void Update()
         {
@@ -53,6 +62,10 @@ namespace HighwayRenegade.Gameplay.Bike
             }
 
             _bike.SetInput(_input);
+
+            // MeleeCombat owns the cooldown, so an unavailable swing is simply ignored.
+            if (_input.AttackSide != 0 && _combat != null)
+                _combat.TrySwing(_input.AttackSide);
         }
 
         private bool ReadGamepad()
@@ -65,14 +78,21 @@ namespace HighwayRenegade.Gameplay.Bike
             float steer = pad.leftStick.x.ReadValue();
             bool handbrake = pad.buttonSouth.isPressed;
 
+            // wasPressedThisFrame, not isPressed: a swing is a discrete action, and
+            // holding the button should not machine-gun attacks at the cooldown rate.
+            bool attackLeft = pad.buttonWest.wasPressedThisFrame;
+            bool attackRight = pad.buttonEast.wasPressedThisFrame;
+
             // Treat a resting pad as "not in use" so it does not suppress touch input.
-            if (throttle < 0.02f && brake < 0.02f && Mathf.Abs(steer) < 0.05f && !handbrake)
+            if (throttle < 0.02f && brake < 0.02f && Mathf.Abs(steer) < 0.05f
+                && !handbrake && !attackLeft && !attackRight)
                 return false;
 
             _input.Throttle = throttle;
             _input.Brake = brake;
             _input.Steer = steer;
             _input.Handbrake = handbrake;
+            _input.AttackSide = attackLeft ? -1 : (attackRight ? 1 : 0);
             return true;
         }
 
@@ -106,6 +126,16 @@ namespace HighwayRenegade.Gameplay.Bike
                 {
                     _touchActive[i] = true;
                     _touchOrigins[i] = pos;
+                }
+
+                // Attack strip across the top of the screen. Placed above the driving
+                // controls so a swing can never be mistaken for a steer or a throttle
+                // press - on touch a misread input loses a race.
+                if (pos.y >= Screen.height * (1f - _attackStripHeight))
+                {
+                    if (t.press.wasPressedThisFrame)
+                        _input.AttackSide = pos.x < halfWidth ? -1 : 1;
+                    continue;
                 }
 
                 if (pos.x < halfWidth)
@@ -144,6 +174,8 @@ namespace HighwayRenegade.Gameplay.Bike
             _input.Throttle = kb.wKey.isPressed || kb.upArrowKey.isPressed ? 1f : 0f;
             _input.Brake = kb.sKey.isPressed || kb.downArrowKey.isPressed ? 1f : 0f;
             _input.Handbrake = kb.spaceKey.isPressed;
+            _input.AttackSide = kb.qKey.wasPressedThisFrame ? -1
+                              : (kb.eKey.wasPressedThisFrame ? 1 : 0);
 
             float raw = 0f;
             if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) raw -= 1f;

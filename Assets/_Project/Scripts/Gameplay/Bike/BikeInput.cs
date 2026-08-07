@@ -21,6 +21,14 @@ namespace HighwayRenegade.Gameplay.Bike
         /// <summary>Handbrake held — forces the rear tyre to break traction.</summary>
         public bool Handbrake;
 
+        /// <summary>
+        /// Melee swing this frame: -1 left, +1 right, 0 for none.
+        ///
+        /// Carried on the input struct rather than read separately so a replay or a test
+        /// can drive combat through exactly the same channel as riding.
+        /// </summary>
+        public int AttackSide;
+
         public static readonly BikeInput Neutral = default;
     }
 }

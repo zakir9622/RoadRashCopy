@@ -1,6 +1,8 @@
 using UnityEngine;
 using HighwayRenegade.Core.AI;
+using HighwayRenegade.Core.Combat;
 using HighwayRenegade.Gameplay.Bike;
+using HighwayRenegade.Gameplay.Combat;
 
 namespace HighwayRenegade.Gameplay.AI
 {
@@ -31,9 +33,6 @@ namespace HighwayRenegade.Gameplay.AI
         [Tooltip("Starting aggression. 1 is neutral; higher rivals pick fights unprompted.")]
         [Range(1f, 2.5f)][SerializeField] private float _baseAggression = 1f;
 
-        [Header("Health")]
-        [SerializeField] private float _maxHealth = 100f;
-
         [Header("Steering")]
         [Tooltip("How far ahead the rival aims when racing. Short = twitchy, long = lazy.")]
         [SerializeField] private float _lookAheadDistance = 14f;
@@ -44,9 +43,10 @@ namespace HighwayRenegade.Gameplay.AI
         [SerializeField] private float _decisionInterval = 0.15f;
 
         private BikeController _bike;
+        private Damageable _damageable;
+        private MeleeCombat _combat;
         private RivalState _state = RivalState.Race;
         private float _aggression;
-        private float _health;
         private float _nextDecisionTime;
         private BikeInput _input;
 
@@ -57,13 +57,23 @@ namespace HighwayRenegade.Gameplay.AI
         public float Aggression => _aggression;
 
         /// <summary>Remaining health as a 0..1 fraction.</summary>
-        public float Health01 => _maxHealth > 0f ? Mathf.Clamp01(_health / _maxHealth) : 0f;
+        public float Health01 => _damageable != null ? _damageable.Health01 : 1f;
 
         private void Awake()
         {
             _bike = GetComponent<BikeController>();
+            _damageable = GetComponent<Damageable>();
+            _combat = GetComponent<MeleeCombat>();
             _aggression = _baseAggression;
-            _health = _maxHealth;
+
+            // Health lives on the shared Damageable so rivals and the player obey exactly
+            // the same damage rules. An AI with its own survivability model feels unfair.
+            if (_damageable != null) _damageable.Damaged += OnDamaged;
+        }
+
+        private void OnDestroy()
+        {
+            if (_damageable != null) _damageable.Damaged -= OnDamaged;
         }
 
         private void Start()
@@ -88,6 +98,25 @@ namespace HighwayRenegade.Gameplay.AI
             }
 
             _bike.SetInput(BuildInput());
+            TryAttack();
+        }
+
+        /// <summary>
+        /// Swings while in Attack state. The cooldown lives in MeleeCombat, so calling
+        /// this every frame is safe and simply throws a punch whenever one is available.
+        /// Aggression is pushed across so a provoked rival hits measurably harder.
+        /// </summary>
+        private void TryAttack()
+        {
+            if (_combat == null || _state != RivalState.Attack || _target == null) return;
+            if (!_bike.IsGrounded) return;   // no leverage mid-air
+
+            _combat.Aggression = _aggression;
+
+            Vector3 local = transform.InverseTransformDirection(_target.position - transform.position);
+            if (Mathf.Abs(local.z) > CombatMath.Reach(_combat.Weapon)) return;
+
+            _combat.TrySwing(local.x >= 0f ? 1 : -1);
         }
 
         private RivalPerception BuildPerception()
@@ -168,21 +197,19 @@ namespace HighwayRenegade.Gameplay.AI
         }
 
         /// <summary>
-        /// Applies damage and escalates the grudge when the player is the attacker.
+        /// Raised by <see cref="Damageable"/> on every hit that lands. Escalates the
+        /// grudge so the rival starts hunting whoever has been hitting it.
+        ///
+        /// Note this fires for any damage source, including traffic collisions. That is
+        /// a deliberate simplification for now: attributing hits to a specific attacker
+        /// needs Damageable to carry the source, which lands with the traffic system in
+        /// Phase 3. Until then a shunted rival getting angry is acceptable - and arguably
+        /// reads fine, since the player is usually the reason it got shunted.
         /// </summary>
-        /// <param name="amount">Damage to apply.</param>
-        /// <param name="fromPlayer">
-        /// Only player hits raise aggression — a rival shunted by traffic should not
-        /// start hunting the player for something they did not do.
-        /// </param>
-        public void TakeDamage(float amount, bool fromPlayer)
+        private void OnDamaged(float amount)
         {
             if (amount <= 0f) return;
-
-            _health = Mathf.Max(0f, _health - amount);
-
-            if (fromPlayer)
-                _aggression = RivalBrain.RegisterHitTaken(_aggression);
+            _aggression = RivalBrain.RegisterHitTaken(_aggression);
         }
     }
 }

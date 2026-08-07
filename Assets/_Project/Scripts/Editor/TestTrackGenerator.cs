@@ -4,8 +4,10 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using HighwayRenegade.Core.Combat;
 using HighwayRenegade.Gameplay.AI;
 using HighwayRenegade.Gameplay.Bike;
+using HighwayRenegade.Gameplay.Combat;
 using HighwayRenegade.Gameplay.CameraRig;
 using HighwayRenegade.Gameplay.UI;
 using HighwayRenegade.Performance;
@@ -209,6 +211,11 @@ namespace HighwayRenegade.Editor
             var controller = root.AddComponent<BikeController>();
             AssignPrivateReferences(controller, front, rear);
 
+            // Player and rivals get identical combat components so both sides obey the
+            // same damage rules. Weapons are assigned by the caller.
+            root.AddComponent<Damageable>();
+            root.AddComponent<MeleeCombat>();
+
             return controller;
         }
 
@@ -227,6 +234,9 @@ namespace HighwayRenegade.Editor
             };
             var skills = new[] { 0.86f, 0.95f, 0.90f };
             var aggression = new[] { 1.0f, 1.15f, 1.6f };
+            // Give the grid mixed loadouts so weapon stealing is reachable from the
+            // first race rather than gated behind progression.
+            var weapons = new[] { WeaponType.Fists, WeaponType.Chain, WeaponType.Bat };
 
             for (int i = 0; i < colours.Length; i++)
             {
@@ -239,6 +249,11 @@ namespace HighwayRenegade.Editor
                 so.FindProperty("_skill").floatValue = skills[i];
                 so.FindProperty("_baseAggression").floatValue = aggression[i];
                 so.ApplyModifiedPropertiesWithoutUndo();
+
+                var combat = rival.GetComponent<MeleeCombat>();
+                var cso = new SerializedObject(combat);
+                cso.FindProperty("_weapon").enumValueIndex = (int)weapons[i];
+                cso.ApplyModifiedPropertiesWithoutUndo();
             }
         }
 
