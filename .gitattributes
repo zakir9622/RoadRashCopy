@@ -1,0 +1,54 @@
+# ==============================================================================
+# Git attributes — Unity project
+# Normalizes line endings and routes large binary assets through Git LFS.
+# NOTE: Run `git lfs install` once per machine before cloning/committing binaries.
+# ==============================================================================
+
+# Auto-detect text files, normalize to LF in the repo
+* text=auto
+
+# Unity YAML files — force LF and mark as text so meta/scene/prefab merges work
+*.cs        text diff=csharp
+*.shader    text
+*.cginc     text
+*.hlsl      text
+*.uss       text
+*.uxml      text
+*.json      text
+*.md        text
+*.asmdef    text
+*.meta      text
+
+# --- Git LFS: large binary assets ---
+# Images / textures
+*.png   filter=lfs diff=lfs merge=lfs -text
+*.jpg   filter=lfs diff=lfs merge=lfs -text
+*.jpeg  filter=lfs diff=lfs merge=lfs -text
+*.tga   filter=lfs diff=lfs merge=lfs -text
+*.tif   filter=lfs diff=lfs merge=lfs -text
+*.tiff  filter=lfs diff=lfs merge=lfs -text
+*.psd   filter=lfs diff=lfs merge=lfs -text
+*.exr   filter=lfs diff=lfs merge=lfs -text
+*.hdr   filter=lfs diff=lfs merge=lfs -text
+
+# 3D models
+*.fbx   filter=lfs diff=lfs merge=lfs -text
+*.obj   filter=lfs diff=lfs merge=lfs -text
+*.blend filter=lfs diff=lfs merge=lfs -text
+
+# Audio
+*.wav   filter=lfs diff=lfs merge=lfs -text
+*.mp3   filter=lfs diff=lfs merge=lfs -text
+*.ogg   filter=lfs diff=lfs merge=lfs -text
+
+# Video
+*.mp4   filter=lfs diff=lfs merge=lfs -text
+*.mov   filter=lfs diff=lfs merge=lfs -text
+
+# Fonts / archives
+*.ttf   filter=lfs diff=lfs merge=lfs -text
+*.otf   filter=lfs diff=lfs merge=lfs -text
+*.zip   filter=lfs diff=lfs merge=lfs -text
+
+# Android build artifacts (if ever committed intentionally)
+*.aab   filter=lfs diff=lfs merge=lfs -text
