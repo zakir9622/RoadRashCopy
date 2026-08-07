@@ -141,20 +141,62 @@ namespace HighwayRenegade.Tests.PlayMode
         }
 
         [UnityTest]
-        public IEnumerator RecoversUprightAfterABadLanding()
+        public IEnumerator CrashingOverRecoversTheRider()
         {
-            // Air-righting torque exists so a clipped kerb cannot start an unrecoverable
-            // tumble, which reads to players as a bug rather than a mistake.
-            _bike.transform.rotation = Quaternion.Euler(0f, 0f, 75f);
-            _bike.transform.position += Vector3.up * 3f;
+            // A bike on its side stays on its side - that is correct physics, and an
+            // earlier version of this test wrongly demanded it self-right while grounded.
+            // Getting back up is the crash system's job, not the tyre model's.
+            var crash = _bike.GetComponent<BikeCrashHandler>();
+            Assert.IsNotNull(crash, "Player bike needs a BikeCrashHandler. Regenerate the track.");
+
+            _bike.transform.rotation = Quaternion.Euler(0f, 0f, 85f);
             _rb.linearVelocity = Vector3.zero;
             _rb.angularVelocity = Vector3.zero;
 
-            yield return SettleFor(5f);
+            // Long enough to exceed the fallen grace period and the recovery timer.
+            yield return SettleFor(6f);
+
+            Assert.IsFalse(crash.IsCrashed, "Rider never recovered - still down after 6 s.");
 
             float tilt = Vector3.Angle(_bike.transform.up, Vector3.up);
-            Assert.Less(tilt, 50f, $"Bike stayed {tilt:F0} deg from upright - air-righting " +
-                                   "torque is too weak to recover from a bad landing.");
+            Assert.Less(tilt, 40f, $"Bike is still {tilt:F0} deg from upright after remount.");
+        }
+
+        [UnityTest]
+        public IEnumerator MinorSpillKeepsSomeSpeed()
+        {
+            // Rejoining from a dead stop compounds the punishment far beyond the mistake,
+            // which is how one error becomes a restart.
+            var crash = _bike.GetComponent<BikeCrashHandler>();
+            Assert.IsNotNull(crash);
+
+            var input = BikeInput.Neutral;
+            input.Throttle = 1f;
+            yield return Hold(input, 3f);   // build some speed
+
+            _bike.transform.rotation = Quaternion.Euler(0f, _bike.transform.eulerAngles.y, 85f);
+            yield return SettleFor(5f);
+
+            Assert.IsFalse(crash.IsCrashed, "Rider should be back up.");
+            Assert.Greater(_rb.linearVelocity.magnitude, 0.5f,
+                "A tip-over should not leave the rider at a dead stop.");
+        }
+
+        [UnityTest]
+        public IEnumerator HardLeanDoesNotTriggerACrash()
+        {
+            // The grace period exists so a hard lean or a jump landing the rider would have
+            // ridden out is not punished as a crash.
+            var crash = _bike.GetComponent<BikeCrashHandler>();
+            Assert.IsNotNull(crash);
+
+            // Past the tilt limit, but righted again well inside the grace window.
+            _bike.transform.rotation = Quaternion.Euler(0f, 0f, 60f);
+            yield return SettleFor(0.2f);
+            _bike.transform.rotation = Quaternion.identity;
+            yield return SettleFor(0.5f);
+
+            Assert.IsFalse(crash.IsCrashed, "A momentary lean must not register as a crash.");
         }
 
         [UnityTest]

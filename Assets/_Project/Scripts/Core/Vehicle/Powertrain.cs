@@ -159,10 +159,18 @@ namespace HighwayRenegade.Core.Vehicle
             float crankTorque = TorqueAtRpm(spec, rpm) * throttle;
 
             // Closed throttle: the engine retards the bike. This is why a real rider can
-            // slow significantly without touching the brakes, and it is a large part of
-            // why a bike feels connected rather than coasting.
+            // slow significantly without touching the brakes, and a large part of why a
+            // bike feels connected rather than coasting.
+            //
+            // Critically, engine braking OPPOSES MOTION - it is a resistance, not a force
+            // in its own right. Subtracting it unconditionally makes a stationary bike
+            // roll backwards under its own engine, which is exactly what an earlier
+            // version did: -727 N on a parked bike, reversing it to 9 m/s during what was
+            // supposed to be a settling period.
             float braking = (1f - throttle) * spec.EngineBrakingNm;
-            float netCrank = crankTorque - braking;
+
+            float motionSign = roadSpeedMs > 0.1f ? 1f : (roadSpeedMs < -0.1f ? -1f : 0f);
+            float netCrank = crankTorque - braking * motionSign;
 
             return netCrank * TotalRatio(spec, gear) * spec.Efficiency / radius;
         }

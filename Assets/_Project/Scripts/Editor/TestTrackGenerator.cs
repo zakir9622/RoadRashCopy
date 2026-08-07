@@ -212,10 +212,11 @@ namespace HighwayRenegade.Editor
             var controller = root.AddComponent<BikeController>();
             AssignPrivateReferences(controller, front, rear);
 
-            // Player and rivals get identical combat components so both sides obey the
-            // same damage rules. Weapons are assigned by the caller.
+            // Player and rivals get identical combat and crash components so both sides
+            // obey the same rules. Weapons are assigned by the caller.
             root.AddComponent<Damageable>();
             root.AddComponent<MeleeCombat>();
+            root.AddComponent<BikeCrashHandler>();
 
             return controller;
         }
