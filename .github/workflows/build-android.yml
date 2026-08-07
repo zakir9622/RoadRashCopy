@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: '0 0 * * *'
   
-  # Manual trigger button in GitHub Actions tab
+  # Manual 1-click trigger button in GitHub Actions tab
   workflow_dispatch:
     inputs:
       create_release:
@@ -52,14 +52,6 @@ jobs:
             Library-android-
             Library-
 
-      - name: Check Unity License Secret
-        run: |
-          if [ -z "${{ secrets.UNITY_LICENSE }}" ] && [ -z "${{ secrets.UNITY_EMAIL }}" ]; then
-            echo "::warning::UNITY_LICENSE secret is not configured in GitHub repository secrets! GameCI requires a Unity license or email/password to activate Unity in CI."
-          else
-            echo "Unity credentials found in secrets."
-          fi
-
       - name: Unity Android Builder
         uses: game-ci/unity-builder@v4
         id: unity_builder
@@ -73,6 +65,9 @@ jobs:
           ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
         with:
           targetPlatform: Android
+          unityVersion: 6000.0.38f1
+          buildMethod: HighwayRenegade.Editor.BuildScript.BuildAndroid
+          customParameters: -customBuildPath build/Android -buildApk
           androidExportType: ${{ github.event.inputs.build_format == 'aab' && 'androidAppBundle' || 'androidPackage' }}
           androidKeystoreName: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && 'release.keystore' || '' }}
           androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -104,7 +99,7 @@ jobs:
             - **Date**: ${{ github.event.repository.updated_at }}
             
             ### 📥 Download & Install
-            Download the attached `.apk` below and install it directly on your Android phone.
+            Download the attached `.apk` below and install it directly on your Android device.
           files: |
             build/Android/*.apk
             build/Android/*.aab
