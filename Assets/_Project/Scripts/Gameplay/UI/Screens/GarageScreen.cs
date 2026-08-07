@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using HighwayRenegade.Core.Progression;
 using HighwayRenegade.Core.App;
 using HighwayRenegade.Gameplay.Progression;
 
@@ -63,11 +64,11 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             SaveData save = SaveService.Load();
             var bike = BikeShop.AvailableBikes[_currentBikeIndex];
             
-            if (save.PlayerCash >= bike.Price)
+            if (save.Currency >= bike.Price)
             {
-                save.PlayerCash -= bike.Price;
+                save.Currency -= bike.Price;
                 // Ideally add to owned bikes, but for now just set active.
-                save.ActiveBikeId = bike.Id;
+                save.BikeId = bike.Id;
                 SaveService.Save(save);
                 Debug.Log($"[Garage] Bought {bike.Name}!");
                 RefreshUI();
@@ -87,10 +88,10 @@ namespace HighwayRenegade.Gameplay.UI.Screens
         {
             SaveData save = SaveService.Load();
             if (_txtCash != null)
-                _txtCash.text = $"CASH: ${save.PlayerCash}";
+                _txtCash.text = $"CASH: ${save.Currency}";
 
             var bike = BikeShop.AvailableBikes[_currentBikeIndex];
-            bool isOwned = save.ActiveBikeId == bike.Id;
+            bool isOwned = save.BikeId == bike.Id;
 
             if (_txtBikeInfo != null)
             {
@@ -99,7 +100,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
             if (_txtOwnershipStatus != null)
             {
-                _txtOwnershipStatus.text = isOwned ? "✅ EQUIPPED" : (save.PlayerCash >= bike.Price ? "🟢 AVAILABLE TO BUY" : "🔴 LOCKED (NEED CASH)");
+                _txtOwnershipStatus.text = isOwned ? "✅ EQUIPPED" : (save.Currency >= bike.Price ? "🟢 AVAILABLE TO BUY" : "🔴 LOCKED (NEED CASH)");
             }
 
             // Stat bars visual representation
@@ -111,9 +112,9 @@ namespace HighwayRenegade.Gameplay.UI.Screens
         private void OnRepairClicked()
         {
             SaveData save = SaveService.Load();
-            if (save.PlayerCash >= 50)
+            if (save.Currency >= 50)
             {
-                save.PlayerCash -= 50;
+                save.Currency -= 50;
                 SaveService.Save(save);
                 RefreshUI();
                 Debug.Log("[Garage] Bike repaired.");

@@ -135,10 +135,15 @@ namespace HighwayRenegade.Gameplay.Progression
                     combat.SetWeapon((HighwayRenegade.Core.Combat.WeaponType)record.Weapon);
 
                 if (_rivals[i].TryGetComponent(out BikeCrashHandler crash))
+                {
+                    // Copy the loop variable: a lambda would otherwise capture the shared
+                    // `i` and every rival would credit its wrecks to the last slot.
+                    int index = i;
                     crash.Crashed += (severity, source) => {
                         if (source != null && source.GetComponentInParent<PlayerBikeInput>() != null)
                             _wreckCounts[index]++;
                     };
+                }
             }
         }
 
@@ -156,16 +161,16 @@ namespace HighwayRenegade.Gameplay.Progression
             SaveData save = SaveService.Load();
             int fine = 200;
             
-            save.PlayerCash -= fine;
-            if (save.PlayerCash < 0)
+            save.Currency -= fine;
+            if (save.Currency < 0)
             {
-                save.PlayerCash = 0;
+                save.Currency = 0;
                 Debug.LogError("[CampaignSession] GAME OVER! Player couldn't pay the police fine.");
                 // Transition to Game Over screen in real implementation
             }
             else
             {
-                Debug.Log($"[CampaignSession] Player BUSTED! Paid ${fine} fine. Remaining cash: ${save.PlayerCash}");
+                Debug.Log($"[CampaignSession] Player BUSTED! Paid ${fine} fine. Remaining cash: ${save.Currency}");
             }
             
             SaveService.Save(save);

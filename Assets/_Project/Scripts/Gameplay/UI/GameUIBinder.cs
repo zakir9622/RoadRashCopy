@@ -48,7 +48,7 @@ namespace HighwayRenegade.Gameplay.UI
 
             if (_playerDamageable != null && _healthBarFill != null)
             {
-                float healthPct = _playerDamageable.CurrentHealth / _playerDamageable.MaxHealth;
+                float healthPct = _playerDamageable.Health01;
                 _healthBarFill.style.width = new Length(healthPct * 100f, LengthUnit.Percent);
                 
                 // Change color based on health

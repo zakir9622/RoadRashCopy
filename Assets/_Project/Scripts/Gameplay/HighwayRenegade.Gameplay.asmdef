@@ -5,7 +5,8 @@
     "HighwayRenegade.Core",
     "HighwayRenegade.Performance",
     "HighwayRenegade.Platform",
-    "Unity.InputSystem"
+    "Unity.InputSystem",
+    "UnityEngine.UI"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

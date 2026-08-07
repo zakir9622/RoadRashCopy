@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using HighwayRenegade.Core.Race;
 using HighwayRenegade.Gameplay.Bike;
 using HighwayRenegade.Gameplay.Combat;
 using HighwayRenegade.Gameplay.AI;
@@ -171,7 +172,7 @@ namespace HighwayRenegade.Gameplay.UI
             GUI.DrawTexture(weaponRect, Texture2D.whiteTexture);
 
             GUI.color = Color.white;
-            string weaponName = _combat.CurrentWeapon.ToString().ToUpper();
+            string weaponName = _combat.Weapon.ToString().ToUpper();
             GUI.Label(new Rect(weaponRect.x + 6f * scale, weaponRect.y + 6f * scale, weaponRect.width, 24f * scale), "WEAPON", _hudTitleStyle);
             GUI.Label(new Rect(weaponRect.x + 6f * scale, weaponRect.y + 32f * scale, weaponRect.width, 36f * scale), weaponName, _hudValueStyle);
 

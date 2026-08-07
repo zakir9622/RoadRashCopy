@@ -40,11 +40,11 @@ namespace HighwayRenegade.Tests.EditMode
         [Test]
         public void PowertrainApplyUpgrades_IncreasesPeakTorqueAndRedline()
         {
-            var stock = PowertrainSpec.Superbike();
+            var stock = EngineSpec.Superbike;
             var tuned = Powertrain.ApplyUpgrades(stock, 3, 2);
 
             Assert.That(tuned.PeakTorqueNm, Is.GreaterThan(stock.PeakTorqueNm));
-            Assert.That(tuned.MaxRpm, Is.GreaterThan(stock.MaxRpm));
+            Assert.That(tuned.RedlineRpm, Is.GreaterThan(stock.RedlineRpm));
         }
     }
 }

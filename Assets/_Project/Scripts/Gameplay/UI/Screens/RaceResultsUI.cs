@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+using HighwayRenegade.Core.Progression;
 using HighwayRenegade.Core.App;
 using HighwayRenegade.Gameplay.Progression;
 
@@ -52,7 +53,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             if (_txtPayout != null) _txtPayout.text = $"TOTAL PRIZE: ${total}\n(Race: ${basePayout} | Combat: ${combatBonus})";
             
             SaveData save = SaveService.Load();
-            save.PlayerCash += total;
+            save.Currency += total;
             SaveService.Save(save);
         }
 

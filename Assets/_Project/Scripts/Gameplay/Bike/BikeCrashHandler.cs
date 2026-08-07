@@ -156,7 +156,7 @@ namespace HighwayRenegade.Gameplay.Bike
             _damageable?.ApplyDamage(CrashRules.CrashDamage(severity), 0f, Vector3.zero);
 
             // Trigger intense camera trauma shake
-            float trauma = severity == CrashSeverity.Wreck ? 0.9f : (severity == CrashSeverity.Knockdown ? 0.6f : 0.35f);
+            float trauma = severity == CrashSeverity.Wipeout ? 0.9f : (severity == CrashSeverity.Major ? 0.6f : 0.35f);
             HighwayRenegade.Gameplay.CameraRig.ChaseCamera.Instance?.AddTrauma(trauma);
 
             // Play massive sparks & debris on crash
@@ -174,7 +174,7 @@ namespace HighwayRenegade.Gameplay.Bike
 
         private System.Collections.IEnumerator DoHitStop(CrashSeverity severity)
         {
-            if (severity == CrashSeverity.Wreck || severity == CrashSeverity.Knockdown)
+            if (severity == CrashSeverity.Wipeout || severity == CrashSeverity.Major)
             {
                 float originalTimeScale = Time.timeScale;
                 Time.timeScale = 0.1f;
@@ -202,11 +202,18 @@ namespace HighwayRenegade.Gameplay.Bike
             // 2. Spline fallback if off-road or fell into void
             if (!hitGround || position.y < -10f)
             {
-                var spline = FindFirstObjectByType<HighwayRenegade.Core.Race.TrackSpline>();
+                // TrackSpline is a plain data type, not a component, so it has to be
+                // reached through the generator that owns it.
+                var generator = FindFirstObjectByType<
+                    HighwayRenegade.Gameplay.Environment.SplineHighwayGenerator>();
+                var spline = generator != null ? generator.Spline : null;
+
                 if (spline != null && spline.TotalLength > 10f)
                 {
-                    // Find nearest progress or place at estimated location
-                    Vector3 splinePos = spline.SamplePosition(0f); // Default to start or sample along track
+                    // Remount where the rider actually went down, not at the start line -
+                    // teleporting them back to zero would undo the whole race.
+                    float distance = spline.ProjectToDistance(position);
+                    Vector3 splinePos = spline.SamplePosition(distance);
                     position = splinePos + Vector3.up * _remountHeight;
                 }
                 else

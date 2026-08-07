@@ -35,14 +35,14 @@ namespace HighwayRenegade.Gameplay.AI
                 // Keep speed slightly higher than target to catch up
                 float throttle = 1f;
                 
-                _bike.SetInput(new BikeInput(throttle, steering, 0f, 0f, 0f));
+                _bike.SetInput(new BikeInput { Throttle = throttle, Steer = steering });
 
                 CheckBustRadius();
             }
             else
             {
                 // Just cruise
-                _bike.SetInput(new BikeInput(0.5f, 0f, 0f, 0f, 0f));
+                _bike.SetInput(new BikeInput { Throttle = 0.5f });
             }
         }
 
