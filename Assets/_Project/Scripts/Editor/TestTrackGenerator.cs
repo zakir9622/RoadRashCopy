@@ -44,6 +44,10 @@ namespace HighwayRenegade.Editor
         {
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
+            // Static cache would otherwise carry materials from a previous generation
+            // into a brand-new scene, where those objects no longer exist.
+            MaterialCache.Clear();
+
             BuildLighting();
             BuildRoad();
             BuildObstacleCourse();
@@ -153,6 +157,12 @@ namespace HighwayRenegade.Editor
             crest.transform.position = new Vector3(0f, -14f, 420f);
             crest.transform.rotation = Quaternion.Euler(0f, 0f, 90f);
             Paint(crest, new Color(0.24f, 0.24f, 0.26f));
+
+            // Unity's Cylinder primitive ships with a CapsuleCollider, whose rounded caps
+            // bear no resemblance to the cylinder mesh once scaled non-uniformly like this.
+            // The bike would hit invisible geometry well off the visible surface, so swap
+            // in a MeshCollider that matches what the player can actually see.
+            ReplaceWithMeshCollider(crest);
 
             // Slalom pillars — steering falloff and grip curve at speed.
             for (int i = 0; i < 8; i++)
@@ -305,15 +315,54 @@ namespace HighwayRenegade.Editor
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
+        /// <summary>
+        /// One material per distinct colour, shared across every object using it.
+        ///
+        /// The naive version cloned a material per object, which produced 98 unique
+        /// materials in a scene using only 8 colours. Unique materials defeat SRP
+        /// batching, so 65 identical lane stripes became 65 separate draw calls -
+        /// exactly the CPU-side cost the architecture's GPU Resident Drawer exists
+        /// to avoid.
+        /// </summary>
+        private static readonly Dictionary<Color, Material> MaterialCache = new Dictionary<Color, Material>();
+
         private static void Paint(GameObject go, Color color)
         {
             var renderer = go.GetComponent<Renderer>();
             if (renderer == null) return;
 
-            // sharedMaterial would edit the default material asset itself, which leaks
-            // colour changes into every other object using it.
-            var material = new Material(renderer.sharedMaterial) { color = color };
+            if (!MaterialCache.TryGetValue(color, out Material material))
+            {
+                // Clone rather than edit sharedMaterial directly: that would mutate the
+                // default material asset and leak the colour into unrelated objects.
+                material = new Material(renderer.sharedMaterial) { color = color };
+                MaterialCache[color] = material;
+            }
+
             renderer.sharedMaterial = material;
+        }
+
+        /// <summary>
+        /// Swaps a primitive's default collider for a MeshCollider matching its mesh.
+        /// Used where a primitive's stock collider shape diverges badly from the rendered
+        /// mesh under non-uniform scale. Left non-convex: these are static world geometry,
+        /// and non-convex mesh colliders are both cheaper and exact for static bodies.
+        /// </summary>
+        private static void ReplaceWithMeshCollider(GameObject go)
+        {
+            var existing = go.GetComponent<Collider>();
+            if (existing != null) Object.DestroyImmediate(existing);
+
+            var filter = go.GetComponent<MeshFilter>();
+            if (filter == null || filter.sharedMesh == null)
+            {
+                Debug.LogWarning($"[TestTrack] {go.name} has no mesh; left without a collider.", go);
+                return;
+            }
+
+            var mc = go.AddComponent<MeshCollider>();
+            mc.sharedMesh = filter.sharedMesh;
+            mc.convex = false;
         }
 
         private static void RegisterInBuildSettings(string path)
