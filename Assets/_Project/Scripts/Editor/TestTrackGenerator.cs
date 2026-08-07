@@ -13,6 +13,7 @@ using HighwayRenegade.Gameplay.CameraRig;
 using HighwayRenegade.Gameplay.Race;
 using HighwayRenegade.Gameplay.UI;
 using HighwayRenegade.Gameplay.Environment;
+using HighwayRenegade.Gameplay.Progression;
 using HighwayRenegade.Performance;
 
 namespace HighwayRenegade.Editor
@@ -64,8 +65,13 @@ namespace HighwayRenegade.Editor
             var trafficSpawner = root.AddComponent<TrafficSpawner>();
             var soTraffic = new SerializedObject(trafficSpawner);
             soTraffic.FindProperty("_vehiclePrefab").objectReferenceValue = trafficPrefabGo.GetComponent<TrafficVehicle>();
+            soTraffic.FindProperty("_fallbackTrackLength").floatValue = RoadLength;
             soTraffic.ApplyModifiedPropertiesWithoutUndo();
-            trafficSpawner.Initialize(spline);
+
+            // Deliberately NOT initialised here. A TrackSpline is a plain C# object and
+            // cannot be serialised into the scene, so traffic spawned at generation time
+            // loads with a null spline and never moves. The spawner initialises itself in
+            // Start() instead, against a spline that actually exists at runtime.
 
             // Hide the prefab
             trafficPrefabGo.SetActive(false);
@@ -119,6 +125,10 @@ namespace HighwayRenegade.Editor
             BikeController player = BuildBike("Bike (Player)", new Vector3(0f, 1f, 0f),
                                               new Color(0.75f, 0.18f, 0.12f));
             player.gameObject.AddComponent<PlayerBikeInput>();
+
+            // Applies the saved bike, purchased upgrades and accumulated wear to the
+            // machine. Without it the garage's upgrades are money burnt for no effect.
+            player.gameObject.AddComponent<BikeLoadout>();
 
             BuildRivals(player);
             BuildCamera(player);
@@ -421,6 +431,16 @@ namespace HighwayRenegade.Editor
             so.FindProperty("_thermal").objectReferenceValue = thermal;
             so.FindProperty("_race").objectReferenceValue = race;
             so.ApplyModifiedPropertiesWithoutUndo();
+
+            // CampaignSession was absent from the generated scene entirely, which meant
+            // none of the progression layer ever ran: no prize money, no rival grudges
+            // carried between races, no bike damage, no bust handling. Every race was a
+            // sealed sandbox that wrote nothing to the save file.
+            go.AddComponent<CampaignSession>();
+
+            // Music and SFX bus. Without it the only audio in the scene is the bike's own
+            // procedural engine synthesis.
+            go.AddComponent<AudioManager>();
         }
 
         /// <summary>

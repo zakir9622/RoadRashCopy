@@ -18,6 +18,10 @@ namespace HighwayRenegade.Gameplay.Environment
         [Tooltip("Lane offsets (-2 for left lane, 2 for right lane, etc)")]
         [SerializeField] private float[] _laneOffsets = new float[] { -2.5f, 2.5f };
 
+        [Tooltip("Length of the straight fallback track, metres. Used only when no " +
+                 "SplineHighwayGenerator is present to supply a real spline.")]
+        [SerializeField] private float _fallbackTrackLength = 1200f;
+
         private TrackSpline _spline;
         private List<TrafficVehicle> _vehicles = new List<TrafficVehicle>();
 
@@ -25,6 +29,36 @@ namespace HighwayRenegade.Gameplay.Environment
         {
             _spline = spline;
             SpawnInitialTraffic();
+        }
+
+        /// <summary>
+        /// Spawns at runtime if nothing has initialised this spawner yet.
+        ///
+        /// TrackSpline is a plain C# object, so a spline handed over at scene-generation
+        /// time does not survive being saved to the .unity file - the field comes back
+        /// null on load. The generator did exactly that, which left the baked traffic
+        /// frozen on the road forever, because TrafficVehicle bails out of FixedUpdate
+        /// when its spline is null. Spawning here instead means traffic is always driven
+        /// by a live spline.
+        /// </summary>
+        private void Start()
+        {
+            if (_spline != null) return;
+
+            var generator = FindFirstObjectByType<SplineHighwayGenerator>();
+            if (generator != null && generator.Spline != null)
+            {
+                Initialize(generator.Spline);
+                return;
+            }
+
+            // The placeholder track is a straight road with no generator, so synthesise a
+            // matching straight spline rather than leaving the road empty.
+            Initialize(new TrackSpline(new[]
+            {
+                new SplineNode(Vector3.zero, Vector3.forward),
+                new SplineNode(Vector3.forward * _fallbackTrackLength, Vector3.forward),
+            }));
         }
 
         private void SpawnInitialTraffic()

@@ -37,13 +37,16 @@ namespace HighwayRenegade.Gameplay.UI
         {
             if (_document == null || _document.rootVisualElement == null) return;
 
-            if (_playerBike != null && _playerBike.TryGetComponent<Rigidbody>(out var rb))
+            if (_playerBike != null)
             {
-                float speedKmh = rb.linearVelocity.magnitude * 3.6f;
+                // ForwardSpeed rather than rigidbody magnitude: the speedo should read what
+                // the bike is doing along the road, not include sideways slide during a
+                // drift, which would make the number jump while cornering.
+                float speedKmh = Mathf.Abs(_playerBike.ForwardSpeed) * 3.6f;
                 if (_speedLabel != null) _speedLabel.text = Mathf.RoundToInt(speedKmh).ToString();
-                
-                // Assuming BikeController has a way to get current gear. For now, pseudo-code or placeholder:
-                if (_gearLabel != null) _gearLabel.text = "1"; // Replace with _playerBike.CurrentGear.ToString() if exposed
+
+                // Gear is 0-based internally; riders count from 1.
+                if (_gearLabel != null) _gearLabel.text = (_playerBike.Gear + 1).ToString();
             }
 
             if (_playerDamageable != null && _healthBarFill != null)

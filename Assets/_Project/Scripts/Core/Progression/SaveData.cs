@@ -70,7 +70,14 @@ namespace HighwayRenegade.Core.Progression
         public List<RivalRecord> Rivals = new List<RivalRecord>();
 
         /// <summary>Identifier of the bike the player is riding.</summary>
-        public string BikeId = "superbike";
+        public string BikeId = StarterBikeId;
+
+        /// <summary>
+        /// Id of the free starter bike. Must match an entry in BikeShop: the default used
+        /// to be "superbike", which matches nothing in the shop, so every lookup for the
+        /// player's bike returned null and its value read as zero.
+        /// </summary>
+        public const string StarterBikeId = "bike_rat";
 
         /// <summary>Total races finished, for stats and pacing decisions.</summary>
         public int RacesFinished;
@@ -177,7 +184,13 @@ namespace HighwayRenegade.Core.Progression
             data.CompletedEvents ??= new List<string>();
             data.Rivals ??= new List<RivalRecord>();
 
-            if (string.IsNullOrEmpty(data.BikeId)) data.BikeId = "superbike";
+            if (string.IsNullOrEmpty(data.BikeId)) data.BikeId = SaveData.StarterBikeId;
+
+            // "superbike" was the old default and matches no entry in BikeShop, so any
+            // save carrying it looked up as null and valued the player's bike at zero.
+            // Mapped to the real superbike rather than the starter: these players were
+            // riding it, and demoting them to fix our own naming mistake is not a repair.
+            if (data.BikeId == "superbike") data.BikeId = "bike_super";
 
             // Clamp values that would break gameplay if a file were hand-edited or a
             // previous version wrote something nonsensical.
