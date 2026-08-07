@@ -20,8 +20,8 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
         private void Start()
         {
-            _btnBack.onClick.AddListener(OnBackClicked);
-            _btnRepair.onClick.AddListener(OnRepairClicked);
+            if (_btnBack != null) _btnBack.onClick.AddListener(OnBackClicked);
+            if (_btnRepair != null) _btnRepair.onClick.AddListener(OnRepairClicked);
             
             if (_btnNextBike != null) _btnNextBike.onClick.AddListener(OnNextBikeClicked);
             if (_btnPrevBike != null) _btnPrevBike.onClick.AddListener(OnPrevBikeClicked);
@@ -95,7 +95,8 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
             if (_txtBikeInfo != null)
             {
-                _txtBikeInfo.text = $"{bike.Name.ToUpper()}\nPRICE: ${(bike.Price == 0 ? "FREE" : $"${bike.Price}")}";
+                string price = bike.Price == 0 ? "FREE" : $"${bike.Price}";
+                _txtBikeInfo.text = $"{bike.Name.ToUpper()}\nPRICE: {price}";
             }
 
             if (_txtOwnershipStatus != null)
@@ -109,16 +110,43 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             if (_txtHandlingStat != null) _txtHandlingStat.text = $"HANDLING: {bike.Handling:F1} / 10";
         }
 
+        /// <summary>
+        /// Repairs the bike, priced by how broken it is and what the bike is worth.
+        ///
+        /// This used to charge a flat $50 and change nothing else: the money vanished and
+        /// the bike was exactly as damaged afterwards. Now it moves BikeCondition, and a
+        /// player who cannot cover the full bill buys as much repair as they can afford
+        /// rather than being stuck behind a price they can never reach.
+        /// </summary>
         private void OnRepairClicked()
         {
             SaveData save = SaveService.Load();
-            if (save.Currency >= 50)
+            int bikeValue = BikeShop.GetBike(save.BikeId)?.Price ?? 0;
+
+            if (save.BikeCondition >= RepairRules.PristineCondition)
             {
-                save.Currency -= 50;
-                SaveService.Save(save);
-                RefreshUI();
-                Debug.Log("[Garage] Bike repaired.");
+                Debug.Log("[Garage] Bike is already in perfect condition.");
+                return;
             }
+
+            float target = RepairRules.AffordableCondition(save.Currency, save.BikeCondition, bikeValue);
+            if (target <= save.BikeCondition)
+            {
+                Debug.LogWarning("[Garage] Not enough cash to repair anything.");
+                return;
+            }
+
+            // Charge for the repair actually performed, not the full bill.
+            int spent = RepairRules.RepairCost(save.BikeCondition, bikeValue)
+                      - RepairRules.RepairCost(target, bikeValue);
+            if (spent > save.Currency) spent = save.Currency;
+
+            save.Currency -= spent;
+            save.BikeCondition = target;
+            SaveService.Save(save);
+            RefreshUI();
+
+            Debug.Log($"[Garage] Repaired to {target:P0} for ${spent}.");
         }
 
         private void OnBackClicked()

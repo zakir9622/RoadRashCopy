@@ -218,6 +218,11 @@ for CONFIG in player editor; do
   PASSES_DONE=$((PASSES_DONE + 1))
 done
 
+# The Editor assembly is not compiled here (see README), so its string-keyed
+# serialized references get a static check of their own.
+echo
+python3 "$HERE/check-serialized-refs.py" || FAILED=1
+
 echo
 if [[ $PASSES_DONE -ne 2 ]]; then
   err "only $PASSES_DONE of 2 configurations completed - the harness itself failed"

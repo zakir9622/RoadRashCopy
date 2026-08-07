@@ -12,8 +12,10 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
         private void Start()
         {
-            _btnPlay.onClick.AddListener(OnPlayClicked);
-            _btnGarage.onClick.AddListener(OnGarageClicked);
+            // Unguarded, an unassigned button reference throws on the first frame of the
+            // main menu - the worst possible place for a startup crash.
+            if (_btnPlay != null) _btnPlay.onClick.AddListener(OnPlayClicked);
+            if (_btnGarage != null) _btnGarage.onClick.AddListener(OnGarageClicked);
             
             // Assume we are in the main menu scene
             GameStateManager.ChangeState(GameState.MainMenu);
