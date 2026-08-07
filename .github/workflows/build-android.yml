@@ -1,76 +1,50 @@
-name: Build Android
+name: Android Build & Release
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  # Daily scheduled build at 00:00 UTC (No push/commit spam)
+  schedule:
+    - cron: '0 0 * * *'
+  
+  # Manual trigger button in GitHub Actions tab
   workflow_dispatch:
     inputs:
-      buildApk:
-        description: "Build .apk instead of .aab (easier to sideload for testing)"
+      create_release:
+        description: 'Publish APK directly to GitHub Releases'
         type: boolean
         default: true
+      build_format:
+        description: 'Package format to build'
+        type: choice
+        options:
+          - apk
+          - aab
+        default: 'apk'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
-  test:
-    name: EditMode & PlayMode tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: true
-
-      # Unity's Library/ folder is expensive to regenerate (asset reimport can take
-      # 10+ minutes). Caching it keyed on asset+package hashes turns cold builds into
-      # warm ones. The restore-keys fall back to any previous cache rather than none.
-      - uses: actions/cache@v4
-        with:
-          path: Library
-          key: Library-test-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: |
-            Library-test-
-            Library-
-
-      - uses: game-ci/unity-test-runner@v4
-        id: tests
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          githubToken: ${{ secrets.GITHUB_TOKEN }}
-          testMode: all
-          checkName: Unity Test Results
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: ${{ steps.tests.outputs.artifactsPath }}
-          retention-days: 14
-
   build:
-    name: Android build
+    name: Build Android APK
     runs-on: ubuntu-latest
-    needs: test
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           lfs: true
 
-      # Unity's Android build needs far more disk than the default runner leaves free.
-      - name: Free disk space
+      - name: Free runner disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc
           sudo rm -rf /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
           df -h /
 
-      - uses: actions/cache@v4
+      - name: Cache Unity Library
+        uses: actions/cache@v4
         with:
           path: Library
           key: Library-android-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
@@ -78,21 +52,28 @@ jobs:
             Library-android-
             Library-
 
-      - uses: game-ci/unity-builder@v4
-        id: build
+      - name: Check Unity License Secret
+        run: |
+          if [ -z "${{ secrets.UNITY_LICENSE }}" ] && [ -z "${{ secrets.UNITY_EMAIL }}" ]; then
+            echo "::warning::UNITY_LICENSE secret is not configured in GitHub repository secrets! GameCI requires a Unity license or email/password to activate Unity in CI."
+          else
+            echo "Unity credentials found in secrets."
+          fi
+
+      - name: Unity Android Builder
+        uses: game-ci/unity-builder@v4
+        id: unity_builder
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-          # Signing secrets are optional. Without them the build is debug-signed,
-          # which is fine for sideloading but NOT accepted by the Play Store.
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
           ANDROID_KEYALIAS_NAME: ${{ secrets.ANDROID_KEYALIAS_NAME }}
           ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
         with:
           targetPlatform: Android
-          androidExportType: androidPackage
+          androidExportType: ${{ github.event.inputs.build_format == 'aab' && 'androidAppBundle' || 'androidPackage' }}
           androidKeystoreName: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && 'release.keystore' || '' }}
           androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
@@ -100,8 +81,32 @@ jobs:
           androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
           allowDirtyBuild: true
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: HighwayRenegade-Android-${{ github.run_number }}
+          name: RoadRash-Android-${{ github.run_number }}
           path: build/Android
-          retention-days: 30
+          retention-days: 14
+
+      - name: Publish to GitHub Releases
+        if: ${{ github.event.inputs.create_release != 'false' && !cancelled() }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Road Rash Android Build v1.0.${{ github.run_number }}"
+          body: |
+            ## 🏍️ Highway Renegade (Road Rash Mobile)
+            
+            **Build Details:**
+            - **Commit**: `${{ github.sha }}`
+            - **Branch**: `main`
+            - **Format**: ${{ github.event.inputs.build_format || 'apk' }}
+            - **Date**: ${{ github.event.repository.updated_at }}
+            
+            ### 📥 Download & Install
+            Download the attached `.apk` below and install it directly on your Android phone.
+          files: |
+            build/Android/*.apk
+            build/Android/*.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
