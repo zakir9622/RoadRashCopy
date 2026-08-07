@@ -25,7 +25,7 @@ namespace HighwayRenegade.Gameplay.AI
     {
         public static readonly List<RivalProfile> Rivals = new List<RivalProfile>()
         {
-            new RivalProfile { Name = "Biff", Personality = RivalPersonality.Aggressor, PreferredBikeId = "bike_rat", PreferredWeapon = Core.Combat.WeaponType.Club },
+            new RivalProfile { Name = "Biff", Personality = RivalPersonality.Aggressor, PreferredBikeId = "bike_rat", PreferredWeapon = Core.Combat.WeaponType.Bat },
             new RivalProfile { Name = "Viper", Personality = RivalPersonality.SpeedDemon, PreferredBikeId = "bike_super", PreferredWeapon = Core.Combat.WeaponType.Kick },
             new RivalProfile { Name = "Natasha", Personality = RivalPersonality.GrudgeHolder, PreferredBikeId = "bike_sport", PreferredWeapon = Core.Combat.WeaponType.Chain },
             new RivalProfile { Name = "Axle", Personality = RivalPersonality.Aggressor, PreferredBikeId = "bike_rat", PreferredWeapon = Core.Combat.WeaponType.Chain }

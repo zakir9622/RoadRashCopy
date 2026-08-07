@@ -94,7 +94,7 @@ namespace HighwayRenegade.Editor
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
 
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel30;
-            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel35;
+            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevelAuto;
 
             // Play Store requires a 64-bit binary; IL2CPP is required for ARM64.
             // NamedBuildTarget is the Unity 6 API — the BuildTargetGroup overloads are obsolete.
