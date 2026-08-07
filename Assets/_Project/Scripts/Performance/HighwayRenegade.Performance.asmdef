@@ -3,8 +3,7 @@
   "rootNamespace": "HighwayRenegade.Performance",
   "references": [
     "HighwayRenegade.Core",
-    "Unity.RenderPipelines.Universal.Runtime",
-    "Unity.AdaptivePerformance"
+    "Unity.RenderPipelines.Universal.Runtime"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

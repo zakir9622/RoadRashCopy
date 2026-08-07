@@ -1,11 +1,7 @@
 {
   "name": "HighwayRenegade.Core",
   "rootNamespace": "HighwayRenegade.Core",
-  "references": [
-    "Unity.Mathematics",
-    "Unity.Collections",
-    "Unity.Burst"
-  ],
+  "references": [],
   "includePlatforms": [],
   "excludePlatforms": [],
   "allowUnsafeCode": false,

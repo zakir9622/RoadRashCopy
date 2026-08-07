@@ -4,9 +4,7 @@
   "references": [
     "HighwayRenegade.Core",
     "HighwayRenegade.Performance",
-    "Unity.Mathematics",
-    "Unity.InputSystem",
-    "Unity.Animation.Rigging"
+    "Unity.InputSystem"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
