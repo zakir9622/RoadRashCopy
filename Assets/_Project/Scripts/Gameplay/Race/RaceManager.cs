@@ -167,6 +167,24 @@ namespace HighwayRenegade.Gameplay.Race
                 PlayerPosition = RaceRules.PositionOf(_snapshots, _snapshots.Length, _playerIndex);
         }
 
+        /// <summary>
+        /// One-based position of any racer, not just the player, or 0 if unknown.
+        ///
+        /// Needed so progression can record who actually beat whom. Without it,
+        /// CampaignSession had to assume "the player finished" meant "the player beat
+        /// everyone", which logged a loss against rivals who genuinely won.
+        /// </summary>
+        public int PositionOf(BikeController bike)
+        {
+            if (bike == null) return 0;
+
+            for (int i = 0; i < _racers.Length; i++)
+                if (_racers[i] == bike)
+                    return RaceRules.PositionOf(_snapshots, _snapshots.Length, i);
+
+            return 0;
+        }
+
         /// <summary>Distance from the player to the finish line, metres. Never negative.</summary>
         public float PlayerDistanceRemaining()
         {

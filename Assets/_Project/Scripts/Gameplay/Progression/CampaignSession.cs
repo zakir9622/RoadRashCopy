@@ -48,6 +48,13 @@ namespace HighwayRenegade.Gameplay.Progression
 
         private bool _resultRecorded;
 
+        // Whether the player went down at all this race. Attributing a crash to a specific
+        // rival needs Damageable to carry a damage source, which does not exist yet
+        // (IMPROVEMENTS.md 1.2). Until then, credit is given only to rivals who also
+        // finished ahead - a rider who beat the player AND was around when they went down
+        // is the most defensible attribution available.
+        private bool _playerWasWrecked;
+
         /// <summary>The loaded save. Never null after Awake.</summary>
         public SaveData Save => _save;
 
@@ -71,6 +78,10 @@ namespace HighwayRenegade.Gameplay.Progression
         {
             _race = FindFirstObjectByType<RaceManager>();
             if (_race != null) _race.PlayerFinished += OnPlayerFinished;
+
+            var player = FindFirstObjectByType<PlayerBikeInput>();
+            if (player != null && player.TryGetComponent(out BikeCrashHandler playerCrash))
+                playerCrash.Crashed += _ => _playerWasWrecked = true;
 
             BindRivals();
         }
@@ -138,15 +149,20 @@ namespace HighwayRenegade.Gameplay.Progression
                 RivalRecord record = _records[i];
                 if (record == null || _rivals[i] == null) continue;
 
-                // A rival still on track when the player crossed the line finished behind
-                // them, by definition.
-                bool playerAhead = playerPosition > 0;
+                // Compare actual finishing positions. Assuming the player beat everyone
+                // just because they finished would log a loss against rivals who genuinely
+                // won, and those rivals would wrongly shed grudge for a race they took.
+                int rivalPosition = _race != null
+                    ? _race.PositionOf(_rivals[i].GetComponent<BikeController>())
+                    : 0;
+
+                bool playerAhead = rivalPosition <= 0 || playerPosition < rivalPosition;
 
                 RivalMemory.ApplyRaceOutcome(record, new RaceOutcome(
                     playerFinishedAhead: playerAhead,
                     wreckedByPlayer: _wreckCounts[i],
                     disarmedByPlayer: _disarmed[i],
-                    wreckedThePlayer: false));
+                    wreckedThePlayer: _playerWasWrecked && !playerAhead));
 
                 // A disarmed rival turns up next race with whatever they are left holding,
                 // which is how a stolen bat stays stolen.
