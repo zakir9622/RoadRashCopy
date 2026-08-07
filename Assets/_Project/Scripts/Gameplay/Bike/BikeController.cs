@@ -70,6 +70,11 @@ namespace HighwayRenegade.Gameplay.Bike
         [Tooltip("Degrees/sec the front wheel turns toward its target.")]
         [SerializeField] private float _steerRate = 180f;
 
+        [Header("Rider Aids")]
+        [Tooltip("Assist level. Full is the correct default for touch: the tyre model is " +
+                 "realistic enough to punish input precision a thumb cannot deliver.")]
+        [SerializeField] private AssistLevel _assists = AssistLevel.Full;
+
         [Header("Handbrake")]
         [Tooltip("Rear tyre grip multiplier while the handbrake is held. Low values let the " +
                  "back step out deliberately.")]
@@ -98,6 +103,7 @@ namespace HighwayRenegade.Gameplay.Bike
         private bool _rearGrounded;
         private float _forwardSpeed;
         private float _slipAngle;
+        private float _signedSlipAngle;
         private int _gear;
         private float _engineRpm;
         private float _topSpeed = 60f;
@@ -116,6 +122,21 @@ namespace HighwayRenegade.Gameplay.Bike
 
         /// <summary>Angle between where the bike points and where it is travelling.</summary>
         public float SlipAngle => _slipAngle;
+
+        /// <summary>
+        /// Slip angle with direction: positive when the rear is stepping out to the right.
+        ///
+        /// Counter-steer assists need the sign, not the magnitude - steering into a slide
+        /// catches it, steering out of it makes the slide unrecoverable.
+        /// </summary>
+        public float SignedSlipAngle => _signedSlipAngle;
+
+        /// <summary>Current rider aid level.</summary>
+        public AssistLevel Assists
+        {
+            get => _assists;
+            set => _assists = value;
+        }
 
         /// <summary>True while the rear tyre is past its grip peak and sliding.</summary>
         public bool IsDrifting { get; private set; }
@@ -194,12 +215,25 @@ namespace HighwayRenegade.Gameplay.Bike
         /// </summary>
         private void UpdateSteering(float speed01, float dt)
         {
-            float target = _input.Steer * _maxSteerAngle * _steerFalloff.Evaluate(speed01);
+            // Aids act on the rider's INPUT, before it becomes a steering angle. They trim
+            // steering past the tyre's grip peak and add counter-steer during a slide -
+            // they never grant grip the tyre model says is unavailable.
+            float steerInput = RidingAssists.ApplySteeringAssists(
+                _input.Steer, _signedSlipAngle, _frontTyre.PeakSlipAngleDeg, _assists);
+
+            float target = steerInput * _maxSteerAngle * _steerFalloff.Evaluate(speed01);
 
             // Reverse the steer sense when rolling backwards, as a real vehicle does.
             if (_forwardSpeed < -0.5f) target = -target;
 
-            _currentSteerAngle = Mathf.MoveTowards(_currentSteerAngle, target, _steerRate * dt);
+            // Assist-scaled rate limiting. A touch drag can jump centre-to-lock between
+            // frames, which no physical rider could do and the tyre model punishes at once.
+            float smoothing = RidingAssists.SteerSmoothingSeconds(_assists);
+            float rate = smoothing > 0.001f
+                ? Mathf.Min(_steerRate, _maxSteerAngle / smoothing)
+                : _steerRate;
+
+            _currentSteerAngle = Mathf.MoveTowards(_currentSteerAngle, target, rate * dt);
 
             if (_frontWheel != null)
                 _frontWheel.localRotation = Quaternion.Euler(0f, _currentSteerAngle, 0f);
@@ -219,11 +253,17 @@ namespace HighwayRenegade.Gameplay.Bike
             if (speed < 0.5f)
             {
                 _slipAngle = 0f;
+                _signedSlipAngle = 0f;
                 IsDrifting = false;
                 return;
             }
 
             _slipAngle = Vector3.Angle(transform.forward, flat);
+
+            // Sign it against the bike's own up axis, so it stays correct on banked or
+            // inverted surfaces where a world-up cross product would flip.
+            float direction = Vector3.Dot(Vector3.Cross(transform.forward, flat), transform.up);
+            _signedSlipAngle = direction >= 0f ? _slipAngle : -_slipAngle;
 
             // Drifting means the rear tyre is past its grip peak - the point beyond which
             // more steering produces less grip.
@@ -279,9 +319,10 @@ namespace HighwayRenegade.Gameplay.Bike
                                   * (1f - _frontBrakeBias) * _input.Brake;
 
                 // The tyre can only transmit what friction allows. Exceeding it is wheelspin
-                // or lock-up, not extra thrust.
+                // or lock-up, not extra thrust. Traction control then caps it further -
+                // strictly below the physical limit, never above.
                 float maxLongitudinal = TyreModel.FrictionAtLoad(tyre, normalLoad) * normalLoad;
-                float clamped = Mathf.Clamp(driveForce, -maxLongitudinal, maxLongitudinal);
+                float clamped = RidingAssists.LimitDriveForce(driveForce, maxLongitudinal, _assists);
 
                 longitudinalUsage = maxLongitudinal > 1f ? Mathf.Abs(clamped) / maxLongitudinal : 0f;
                 _driveGripUsage = longitudinalUsage;
