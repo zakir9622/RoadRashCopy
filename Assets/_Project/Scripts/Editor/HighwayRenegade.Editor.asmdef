@@ -1,0 +1,20 @@
+{
+  "name": "HighwayRenegade.Editor",
+  "rootNamespace": "HighwayRenegade.Editor",
+  "references": [
+    "HighwayRenegade.Core",
+    "HighwayRenegade.Performance",
+    "HighwayRenegade.Gameplay"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

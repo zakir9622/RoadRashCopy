@@ -1,0 +1,27 @@
+{
+  "name": "HighwayRenegade.Tests.EditMode",
+  "rootNamespace": "HighwayRenegade.Tests.EditMode",
+  "references": [
+    "UnityEngine.TestRunner",
+    "UnityEditor.TestRunner",
+    "HighwayRenegade.Core",
+    "HighwayRenegade.Performance",
+    "HighwayRenegade.Gameplay",
+    "Unity.Mathematics"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

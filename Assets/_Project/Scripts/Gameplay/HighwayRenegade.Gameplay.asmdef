@@ -1,0 +1,20 @@
+{
+  "name": "HighwayRenegade.Gameplay",
+  "rootNamespace": "HighwayRenegade.Gameplay",
+  "references": [
+    "HighwayRenegade.Core",
+    "HighwayRenegade.Performance",
+    "Unity.Mathematics",
+    "Unity.InputSystem",
+    "Unity.Animation.Rigging"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
