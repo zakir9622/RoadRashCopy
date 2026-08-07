@@ -5,7 +5,8 @@ namespace HighwayRenegade.Core.Combat
     {
         Fists = 0,
         Chain = 1,
-        Bat = 2
+        Bat = 2,
+        Kick = 3
     }
 
     /// <summary>
@@ -39,6 +40,7 @@ namespace HighwayRenegade.Core.Combat
             {
                 case WeaponType.Bat:   return 34f;
                 case WeaponType.Chain: return 26f;
+                case WeaponType.Kick:  return 8f;
                 default:               return 15f;   // Fists
             }
         }
@@ -53,6 +55,7 @@ namespace HighwayRenegade.Core.Combat
             {
                 case WeaponType.Bat:   return 3.4f;
                 case WeaponType.Chain: return 4.2f;   // longest reach, less damage than a bat
+                case WeaponType.Kick:  return 1.8f;   // shortest reach
                 default:               return 2.2f;
             }
         }
@@ -64,6 +67,7 @@ namespace HighwayRenegade.Core.Combat
             {
                 case WeaponType.Bat:   return 1.05f;
                 case WeaponType.Chain: return 0.85f;
+                case WeaponType.Kick:  return 0.70f;
                 default:               return 0.55f;
             }
         }
@@ -102,10 +106,12 @@ namespace HighwayRenegade.Core.Combat
         /// Sideways impulse applied to the victim. Derived from damage so the visual
         /// reaction always matches how hard the hit actually was - a weak graze that
         /// launches a rider across the road reads as a physics bug.
+        /// Kick is the exception: low damage, massive knockback.
         /// </summary>
-        public static float ComputeImpulse(float damage)
+        public static float ComputeImpulse(WeaponType weapon, float damage)
         {
             if (damage <= 0f) return 0f;
+            if (weapon == WeaponType.Kick) return damage * 8.0f * ImpulsePerDamage; // massive impulse for kicks
             return damage * ImpulsePerDamage;
         }
 
@@ -119,6 +125,7 @@ namespace HighwayRenegade.Core.Combat
             {
                 case WeaponType.Bat:   return 460f;
                 case WeaponType.Chain: return 320f;
+                case WeaponType.Kick:  return 85f;  // Less upper body drag, more leg drag
                 default:               return 110f; // Fists
             }
         }

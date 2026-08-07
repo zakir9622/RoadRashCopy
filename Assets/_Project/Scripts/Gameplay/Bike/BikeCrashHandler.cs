@@ -49,8 +49,11 @@ namespace HighwayRenegade.Gameplay.Bike
         /// <summary>Seconds remaining before the rider is back up.</summary>
         public float RecoveryRemaining => IsCrashed ? Mathf.Max(0f, _recoveryEndsAt - Time.time) : 0f;
 
-        /// <summary>Raised the moment a crash begins. Drives audio, VFX and camera shake.</summary>
-        public event Action<CrashSeverity> Crashed;
+        private float _lastAttackTime;
+        private GameObject _lastAttacker;
+
+        /// <summary>Raised the moment a crash begins. Drives audio, VFX and camera shake. Argument 2 is the source (rival) that caused the crash, if any.</summary>
+        public event Action<CrashSeverity, GameObject> Crashed;
 
         /// <summary>Raised when control returns to the rider.</summary>
         public event Action Recovered;
@@ -60,6 +63,27 @@ namespace HighwayRenegade.Gameplay.Bike
             _bike = GetComponent<BikeController>();
             _rb = GetComponent<Rigidbody>();
             _damageable = GetComponent<Damageable>();
+        }
+
+        private void OnEnable()
+        {
+            if (_damageable != null)
+                _damageable.DamagedBySource += OnDamagedBySource;
+        }
+
+        private void OnDisable()
+        {
+            if (_damageable != null)
+                _damageable.DamagedBySource -= OnDamagedBySource;
+        }
+
+        private void OnDamagedBySource(float amount, GameObject source)
+        {
+            if (source != null && source != gameObject)
+            {
+                _lastAttacker = source;
+                _lastAttackTime = Time.time;
+            }
         }
 
         private void FixedUpdate()
@@ -131,7 +155,8 @@ namespace HighwayRenegade.Gameplay.Bike
 
             _damageable?.ApplyDamage(CrashRules.CrashDamage(severity), 0f, Vector3.zero);
 
-            Crashed?.Invoke(severity);
+            GameObject responsibleSource = (Time.time - _lastAttackTime < 2.5f) ? _lastAttacker : null;
+            Crashed?.Invoke(severity, responsibleSource);
         }
 
         /// <summary>

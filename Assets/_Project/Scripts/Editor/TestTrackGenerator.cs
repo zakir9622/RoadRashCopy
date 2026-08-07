@@ -12,6 +12,7 @@ using HighwayRenegade.Gameplay.Combat;
 using HighwayRenegade.Gameplay.CameraRig;
 using HighwayRenegade.Gameplay.Race;
 using HighwayRenegade.Gameplay.UI;
+using HighwayRenegade.Gameplay.Environment;
 using HighwayRenegade.Performance;
 
 namespace HighwayRenegade.Editor
@@ -43,6 +44,56 @@ namespace HighwayRenegade.Editor
             Debug.Log($"[TestTrack] Generated {path}");
         }
 
+        private static void BuildEnvironment(TrackSpline spline)
+        {
+            var root = new GameObject("Environment");
+
+            // Traffic setup
+            GameObject trafficPrefabGo = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            trafficPrefabGo.name = "TrafficVehicle_Prefab";
+            trafficPrefabGo.transform.localScale = new Vector3(2.5f, 1.8f, 4.5f);
+            Object.DestroyImmediate(trafficPrefabGo.GetComponent<BoxCollider>());
+            var trafficRb = trafficPrefabGo.AddComponent<Rigidbody>();
+            trafficRb.isKinematic = true;
+            var trafficCol = trafficPrefabGo.AddComponent<BoxCollider>();
+            trafficCol.isTrigger = false;
+            trafficPrefabGo.AddComponent<Damageable>(); // so player can bump it
+            trafficPrefabGo.AddComponent<TrafficVehicle>();
+            Paint(trafficPrefabGo, new Color(0.8f, 0.8f, 0.8f));
+
+            var trafficSpawner = root.AddComponent<TrafficSpawner>();
+            var soTraffic = new SerializedObject(trafficSpawner);
+            soTraffic.FindProperty("_vehiclePrefab").objectReferenceValue = trafficPrefabGo.GetComponent<TrafficVehicle>();
+            soTraffic.ApplyModifiedPropertiesWithoutUndo();
+            trafficSpawner.Initialize(spline);
+
+            // Hide the prefab
+            trafficPrefabGo.SetActive(false);
+            trafficPrefabGo.transform.SetParent(root.transform);
+
+            // Scenery setup
+            GameObject treePrefabGo = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            treePrefabGo.name = "Tree_Prefab";
+            treePrefabGo.transform.localScale = new Vector3(1f, 4f, 1f);
+            Paint(treePrefabGo, new Color(0.1f, 0.5f, 0.1f));
+            treePrefabGo.SetActive(false);
+            treePrefabGo.transform.SetParent(root.transform);
+
+            GameObject signPrefabGo = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            signPrefabGo.name = "Sign_Prefab";
+            signPrefabGo.transform.localScale = new Vector3(0.5f, 2f, 0.5f);
+            Paint(signPrefabGo, new Color(0.5f, 0.5f, 0.5f));
+            signPrefabGo.SetActive(false);
+            signPrefabGo.transform.SetParent(root.transform);
+
+            var scenerySpawner = root.AddComponent<ScenerySpawner>();
+            var soScenery = new SerializedObject(scenerySpawner);
+            soScenery.FindProperty("_treePrefab").objectReferenceValue = treePrefabGo;
+            soScenery.FindProperty("_signPrefab").objectReferenceValue = signPrefabGo;
+            soScenery.ApplyModifiedPropertiesWithoutUndo();
+            scenerySpawner.Generate(spline);
+        }
+
         /// <summary>Creates the scene, saves it, and registers it in Build Settings.</summary>
         public static string Generate()
         {
@@ -55,6 +106,15 @@ namespace HighwayRenegade.Editor
             BuildLighting();
             BuildRoad();
             BuildObstacleCourse();
+            
+            // Build simple straight spline for the track
+            SplineNode[] nodes = new SplineNode[] {
+                new SplineNode(new Vector3(0, 0, 0), new Vector3(0, 0, 1)),
+                new SplineNode(new Vector3(0, 0, RoadLength), new Vector3(0, 0, 1))
+            };
+            TrackSpline spline = new TrackSpline(nodes);
+            
+            BuildEnvironment(spline);
 
             BikeController player = BuildBike("Bike (Player)", new Vector3(0f, 1f, 0f),
                                               new Color(0.75f, 0.18f, 0.12f));

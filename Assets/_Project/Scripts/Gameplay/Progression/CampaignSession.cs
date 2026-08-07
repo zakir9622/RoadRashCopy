@@ -48,12 +48,7 @@ namespace HighwayRenegade.Gameplay.Progression
 
         private bool _resultRecorded;
 
-        // Whether the player went down at all this race. Attributing a crash to a specific
-        // rival needs Damageable to carry a damage source, which does not exist yet
-        // (IMPROVEMENTS.md 1.2). Until then, credit is given only to rivals who also
-        // finished ahead - a rider who beat the player AND was around when they went down
-        // is the most defensible attribution available.
-        private bool _playerWasWrecked;
+        private int[] _playerWreckedByRival = System.Array.Empty<int>();
 
         /// <summary>The loaded save. Never null after Awake.</summary>
         public SaveData Save => _save;
@@ -81,7 +76,25 @@ namespace HighwayRenegade.Gameplay.Progression
 
             var player = FindFirstObjectByType<PlayerBikeInput>();
             if (player != null && player.TryGetComponent(out BikeCrashHandler playerCrash))
-                playerCrash.Crashed += _ => _playerWasWrecked = true;
+            {
+                playerCrash.Crashed += (severity, source) => {
+                    if (source != null)
+                    {
+                        var rival = source.GetComponentInParent<RivalAIController>();
+                        if (rival != null)
+                        {
+                            for (int i = 0; i < _rivals.Length; i++)
+                            {
+                                if (_rivals[i] == rival)
+                                {
+                                    _playerWreckedByRival[i]++;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                };
+            }
 
             BindRivals();
         }
@@ -102,6 +115,7 @@ namespace HighwayRenegade.Gameplay.Progression
             _records = new RivalRecord[n];
             _wreckCounts = new int[n];
             _disarmed = new bool[n];
+            _playerWreckedByRival = new int[n];
 
             for (int i = 0; i < n; i++)
             {
@@ -120,10 +134,11 @@ namespace HighwayRenegade.Gameplay.Progression
                 if (_rivals[i].TryGetComponent(out MeleeCombat combat))
                     combat.SetWeapon((HighwayRenegade.Core.Combat.WeaponType)record.Weapon);
 
-                // Watching for wrecks is how the grudge gets earned during the race.
-                int index = i;
                 if (_rivals[i].TryGetComponent(out BikeCrashHandler crash))
-                    crash.Crashed += _ => _wreckCounts[index]++;
+                    crash.Crashed += (severity, source) => {
+                        if (source != null && source.GetComponentInParent<PlayerBikeInput>() != null)
+                            _wreckCounts[index]++;
+                    };
             }
         }
 
@@ -162,7 +177,7 @@ namespace HighwayRenegade.Gameplay.Progression
                     playerFinishedAhead: playerAhead,
                     wreckedByPlayer: _wreckCounts[i],
                     disarmedByPlayer: _disarmed[i],
-                    wreckedThePlayer: _playerWasWrecked && !playerAhead));
+                    wreckedThePlayer: _playerWreckedByRival[i] > 0));
 
                 // A disarmed rival turns up next race with whatever they are left holding,
                 // which is how a stolen bat stays stolen.

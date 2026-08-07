@@ -67,19 +67,22 @@ namespace HighwayRenegade.Gameplay.Combat
         /// <param name="side">
         /// -1 to swing left, +1 to swing right, 0 to hit whichever side has a target.
         /// </param>
-        public bool TrySwing(int side = 0)
+        /// <param name="useKick">If true, perform a kick instead of swinging the held weapon.</param>
+        public bool TrySwing(int side = 0, bool useKick = false)
         {
             if (!CanSwing) return false;
-            _nextSwingTime = Time.time + CombatMath.Cooldown(_weapon);
+            
+            WeaponType activeWeapon = useKick ? WeaponType.Kick : _weapon;
+            _nextSwingTime = Time.time + CombatMath.Cooldown(activeWeapon);
 
             // Aerodynamic recoil on the attacker: swinging a bat at 200 km/h creates drag
             if (TryGetComponent(out Rigidbody selfRb))
             {
-                float recoilDrag = CombatMath.SwingRecoilDrag(_weapon);
+                float recoilDrag = CombatMath.SwingRecoilDrag(activeWeapon);
                 selfRb.AddForce(-transform.forward * recoilDrag, ForceMode.Force);
             }
 
-            float reach = CombatMath.Reach(_weapon);
+            float reach = CombatMath.Reach(activeWeapon);
             int count = Physics.OverlapSphereNonAlloc(
                 transform.position, reach, _hitBuffer, _targetMask, QueryTriggerInteraction.Ignore);
 
@@ -105,13 +108,13 @@ namespace HighwayRenegade.Gameplay.Combat
                 Vector3 sideAxis = local.x >= 0f ? transform.right : -transform.right;
                 if (Vector3.Angle(flat, sideAxis) > _swingArcDegrees) continue;
 
-                ApplyHit(victim, local);
+                ApplyHit(victim, local, activeWeapon);
             }
 
             return true;
         }
 
-        private void ApplyHit(Damageable victim, Vector3 localOffset)
+        private void ApplyHit(Damageable victim, Vector3 localOffset, WeaponType activeWeapon)
         {
             float victimSpeed = victim.TryGetComponent(out BikeController victimBike)
                 ? victimBike.ForwardSpeed
@@ -125,8 +128,8 @@ namespace HighwayRenegade.Gameplay.Combat
             int hitZone = localOffset.z > 0.4f ? 1 : (localOffset.z < -0.4f ? 2 : 0);
             float zoneMultiplier = CombatMath.ZoneDamageMultiplier(hitZone);
 
-            float damage = CombatMath.ComputeDamage(_weapon, relativeSpeed, _aggression) * zoneMultiplier;
-            float impulse = CombatMath.ComputeImpulse(damage);
+            float damage = CombatMath.ComputeDamage(activeWeapon, relativeSpeed, _aggression) * zoneMultiplier;
+            float impulse = CombatMath.ComputeImpulse(activeWeapon, damage);
             Vector3 shove = (victim.transform.position - transform.position);
 
             if (!victim.ApplyDamage(damage, impulse, shove, gameObject)) return;   // absorbed by i-frames
@@ -137,17 +140,17 @@ namespace HighwayRenegade.Gameplay.Combat
                 victimRb.AddTorque(transform.up * (Mathf.Sign(localOffset.x) * 45f), ForceMode.Impulse);
             }
 
-            TryStealWeapon(victim, damage);
+            TryStealWeapon(victim, damage, activeWeapon);
         }
 
         /// <summary>
         /// Knocks the victim's weapon loose and takes it if this hit qualifies
         /// (GDD: "Weapons can be stolen from opponents during combat").
         /// </summary>
-        private void TryStealWeapon(Damageable victim, float damage)
+        private void TryStealWeapon(Damageable victim, float damage, WeaponType attackerWeapon)
         {
             if (!victim.TryGetComponent(out MeleeCombat victimCombat)) return;
-            if (!CombatMath.CanStealWeapon(_weapon, victimCombat.Weapon, damage)) return;
+            if (!CombatMath.CanStealWeapon(attackerWeapon, victimCombat.Weapon, damage)) return;
 
             WeaponType taken = victimCombat.Weapon;
             victimCombat.SetWeapon(WeaponType.Fists);
