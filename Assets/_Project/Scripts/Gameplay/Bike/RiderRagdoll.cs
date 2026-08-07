@@ -47,6 +47,9 @@ namespace HighwayRenegade.Gameplay.Bike
                     _riderRb.linearVelocity = bikeRb.linearVelocity + (Vector3.up * 5f) + (transform.forward * 5f);
                 }
 
+                // Switch camera to track the ragdoll rider
+                HighwayRenegade.Gameplay.CameraRig.ChaseCamera.Instance?.SetTemporaryTarget(_riderRb.transform, 3f);
+
                 // Enable running back to bike after tumbling
                 Invoke(nameof(EnableFootLocomotion), 1.5f);
             }
@@ -58,6 +61,8 @@ namespace HighwayRenegade.Gameplay.Bike
             {
                 _footLocomotion.enabled = true;
                 _footLocomotion.SetTargetBike(_mountPoint);
+                // Camera continues tracking the runner
+                HighwayRenegade.Gameplay.CameraRig.ChaseCamera.Instance?.SetTemporaryTarget(_footLocomotion.transform, 4f);
             }
         }
 
@@ -73,6 +78,9 @@ namespace HighwayRenegade.Gameplay.Bike
             {
                 _footLocomotion.enabled = false;
             }
+
+            // Return camera to bike
+            HighwayRenegade.Gameplay.CameraRig.ChaseCamera.Instance?.ResetTarget();
         }
     }
 }

@@ -87,13 +87,29 @@ namespace HighwayRenegade.Gameplay.Environment
             shape.radius = 0.5f;
         }
 
-        public void PlaySparks(Vector3 position, Vector3 normal)
+        public void PlaySparks(Vector3 position, Vector3 normal, int count = 30)
         {
             if (_sparksSystem == null) return;
             
             _sparksSystem.transform.position = position;
             _sparksSystem.transform.rotation = Quaternion.LookRotation(normal);
-            _sparksSystem.Emit(30);
+            _sparksSystem.Emit(count);
+        }
+
+        public void PlayCrashBurst(Vector3 position)
+        {
+            if (_sparksSystem != null)
+            {
+                _sparksSystem.transform.position = position;
+                _sparksSystem.transform.rotation = Quaternion.identity;
+                _sparksSystem.Emit(75); // Massive spark burst
+            }
+
+            if (_smokeSystem != null)
+            {
+                _smokeSystem.transform.position = position;
+                _smokeSystem.Emit(25); // Dust & smoke cloud
+            }
         }
 
         public void PlaySmoke(Vector3 position)

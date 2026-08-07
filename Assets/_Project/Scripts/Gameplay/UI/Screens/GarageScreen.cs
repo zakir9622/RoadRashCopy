@@ -78,17 +78,34 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             }
         }
 
+        [SerializeField] private Text _txtSpeedStat;
+        [SerializeField] private Text _txtAccelStat;
+        [SerializeField] private Text _txtHandlingStat;
+        [SerializeField] private Text _txtOwnershipStatus;
+
         private void RefreshUI()
         {
             SaveData save = SaveService.Load();
             if (_txtCash != null)
-                _txtCash.text = $"Cash: ${save.PlayerCash}";
+                _txtCash.text = $"CASH: ${save.PlayerCash}";
 
             var bike = BikeShop.AvailableBikes[_currentBikeIndex];
+            bool isOwned = save.ActiveBikeId == bike.Id;
+
             if (_txtBikeInfo != null)
             {
-                _txtBikeInfo.text = $"{bike.Name}\nPrice: ${bike.Price}\nTop Speed: {bike.TopSpeed}";
+                _txtBikeInfo.text = $"{bike.Name.ToUpper()}\nPRICE: ${(bike.Price == 0 ? "FREE" : $"${bike.Price}")}";
             }
+
+            if (_txtOwnershipStatus != null)
+            {
+                _txtOwnershipStatus.text = isOwned ? "✅ EQUIPPED" : (save.PlayerCash >= bike.Price ? "🟢 AVAILABLE TO BUY" : "🔴 LOCKED (NEED CASH)");
+            }
+
+            // Stat bars visual representation
+            if (_txtSpeedStat != null) _txtSpeedStat.text = $"TOP SPEED: {bike.TopSpeed} KM/H";
+            if (_txtAccelStat != null) _txtAccelStat.text = $"ACCELERATION: {bike.Acceleration:F1} G";
+            if (_txtHandlingStat != null) _txtHandlingStat.text = $"HANDLING: {bike.Handling:F1} / 10";
         }
 
         private void OnRepairClicked()

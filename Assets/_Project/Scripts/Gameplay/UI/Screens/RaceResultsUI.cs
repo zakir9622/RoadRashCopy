@@ -9,11 +9,13 @@ namespace HighwayRenegade.Gameplay.UI.Screens
     {
         [SerializeField] private Text _txtPlacement;
         [SerializeField] private Text _txtPayout;
+        [SerializeField] private Text _txtKnockouts;
+        [SerializeField] private Text _txtMedal;
         [SerializeField] private Button _btnContinue;
 
         private void Start()
         {
-            _btnContinue.onClick.AddListener(OnContinueClicked);
+            if (_btnContinue != null) _btnContinue.onClick.AddListener(OnContinueClicked);
             
             GameStateManager.OnStateChanged += OnStateChanged;
             gameObject.SetActive(false);
@@ -30,19 +32,27 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             
             if (newState == GameState.PostRace)
             {
-                DisplayResults(1); // Hardcoded placement for now
+                var race = FindFirstObjectByType<HighwayRenegade.Gameplay.Race.RaceManager>();
+                int place = race != null && race.PlayerPosition > 0 ? race.PlayerPosition : 1;
+                DisplayResults(place, 2); // Sample 2 knockouts
             }
         }
 
-        public void DisplayResults(int placement)
+        public void DisplayResults(int placement, int knockouts = 0)
         {
-            _txtPlacement.text = $"You Finished: {placement}";
+            string medal = placement == 1 ? "🥇 GOLD TROPHY" : (placement == 2 ? "🥈 SILVER TROPHY" : (placement == 3 ? "🥉 BRONZE TROPHY" : "4TH+ FINISHER"));
+            if (_txtMedal != null) _txtMedal.text = medal;
+            if (_txtPlacement != null) _txtPlacement.text = $"POSITION: P{placement}";
             
-            int payout = CalculatePayout(placement);
-            _txtPayout.text = $"Prize Money: ${payout}";
+            int basePayout = CalculatePayout(placement);
+            int combatBonus = knockouts * 150;
+            int total = basePayout + combatBonus;
+
+            if (_txtKnockouts != null) _txtKnockouts.text = $"Knockouts ({knockouts}): +${combatBonus}";
+            if (_txtPayout != null) _txtPayout.text = $"TOTAL PRIZE: ${total}\n(Race: ${basePayout} | Combat: ${combatBonus})";
             
             SaveData save = SaveService.Load();
-            save.PlayerCash += payout;
+            save.PlayerCash += total;
             SaveService.Save(save);
         }
 
@@ -51,9 +61,9 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             switch (placement)
             {
                 case 1: return 1000;
-                case 2: return 500;
-                case 3: return 250;
-                default: return 50;
+                case 2: return 600;
+                case 3: return 350;
+                default: return 100;
             }
         }
 

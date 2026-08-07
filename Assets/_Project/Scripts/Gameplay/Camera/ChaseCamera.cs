@@ -55,29 +55,58 @@ namespace HighwayRenegade.Gameplay.CameraRig
         private float _previousSpeed;
         private float _gForceOffset;
 
+        // Dynamic targeting and trauma
+        private Transform _overrideTarget;
+        private float _overrideLookAhead;
+        private float _trauma; // 0..1, decays over time
+
+        public static ChaseCamera Instance { get; private set; }
+
         private void Awake()
         {
+            Instance = this;
             _camera = GetComponent<Camera>();
             _camera.fieldOfView = _baseFov;
 
             if (_target == null)
             {
-                // FindFirstObjectByType is the non-deprecated Unity 6 API and is only
-                // ever hit at startup, never per frame.
                 _target = FindFirstObjectByType<BikeController>();
                 if (_target == null)
                     Debug.LogError("[ChaseCamera] No BikeController found to follow.", this);
             }
         }
 
+        public void SetTemporaryTarget(Transform customTarget, float customLookAhead = 0f)
+        {
+            _overrideTarget = customTarget;
+            _overrideLookAhead = customLookAhead;
+        }
+
+        public void ResetTarget()
+        {
+            _overrideTarget = null;
+        }
+
+        public void AddTrauma(float amount)
+        {
+            _trauma = Mathf.Clamp01(_trauma + amount);
+        }
+
         private void LateUpdate()
         {
-            if (_target == null) return;
+            if (_target == null && _overrideTarget == null) return;
 
-            Transform bike = _target.transform;
+            Transform currentTransform = _overrideTarget != null ? _overrideTarget : _target.transform;
             float dt = Time.deltaTime;
-            float speed01 = _target.NormalisedSpeed;
-            float currentSpeed = _target.ForwardSpeed;
+            float speed01 = _target != null ? _target.NormalisedSpeed : 0f;
+            float currentSpeed = _target != null ? _target.ForwardSpeed : 0f;
+
+            // Decay trauma
+            if (_trauma > 0f)
+            {
+                _trauma = Mathf.Max(0f, _trauma - dt * 1.5f);
+            }
+            float shakePower = _trauma * _trauma; // Non-linear trauma falloff
 
             // --- G-force dynamic pullback & dive compression ---
             float acceleration = dt > 0.0001f ? (currentSpeed - _previousSpeed) / dt : 0f;
@@ -86,35 +115,44 @@ namespace HighwayRenegade.Gameplay.CameraRig
             _gForceOffset = Mathf.Lerp(_gForceOffset, targetGForce, _gForceDamping * 10f * dt);
 
             // --- Position: damped follow with G-force adjustment ---
-            Quaternion yawOnly = Quaternion.Euler(0f, bike.eulerAngles.y, 0f);
-            Vector3 dynamicLocalOffset = _localOffset + new Vector3(0f, -_target.BrakeDive * 0.25f, _gForceOffset);
-            Vector3 desired = bike.position + yawOnly * dynamicLocalOffset;
+            Quaternion yawOnly = Quaternion.Euler(0f, currentTransform.eulerAngles.y, 0f);
+            float brakeDive = _target != null ? _target.BrakeDive : 0f;
+            Vector3 dynamicLocalOffset = _localOffset + new Vector3(0f, -brakeDive * 0.25f, _gForceOffset);
+            Vector3 desired = currentTransform.position + yawOnly * dynamicLocalOffset;
 
-            // High-speed aerodynamic turbulence micro-jitter
-            if (speed01 > 0.5f)
-            {
-                float shakeNoise = (Mathf.PerlinNoise(Time.time * 28f, 0f) - 0.5f) * _turbulenceStrength * speed01;
-                desired += yawOnly * new Vector3(shakeNoise, shakeNoise * 0.5f, 0f);
-            }
+            // High-speed aerodynamic turbulence micro-jitter + Trauma Shake
+            float shakeNoiseX = (Mathf.PerlinNoise(Time.time * 28f, 0f) - 0.5f) * (_turbulenceStrength * speed01 + shakePower * 0.8f);
+            float shakeNoiseY = (Mathf.PerlinNoise(0f, Time.time * 28f) - 0.5f) * (_turbulenceStrength * speed01 * 0.5f + shakePower * 0.6f);
+            float shakeNoiseZ = (Mathf.PerlinNoise(Time.time * 20f, Time.time * 20f) - 0.5f) * (shakePower * 0.5f);
+            desired += yawOnly * new Vector3(shakeNoiseX, shakeNoiseY, shakeNoiseZ);
 
             transform.position = Vector3.SmoothDamp(
                 transform.position, desired, ref _positionVelocity, _positionDamping);
 
             // --- Rotation: aim ahead of the bike with Apex Anticipation ---
-            // Leaning into a corner shifts the look target laterally toward the apex
-            float apexLead = (_target.SignedSlipAngle + _target.LeanAngleDeg) * _apexLeadFactor;
-            Vector3 lookTarget = bike.position
-                                 + bike.forward * _lookAheadDistance
-                                 + bike.right * apexLead
+            float lookAhead = _overrideTarget != null ? _overrideLookAhead : _lookAheadDistance;
+            float apexLead = _target != null ? (_target.SignedSlipAngle + _target.LeanAngleDeg) * _apexLeadFactor : 0f;
+            Vector3 lookTarget = currentTransform.position
+                                 + currentTransform.forward * lookAhead
+                                 + currentTransform.right * apexLead
                                  + Vector3.up * _lookAheadHeight;
 
             Quaternion desiredRotation = Quaternion.LookRotation(lookTarget - transform.position, Vector3.up);
+            
+            // Add slight rotational trauma shake
+            if (shakePower > 0.01f)
+            {
+                float rotNoise = (Mathf.PerlinNoise(Time.time * 35f, 15f) - 0.5f) * (shakePower * 4f);
+                desiredRotation *= Quaternion.Euler(0f, 0f, rotNoise);
+            }
+
             transform.rotation = Quaternion.Slerp(
                 transform.rotation, desiredRotation, _rotationDamping * dt);
 
             // --- FOV: the speed cue ---
             float targetFov = Mathf.Lerp(_baseFov, _maxFov, speed01);
-            if (_target.IsDrifting) targetFov += _driftFovBonus;
+            if (_target != null && _target.IsDrifting) targetFov += _driftFovBonus;
+            if (shakePower > 0.1f) targetFov -= shakePower * 3f; // Visual compression on hit
 
             _camera.fieldOfView = Mathf.Lerp(
                 _camera.fieldOfView, targetFov, _fovDamping * dt);

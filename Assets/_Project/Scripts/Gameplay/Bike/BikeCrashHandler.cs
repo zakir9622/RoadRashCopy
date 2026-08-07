@@ -155,11 +155,32 @@ namespace HighwayRenegade.Gameplay.Bike
 
             _damageable?.ApplyDamage(CrashRules.CrashDamage(severity), 0f, Vector3.zero);
 
-            // Play massive sparks on crash
+            // Trigger intense camera trauma shake
+            float trauma = severity == CrashSeverity.Wreck ? 0.9f : (severity == CrashSeverity.Knockdown ? 0.6f : 0.35f);
+            HighwayRenegade.Gameplay.CameraRig.ChaseCamera.Instance?.AddTrauma(trauma);
+
+            // Play massive sparks & debris on crash
             HighwayRenegade.Gameplay.Environment.VFXManager.Instance?.PlaySparks(transform.position, Vector3.up);
+
+            // Play sound effect
+            // If audio manager is available, trigger impact SFX
+            
+            // Micro-freeze hit-stop for impactful feeling
+            StartCoroutine(DoHitStop(severity));
 
             GameObject responsibleSource = (Time.time - _lastAttackTime < 2.5f) ? _lastAttacker : null;
             Crashed?.Invoke(severity, responsibleSource);
+        }
+
+        private System.Collections.IEnumerator DoHitStop(CrashSeverity severity)
+        {
+            if (severity == CrashSeverity.Wreck || severity == CrashSeverity.Knockdown)
+            {
+                float originalTimeScale = Time.timeScale;
+                Time.timeScale = 0.1f;
+                yield return new WaitForSecondsRealtime(0.08f);
+                Time.timeScale = originalTimeScale;
+            }
         }
 
         /// <summary>
@@ -168,17 +189,30 @@ namespace HighwayRenegade.Gameplay.Bike
         private void Remount()
         {
             Vector3 position = transform.position;
+            bool hitGround = false;
 
-            // Drop onto the road surface rather than reusing the crash position, which may
-            // be inside a barrier or off the edge of the world.
+            // 1. Try raycasting down to the road surface
             if (Physics.Raycast(position + Vector3.up * 8f, Vector3.down, out RaycastHit hit,
                                 40f, _groundMask, QueryTriggerInteraction.Ignore))
             {
                 position = hit.point + Vector3.up * _remountHeight;
+                hitGround = true;
             }
-            else
+
+            // 2. Spline fallback if off-road or fell into void
+            if (!hitGround || position.y < -10f)
             {
-                position.y += _remountHeight;
+                var spline = FindFirstObjectByType<HighwayRenegade.Core.Race.TrackSpline>();
+                if (spline != null && spline.TotalLength > 10f)
+                {
+                    // Find nearest progress or place at estimated location
+                    Vector3 splinePos = spline.SamplePosition(0f); // Default to start or sample along track
+                    position = splinePos + Vector3.up * _remountHeight;
+                }
+                else
+                {
+                    position.y = Mathf.Max(0f, position.y) + _remountHeight;
+                }
             }
 
             // Face along the last direction of travel, flattened. Falling back to the
