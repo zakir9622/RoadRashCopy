@@ -5,16 +5,24 @@ using HighwayRenegade.Performance;
 namespace HighwayRenegade.Gameplay.UI
 {
     /// <summary>
-    /// Minimal on-screen readout: speed, drift state, thermal tier, frame rate.
+    /// Developer diagnostics overlay: speed, drift state, thermal tier, frame rate.
     ///
-    /// Deliberately IMGUI. A production HUD belongs in UI Toolkit with authored assets
-    /// (Phase 6), but IMGUI needs no canvas, no prefab, and no atlas — which means the
-    /// placeholder build has a working speedometer without blocking on art.
+    /// This is no longer the player's HUD. It was written as a stand-in "until Phase 6
+    /// moves the HUD to UI Toolkit", and that HUD now exists as
+    /// <see cref="Screens.RaceHudScreen"/> over GameUI.uxml. Leaving both drawing a
+    /// speedometer would put two different readouts on screen at once, so this one keeps
+    /// only the job the player-facing HUD deliberately does not do: showing thermal tier
+    /// and frame rate while tuning.
     ///
-    /// IMGUI allocates when it builds strings, so the displayed text is cached and only
-    /// rebuilt when a value actually changes at display precision. That keeps steady-state
-    /// allocation at zero, which matters because the frame-rate readout below is the very
-    /// thing used to detect GC hitches.
+    /// Off by default for that reason - it is a tool, not part of the game. Enable it in
+    /// the inspector when profiling.
+    ///
+    /// Deliberately IMGUI: it needs no canvas, no prefab and no atlas, so it can be
+    /// switched on in any scene without touching that scene's UI. IMGUI allocates when it
+    /// builds strings, so the displayed text is cached and only rebuilt when a value
+    /// actually changes at display precision. That keeps steady-state allocation at zero,
+    /// which matters because the frame-rate readout is the very thing used to detect GC
+    /// hitches.
     /// </summary>
     [DisallowMultipleComponent]
     public sealed class SpeedHud : MonoBehaviour
@@ -22,7 +30,10 @@ namespace HighwayRenegade.Gameplay.UI
         [SerializeField] private BikeController _bike;
         [SerializeField] private ThermalManager _thermal;
         [SerializeField] private HighwayRenegade.Gameplay.Race.RaceManager _race;
-        [SerializeField] private bool _showDiagnostics = true;
+
+        [Tooltip("Developer overlay. Off in shipping builds; RaceHudScreen is the " +
+                 "player-facing HUD.")]
+        [SerializeField] private bool _showDiagnostics;
 
         private GUIStyle _speedStyle;
         private GUIStyle _labelStyle;

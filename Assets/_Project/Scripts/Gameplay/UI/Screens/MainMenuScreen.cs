@@ -1,53 +1,78 @@
 using UnityEngine;
-using UnityEngine.UI;
 using HighwayRenegade.Core.App;
 
 namespace HighwayRenegade.Gameplay.UI.Screens
 {
-    public class MainMenuScreen : MonoBehaviour
+    /// <summary>
+    /// Title screen. Drives the campaign, garage, settings and exit entries in
+    /// MainMenu.uxml.
+    ///
+    /// Every button goes through <see cref="UIScreen.OnClick"/>, so a control present in
+    /// the markup but absent here - or renamed in one and not the other - is reported at
+    /// bind time instead of quietly doing nothing when pressed. That was not hypothetical:
+    /// the previous version of this screen declared a settings button it never wired.
+    /// </summary>
+    public sealed class MainMenuScreen : UIScreen
     {
-        [SerializeField] private Button _btnPlay;
-        [SerializeField] private Button _btnGarage;
-        [SerializeField] private Button _btnSettings;
+        [Tooltip("Settings modal opened by the SETTINGS entry. Optional; the entry is " +
+                 "disabled when absent rather than left looking live.")]
+        [SerializeField] private SettingsScreen _settings;
 
-        [Tooltip("Panel opened by the SETTINGS button. Lives in this scene, hidden at start.")]
-        [SerializeField] private SettingsScreen _settingsScreen;
-
-        private void Start()
+        protected override void OnBind()
         {
-            // Unguarded, an unassigned button reference throws on the first frame of the
-            // main menu - the worst possible place for a startup crash.
-            if (_btnPlay != null) _btnPlay.onClick.AddListener(OnPlayClicked);
-            if (_btnGarage != null) _btnGarage.onClick.AddListener(OnGarageClicked);
-            if (_btnSettings != null) _btnSettings.onClick.AddListener(OnSettingsClicked);
+            OnClick("BtnCampaign", StartCampaign);
+            OnClick("BtnGarage", OpenGarage);
+            OnClick("BtnExit", QuitGame);
 
-            // Assume we are in the main menu scene
+            var settingsButton = OnClick("BtnSettings", OpenSettings);
+            if (settingsButton != null && _settings == null)
+            {
+                // Better a visibly unavailable control than one that swallows presses.
+                settingsButton.SetEnabled(false);
+                Debug.LogWarning("[MainMenuScreen] No SettingsScreen assigned, so SETTINGS " +
+                                 "is disabled. Assign it in the scene.", this);
+            }
+
             GameStateManager.ChangeState(GameState.MainMenu);
         }
 
-        private void OnPlayClicked()
+        private void StartCampaign()
         {
-            // Transition to Race Scene
             if (SceneLoader.Instance != null)
             {
                 SceneLoader.Instance.LoadSceneAsync(SceneNames.Race, GameState.Racing);
             }
+            else if (GameFlowManager.Instance != null)
+            {
+                // SceneLoader lives on the same object as the flow manager, but a scene
+                // opened directly in the editor may have neither. Falling through to the
+                // flow manager keeps CAMPAIGN working in that case.
+                GameFlowManager.Instance.StartRace();
+            }
+            else
+            {
+                Debug.LogError("[MainMenuScreen] Nothing can load the race scene: neither " +
+                               "SceneLoader nor GameFlowManager is present.", this);
+            }
         }
 
-        private void OnGarageClicked()
+        private void OpenGarage()
         {
-            GameStateManager.ChangeState(GameState.Garage);
-            // Hide this screen, show garage screen...
+            if (GameFlowManager.Instance != null) GameFlowManager.Instance.GoToGarage();
+            else GameStateManager.ChangeState(GameState.Garage);
         }
 
-        /// <summary>
-        /// Settings are a modal detour rather than a destination, so this toggles a panel
-        /// inside the menu scene instead of changing GameState - there is nothing to
-        /// return "back" from, and no scene load to pay for.
-        /// </summary>
-        private void OnSettingsClicked()
+        private void OpenSettings() => _settings?.Toggle();
+
+        private static void QuitGame()
         {
-            if (_settingsScreen != null) _settingsScreen.Toggle();
+            // Application.Quit is a no-op in the editor, so state has to be unwound
+            // explicitly or testing "exit" leaves the editor running in a dead state.
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
         }
     }
 }

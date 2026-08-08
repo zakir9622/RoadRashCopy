@@ -32,6 +32,14 @@ namespace HighwayRenegade.Gameplay.Progression
                  "evolve, but no campaign progress is recorded.")]
         [SerializeField] private string _eventId = "";
 
+        [Tooltip("Purse used when this race is not a campaign event. Without it a free " +
+                 "run pays nothing, which leaves the placeholder track with no economy " +
+                 "at all - you can crash and be billed, but never earn.")]
+        [SerializeField] private int _freeRunPurse = 800;
+
+        [Tooltip("Cash awarded per rival the player puts down.")]
+        [SerializeField] private int _knockoutBonus = 150;
+
         [Header("Debug")]
         [Tooltip("Ignore any save on disk and start from a clean slate. Editor testing only.")]
         [SerializeField] private bool _startFresh;
@@ -52,6 +60,26 @@ namespace HighwayRenegade.Gameplay.Progression
 
         /// <summary>The loaded save. Never null after Awake.</summary>
         public SaveData Save => _save;
+
+        /// <summary>
+        /// How the last finished race was costed. Invalid until the player finishes.
+        ///
+        /// This is the only account of the race's money. The results screen renders it
+        /// rather than recomputing a prize of its own, which is what previously caused a
+        /// campaign race to be paid for twice by two disagreeing formulas.
+        /// </summary>
+        public RaceSummary LastSummary { get; private set; }
+
+        /// <summary>Rivals the player has put down this race.</summary>
+        public int Knockouts
+        {
+            get
+            {
+                int total = 0;
+                for (int i = 0; i < _wreckCounts.Length; i++) total += _wreckCounts[i];
+                return total;
+            }
+        }
 
         /// <summary>Intro text for the current chapter, for the pre-race beat.</summary>
         public string ChapterIntro
@@ -264,9 +292,27 @@ namespace HighwayRenegade.Gameplay.Progression
             }
 
             RaceEvent evt = Campaign.FindEvent(_eventId);
-            if (evt == null) return;                       // free run: no campaign progress
 
-            _save.Currency += RaceRules.PrizeMoney(playerPosition, evt.Purse);
+            // A free run still pays, just from a default purse rather than an event's.
+            // Racing for nothing is not a game loop.
+            int purse = evt != null ? evt.Purse : _freeRunPurse;
+
+            int prize = RaceRules.PrizeMoney(playerPosition, purse);
+            int knockouts = Knockouts;
+            int combatBonus = knockouts * _knockoutBonus;
+
+            // Quoted with the same rules the garage bills, so the figure the player is
+            // shown is the figure they are actually charged.
+            int repairBill = RepairCost;
+
+            // Clamped at zero: a repair bill bigger than the purse leaves the player
+            // broke, never in debt, which nothing downstream knows how to represent.
+            _save.Currency = Mathf.Max(0, _save.Currency + prize + combatBonus);
+
+            LastSummary = new RaceSummary(playerPosition, knockouts, prize, combatBonus,
+                                          repairBill, fine: 0, balance: _save.Currency);
+
+            if (evt == null) return;                       // free run: no campaign progress
 
             if (playerPosition > 0 && playerPosition <= evt.RequiredPosition)
             {

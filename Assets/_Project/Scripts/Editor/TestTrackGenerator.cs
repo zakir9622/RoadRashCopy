@@ -13,6 +13,7 @@ using HighwayRenegade.Gameplay.Combat;
 using HighwayRenegade.Gameplay.CameraRig;
 using HighwayRenegade.Gameplay.Race;
 using HighwayRenegade.Gameplay.UI;
+using HighwayRenegade.Gameplay.UI.Screens;
 using HighwayRenegade.Gameplay.Environment;
 using HighwayRenegade.Gameplay.Progression;
 using HighwayRenegade.Performance;
@@ -442,6 +443,41 @@ namespace HighwayRenegade.Editor
             // Music and SFX bus. Without it the only audio in the scene is the bike's own
             // procedural engine synthesis.
             go.AddComponent<AudioManager>();
+
+            BuildRaceUI();
+        }
+
+        /// <summary>
+        /// Places the in-race UI.
+        ///
+        /// All three of these screens were written and then placed in no scene at all, so
+        /// racing meant no HUD, no way to pause, and nothing shown when you crossed the
+        /// line. The race simply ended and sat there. They are created here for the same
+        /// reason everything else in this file is: a generated scene is the only scene,
+        /// so anything absent from the generator does not exist in the game.
+        /// </summary>
+        private static void BuildRaceUI()
+        {
+            // UI Toolkit delivers pointer input through the EventSystem. Without one the
+            // pause and results buttons draw correctly and ignore every tap.
+            UiSceneBuilder.AddEventSystem();
+
+            UiSceneBuilder.AddScreen<RaceHudScreen>("GameUI", UiSceneBuilder.BaseLayer);
+
+            // Both modals start hidden and raise themselves: pause on the back button,
+            // results when the race enters PostRace.
+            var pause = UiSceneBuilder.AddScreen<PauseScreen>("Pause", UiSceneBuilder.ModalLayer);
+            SetVisibleOnStart(pause, false);
+
+            var results = UiSceneBuilder.AddScreen<RaceResultsScreen>("Results", UiSceneBuilder.ModalLayer);
+            SetVisibleOnStart(results, false);
+        }
+
+        private static void SetVisibleOnStart(MonoBehaviour screen, bool visible)
+        {
+            var so = new SerializedObject(screen);
+            so.FindProperty("_visibleOnStart").boolValue = visible;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         /// <summary>

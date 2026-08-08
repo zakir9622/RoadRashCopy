@@ -109,6 +109,27 @@ namespace HighwayRenegade.Core.Progression
         /// </summary>
         public float BikeCondition = RepairRules.PristineCondition;
 
+        /// <summary>
+        /// Every bike the player has paid for.
+        ///
+        /// Without this the garage only knew which bike was equipped, so switching back
+        /// to a bike you already owned charged you for it a second time - and there was
+        /// no way to own two bikes at once.
+        /// </summary>
+        public List<string> OwnedBikeIds = new List<string>();
+
+        /// <summary>True if this bike has been bought, or is the free starter.</summary>
+        public bool Owns(string bikeId) =>
+            !string.IsNullOrEmpty(bikeId) &&
+            (bikeId == StarterBikeId || OwnedBikeIds.Contains(bikeId));
+
+        /// <summary>Records a purchase. Idempotent.</summary>
+        public void MarkOwned(string bikeId)
+        {
+            if (string.IsNullOrEmpty(bikeId) || OwnedBikeIds.Contains(bikeId)) return;
+            OwnedBikeIds.Add(bikeId);
+        }
+
         /// <summary>Cost to purchase the next stage of an upgrade (0-5).</summary>
         public static int UpgradeCost(int currentStage) => (currentStage + 1) * 600;
 
@@ -209,6 +230,12 @@ namespace HighwayRenegade.Core.Progression
             // bill for damage they never did. Treat "absent" as pristine.
             if (data.BikeCondition <= 0f) data.BikeCondition = RepairRules.PristineCondition;
             else if (data.BikeCondition > 1f) data.BikeCondition = RepairRules.PristineCondition;
+
+            // A save written before ownership was tracked has an empty list, which would
+            // read as "you do not own the bike you are sitting on" and offer to sell it
+            // back to you. Whatever is equipped was, by definition, already paid for.
+            if (data.OwnedBikeIds == null) data.OwnedBikeIds = new List<string>();
+            data.MarkOwned(data.BikeId);
 
             for (int i = 0; i < data.Rivals.Count; i++)
             {

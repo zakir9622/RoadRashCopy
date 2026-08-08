@@ -16,7 +16,16 @@ namespace HighwayRenegade.Core.App
         /// The run is over: the bike is wrecked and the repair is unaffordable. Distinct
         /// from PostRace because it is terminal - there is no "next race" to go to.
         /// </summary>
-        GameOver
+        GameOver,
+
+        /// <summary>
+        /// The game clock is stopped and the pause modal is up.
+        ///
+        /// Appended rather than slotted next to Racing on purpose: enum members are
+        /// persisted by ordinal in save data, so inserting one in the middle silently
+        /// reinterprets every existing save.
+        /// </summary>
+        Paused
     }
 
     /// <summary>

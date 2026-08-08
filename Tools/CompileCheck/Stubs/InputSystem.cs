@@ -138,3 +138,18 @@ namespace UnityEngine.InputSystem
         public Vector2Control position { get; }
     }
 }
+
+namespace UnityEngine.InputSystem.UI
+{
+    /// <summary>
+    /// The EventSystem input module that com.unity.inputsystem provides. Scenes need one
+    /// for UI Toolkit and uGUI to receive pointer input once the new input backend is
+    /// active - the legacy StandaloneInputModule silently delivers nothing there.
+    /// </summary>
+    public class InputSystemUIInputModule : UnityEngine.EventSystems.BaseInputModule
+    {
+        public float moveRepeatDelay { get; set; }
+        public float moveRepeatRate { get; set; }
+        public bool deselectOnBackgroundClick { get; set; }
+    }
+}

@@ -5,7 +5,7 @@
     "HighwayRenegade.Core",
     "HighwayRenegade.Performance",
     "HighwayRenegade.Gameplay",
-    "UnityEngine.UI"
+    "Unity.InputSystem"
   ],
   "includePlatforms": [
     "Editor"
