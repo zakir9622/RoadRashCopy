@@ -60,6 +60,12 @@ namespace HighwayRenegade.Tests.PlayMode
             foreach (var ai in Object.FindObjectsByType<RivalAIController>(FindObjectsSortMode.None))
                 ai.enabled = false;
 
+            // The police unit is not a RivalAIController and would otherwise keep
+            // chasing through every assertion - and busting the player mid-test ends the
+            // race under the physics being measured.
+            foreach (var police in Object.FindObjectsByType<PoliceAI>(FindObjectsSortMode.None))
+                police.enabled = false;
+
             _bike.SetInput(BikeInput.Neutral);
 
             // Let the suspension absorb the spawn drop before any assertions.
