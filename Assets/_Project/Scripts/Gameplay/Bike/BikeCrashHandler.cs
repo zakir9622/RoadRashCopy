@@ -159,8 +159,18 @@ namespace HighwayRenegade.Gameplay.Bike
             float trauma = severity == CrashSeverity.Wipeout ? 0.9f : (severity == CrashSeverity.Major ? 0.6f : 0.35f);
             HighwayRenegade.Gameplay.CameraRig.ChaseCamera.Instance?.AddTrauma(trauma);
 
-            // Play massive sparks & debris on crash
-            HighwayRenegade.Gameplay.Environment.VFXManager.Instance?.PlaySparks(transform.position, Vector3.up);
+            // Sparks for a scrape, the full burst for a real fall.
+            //
+            // PlayCrashBurst - 75 sparks plus a smoke and dust cloud - was written for
+            // exactly this moment and had zero call sites, so every crash in the game
+            // produced the same modest 30-spark puff whether the rider clipped a barrier
+            // or went end over end at 200 km/h. The visual read on how badly that went was
+            // identical, while the audio and the camera trauma both already scaled.
+            var vfx = HighwayRenegade.Gameplay.Environment.VFXManager.Instance;
+            if (severity == CrashSeverity.Wipeout || severity == CrashSeverity.Major)
+                vfx?.PlayCrashBurst(transform.position);
+            else
+                vfx?.PlaySparks(transform.position, Vector3.up);
 
             // Impact audio. Scaled by severity so a tip-over and a wipeout do not land
             // with identical weight - the sound is the fastest read the player gets on how
