@@ -241,6 +241,11 @@ python3 "$HERE/check-assembly-refs.py" || FAILED=1
 # dead in the shipped build with no error anywhere to say so.
 python3 "$HERE/check-reachability.py" || FAILED=1
 
+# Unity identifies assets by the GUID in their .meta, and stored references use that
+# GUID rather than a path. An asset with no committed .meta is re-identified on every
+# clean import, so any reference to it breaks and reports as "script missing".
+python3 "$HERE/check-meta-files.py" || FAILED=1
+
 echo
 if [[ $PASSES_DONE -ne 2 ]]; then
   err "only $PASSES_DONE of 2 configurations completed - the harness itself failed"

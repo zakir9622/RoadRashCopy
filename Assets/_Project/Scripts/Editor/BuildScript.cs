@@ -122,7 +122,13 @@ namespace HighwayRenegade.Editor
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
 
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel30;
-            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevelAuto;
+
+            // Pinned, not Auto. Auto resolves to whatever SDK happens to be installed on
+            // the machine doing the build, so the target level silently changes when the
+            // CI image updates - and Google Play rejects uploads below its current
+            // minimum. A build's target API is a release decision, not an environment
+            // detail, so it belongs in the diff.
+            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel35;
 
             // Play Store requires a 64-bit binary; IL2CPP is required for ARM64.
             // NamedBuildTarget is the Unity 6 API — the BuildTargetGroup overloads are obsolete.
@@ -184,7 +190,15 @@ namespace HighwayRenegade.Editor
 
             if (string.IsNullOrEmpty(keystore) || !File.Exists(keystore))
             {
-                Debug.Log("[Build] No keystore supplied — producing an unsigned/debug-signed build.");
+                // Warning, not Log. A debug-signed package installs fine by sideloading
+                // and is rejected by the Play Store, and that difference is invisible in
+                // the file itself - so it has to be loud at build time rather than
+                // discovered at upload time.
+                Debug.LogWarning("[Build] UNSIGNED: no release keystore supplied, so this " +
+                                 "package is debug-signed. Fine for sideloading; the Play " +
+                                 "Store will reject it. Set ANDROID_KEYSTORE_BASE64, " +
+                                 "ANDROID_KEYSTORE_PASS, ANDROID_KEYALIAS_NAME and " +
+                                 "ANDROID_KEYALIAS_PASS to produce a release build.");
                 PlayerSettings.Android.useCustomKeystore = false;
                 return;
             }

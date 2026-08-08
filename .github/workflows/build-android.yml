@@ -76,7 +76,7 @@ jobs:
     needs: preflight
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: true
 
@@ -96,7 +96,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Library
-          key: Library-test-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          key: Library-test-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}
           restore-keys: |
             Library-test-
             Library-
@@ -131,7 +131,7 @@ jobs:
     if: ${{ !cancelled() && needs.preflight.result == 'success' && (needs.test.result == 'success' || inputs.skip_tests) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: true
 
@@ -150,7 +150,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Library
-          key: Library-android-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          # Keyed on packages and project settings only, NOT on Assets/**.
+          #
+          # Including Assets/** meant every script edit minted a new key and saved a
+          # fresh 1.7 GB cache. GitHub caps a repository at 10 GB and evicts the oldest
+          # entry, so after a handful of commits the cache thrashed and every run paid
+          # the full import cost it was supposed to avoid. What makes Library expensive
+          # to rebuild is package resolution and asset import settings; changed scripts
+          # recompile in seconds against a restored Library.
+          key: Library-android-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}
           restore-keys: |
             Library-android-
             Library-
