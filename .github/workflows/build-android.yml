@@ -44,6 +44,18 @@ jobs:
         with:
           lfs: true
 
+      # unity-test-runner pulls the same multi-GB editor image as the build job. Without
+      # this the pull dies with "no space left on device" - the exact failure that broke
+      # the activation workflow.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache \
+                      /usr/local/share/powershell /usr/share/swift \
+                      "$AGENT_TOOLSDIRECTORY" || true
+          docker image prune -af || true
+          df -h / | tail -1
+
       - name: Cache Unity Library
         uses: actions/cache@v4
         with:
@@ -88,9 +100,14 @@ jobs:
 
       - name: Free runner disk space
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc
-          sudo rm -rf /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
-          df -h /
+          # The Android editor image is ~7 GB compressed and considerably larger
+          # unpacked, so the default runner does not have room for it.
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache \
+                      /usr/local/share/powershell /usr/share/swift \
+                      "$AGENT_TOOLSDIRECTORY" || true
+          docker image prune -af || true
+          df -h / | tail -1
 
       - name: Cache Unity Library
         uses: actions/cache@v4
@@ -101,35 +118,29 @@ jobs:
             Library-android-
             Library-
 
-      - name: Verify Secret Availability
+      - name: Verify Unity credentials
         run: |
-          echo "=========================================="
-          echo "   GAME-CI LICENSE SECRET DIAGNOSTICS     "
-          echo "=========================================="
-          if [ -n "${{ secrets.UNITY_LICENSE || secrets.UNITY_LICENCE || secrets.UNITY_LICENSE_FILE }}" ]; then
-            echo "✅ UNITY_LICENSE: FOUND (Personal/Plus .ulf XML string)"
-          else
-            echo "❌ UNITY_LICENSE: NOT FOUND in Repository Secrets"
-          fi
-          
-          if [ -n "${{ secrets.UNITY_SERIAL || secrets.UNITY_SERIAL_KEY || secrets.UNITY_KEY }}" ]; then
-            echo "✅ UNITY_SERIAL: FOUND"
-          else
-            echo "❌ UNITY_SERIAL: NOT FOUND in Repository Secrets"
-          fi
-          
-          if [ -n "${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}" ]; then
-            echo "✅ UNITY_EMAIL: FOUND"
-          else
-            echo "❌ UNITY_EMAIL: NOT FOUND in Repository Secrets"
+          HAS_LICENSE="${{ secrets.UNITY_LICENSE || secrets.UNITY_LICENCE || secrets.UNITY_LICENSE_FILE }}"
+          HAS_SERIAL="${{ secrets.UNITY_SERIAL || secrets.UNITY_SERIAL_KEY || secrets.UNITY_KEY }}"
+          HAS_EMAIL="${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}"
+          HAS_PASSWORD="${{ secrets.UNITY_PASSWORD }}"
+
+          [ -n "$HAS_LICENSE"  ] && echo "UNITY_LICENSE:  present" || echo "UNITY_LICENSE:  MISSING"
+          [ -n "$HAS_SERIAL"   ] && echo "UNITY_SERIAL:   present" || echo "UNITY_SERIAL:   MISSING"
+          [ -n "$HAS_EMAIL"    ] && echo "UNITY_EMAIL:    present" || echo "UNITY_EMAIL:    MISSING"
+          [ -n "$HAS_PASSWORD" ] && echo "UNITY_PASSWORD: present" || echo "UNITY_PASSWORD: MISSING"
+
+          # Fail here rather than after a ~7 GB image pull. Unity cannot build without
+          # activation, so continuing only buys a slower, more confusing failure deep
+          # inside unity-builder.
+          if [ -z "$HAS_LICENSE" ] && [ -z "$HAS_SERIAL" ]; then
+            echo "::error::No Unity licence configured. Run the 'Acquire Unity License Activation File' workflow, follow the instructions it prints, then add UNITY_LICENSE (plus UNITY_EMAIL and UNITY_PASSWORD) under Settings -> Secrets and variables -> Actions."
+            exit 1
           fi
 
-          if [ -n "${{ secrets.UNITY_PASSWORD }}" ]; then
-            echo "✅ UNITY_PASSWORD: FOUND"
-          else
-            echo "❌ UNITY_PASSWORD: NOT FOUND in Repository Secrets"
+          if [ -z "$HAS_EMAIL" ] || [ -z "$HAS_PASSWORD" ]; then
+            echo "::warning::UNITY_EMAIL / UNITY_PASSWORD are not set. Activation usually needs them alongside the licence file."
           fi
-          echo "=========================================="
 
       - name: Unity Android Builder
         uses: game-ci/unity-builder@v4
@@ -164,7 +175,10 @@ jobs:
           retention-days: 14
 
       - name: Publish to GitHub Releases
-        if: ${{ github.event.inputs.create_release != 'false' && !cancelled() }}
+        # success(), not !cancelled(): this previously ran even when the build failed,
+        # publishing empty GitHub releases with no APK attached ("does not include a
+        # valid file") for runs that never produced anything.
+        if: ${{ success() && github.event.inputs.create_release != 'false' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
