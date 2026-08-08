@@ -138,7 +138,11 @@ namespace HighwayRenegade.Tests.EditMode
             One<PauseScreen>("the pause menu");
             One<RaceResultsScreen>("the results screen");
 
-            Assert.AreEqual(3, All<UIDocument>().Length,
+            // Without this overlay there is no way to pause on a phone at all: PauseScreen
+            // only listens for Escape, and no touch path reaches TogglePause.
+            One<TouchControlsScreen>("the touch overlay");
+
+            Assert.AreEqual(4, All<UIDocument>().Length,
                             "Every UI Toolkit screen needs its own UIDocument.");
 
             // Without an EventSystem the UI draws perfectly and ignores every tap, which

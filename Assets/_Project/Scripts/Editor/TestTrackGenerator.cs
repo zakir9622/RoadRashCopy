@@ -484,6 +484,15 @@ namespace HighwayRenegade.Editor
 
             UiSceneBuilder.AddScreen<RaceHudScreen>("GameUI", UiSceneBuilder.BaseLayer);
 
+            // The touch overlay: zone hints, the pause button, and kick/grab/nitro.
+            // Without it there is no way to pause on a phone at all - PauseScreen only
+            // listened for Escape - and kick, weapon stealing and nitrous were each fully
+            // implemented with no input bound to them.
+            //
+            // BaseLayer + 1: above the HUD so its buttons receive taps, below ModalLayer
+            // so the pause menu covers it rather than the other way round.
+            UiSceneBuilder.AddScreen<TouchControlsScreen>("TouchControls", UiSceneBuilder.BaseLayer + 1);
+
             // Both modals start hidden and raise themselves: pause on the back button,
             // results when the race enters PostRace.
             var pause = UiSceneBuilder.AddScreen<PauseScreen>("Pause", UiSceneBuilder.ModalLayer);
