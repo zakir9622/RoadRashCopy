@@ -47,7 +47,8 @@ namespace HighwayRenegade.Gameplay.Environment
                 {
                     var go = new GameObject("~PlaceholderArtTemplates");
                     go.SetActive(false);
-                    Object.DontDestroyOnLoad(go);
+                    if (Application.isPlaying)
+                        Object.DontDestroyOnLoad(go);
                     _root = go.transform;
                 }
                 return _root;
