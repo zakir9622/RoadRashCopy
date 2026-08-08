@@ -1,0 +1,108 @@
+{
+  "_comment": [
+    "Every art asset the game pulls from a CC0 library, in one reviewable file.",
+    "",
+    "Kept as data rather than hard-coded so adding a road surface or a skybox is a",
+    "one-line diff that a reviewer can check the licence of, and so a clean clone can",
+    "rebuild the whole art set with one command.",
+    "",
+    "resolution: Poly Haven serves 1k/2k/4k/8k. 1k is the mobile default - a 4k road",
+    "texture costs 16x the memory for detail no phone screen resolves at 90 km/h.",
+    "",
+    "maps: Poly Haven names vary per asset. 'Diffuse' is albedo, 'nor_gl' is an",
+    "OpenGL-convention normal map (which is what Unity expects; nor_dx is inverted",
+    "green and will light backwards), 'rough' is roughness, 'arm' packs",
+    "AO/roughness/metallic into one texture - preferred on mobile because it is one",
+    "sampler instead of three."
+  ],
+  "assets": [
+    {
+      "source": "polyhaven",
+      "slug": "asphalt_02",
+      "destination": "Surfaces/Road",
+      "resolution": "1k",
+      "maps": [
+        "Diffuse",
+        "nor_gl",
+        "rough",
+        "arm"
+      ],
+      "licence": "CC0",
+      "use": "Main highway surface"
+    },
+    {
+      "source": "polyhaven",
+      "slug": "asphalt_track",
+      "destination": "Surfaces/Road",
+      "resolution": "1k",
+      "maps": [
+        "Diffuse",
+        "nor_gl",
+        "arm"
+      ],
+      "licence": "CC0",
+      "use": "Worn secondary road / shoulder blend"
+    },
+    {
+      "source": "polyhaven",
+      "slug": "aerial_grass_rock",
+      "destination": "Surfaces/Terrain",
+      "resolution": "1k",
+      "maps": [
+        "Diffuse",
+        "nor_gl",
+        "arm"
+      ],
+      "licence": "CC0",
+      "use": "Roadside verge"
+    },
+    {
+      "source": "polyhaven",
+      "slug": "concrete_wall_008",
+      "destination": "Surfaces/Structure",
+      "resolution": "1k",
+      "maps": [
+        "Diffuse",
+        "nor_gl",
+        "arm"
+      ],
+      "licence": "CC0",
+      "use": "Barriers, underpasses, tunnel walls"
+    },
+    {
+      "source": "polyhaven",
+      "slug": "rusty_metal_02",
+      "destination": "Surfaces/Structure",
+      "resolution": "1k",
+      "maps": [
+        "Diffuse",
+        "nor_gl",
+        "arm"
+      ],
+      "licence": "CC0",
+      "use": "Guardrails, signage posts, bike detailing"
+    },
+    {
+      "source": "polyhaven",
+      "slug": "kloppenheim_02_puresky",
+      "destination": "Sky",
+      "resolution": "1k",
+      "maps": [
+        "hdri"
+      ],
+      "licence": "CC0",
+      "use": "Daylight sky and image-based lighting"
+    },
+    {
+      "source": "polyhaven",
+      "slug": "dikhololo_night",
+      "destination": "Sky",
+      "resolution": "1k",
+      "maps": [
+        "hdri"
+      ],
+      "licence": "CC0",
+      "use": "Night race lighting"
+    }
+  ]
+}

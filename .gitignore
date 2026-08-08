@@ -78,3 +78,18 @@ desktop.ini
 
 # CompileCheck reference cache
 Tools/CompileCheck/.work/
+
+# Fetched CC0 art.
+#
+# Not committed on purpose. Every file here is reproducible from
+# Tools/Assets/manifest.json, exactly as the scenes are reproducible from their
+# generators - so the repository stores the recipe, not the output. It also keeps a
+# game's worth of textures off GitHub's 1 GB LFS free tier, which real art would
+# exhaust quickly. Run: python3 Tools/Assets/fetch-assets.py
+/Assets/_Project/Art/**/*.jpg
+/Assets/_Project/Art/**/*.png
+/Assets/_Project/Art/**/*.hdr
+/Assets/_Project/Art/**/*.exr
+/Assets/_Project/Art/**/*.fbx
+/Assets/_Project/Art/**/*.zip
+/Assets/_Project/Art/.fetched.json

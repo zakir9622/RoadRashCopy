@@ -5622,7 +5622,7 @@ MonoBehaviour:
   _bike: {fileID: 262059473}
   _thermal: {fileID: 718404903}
   _race: {fileID: 718404902}
-  _showDiagnostics: 1
+  _showDiagnostics: 0
 --- !u!114 &718404902
 MonoBehaviour:
   m_ObjectHideFlags: 0

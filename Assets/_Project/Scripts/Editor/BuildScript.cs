@@ -28,17 +28,35 @@ namespace HighwayRenegade.Editor
         [MenuItem("Highway Renegade/Build Android (AAB)")]
         public static void BuildAndroid()
         {
+            bool appBundle = GetArg("-buildApk") == null;   // default to .aab; pass -buildApk for .apk
+            string ext = appBundle ? "aab" : "apk";
+
             // An empty value must fall back too, not just a missing switch:
             // Directory.CreateDirectory("") throws, which would abort the build before it
             // started with an error that says nothing about the real cause.
             string outputPath = GetArg("-customBuildPath");
             if (string.IsNullOrWhiteSpace(outputPath)) outputPath = "build/Android";
 
-            bool appBundle = GetArg("-buildApk") == null;   // default to .aab; pass -buildApk for .apk
-
-            Directory.CreateDirectory(outputPath);
-            string ext = appBundle ? "aab" : "apk";
-            string file = Path.Combine(outputPath, $"{ProductName}.{ext}");
+            // -customBuildPath may be a directory OR a full file path, and which one
+            // arrives is not up to us: game-ci/unity-builder supplies its own
+            // "-customBuildPath .../Android.apk" ahead of the one in customParameters,
+            // and GetArg returns the first match. Treating that as a directory created a
+            // *directory literally named Android.apk*, put the real package one level
+            // inside it, and left the release step's "build/Android/*.apk" glob matching
+            // nothing - so every release published with no file attached while the build
+            // itself reported success.
+            string file;
+            if (HasPackageExtension(outputPath))
+            {
+                file = outputPath;
+                string parent = Path.GetDirectoryName(file);
+                if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+            }
+            else
+            {
+                Directory.CreateDirectory(outputPath);
+                file = Path.Combine(outputPath, $"{ProductName}.{ext}");
+            }
 
             ApplyAndroidSettings(appBundle);
 
@@ -66,15 +84,28 @@ namespace HighwayRenegade.Editor
             BuildReport report = BuildPipeline.BuildPlayer(options);
             BuildSummary summary = report.summary;
 
-            if (summary.result == BuildResult.Succeeded)
-            {
-                Debug.Log($"[Build] SUCCEEDED  {summary.totalSize / (1024 * 1024)} MB  in {summary.totalTime}");
-                if (Application.isBatchMode) EditorApplication.Exit(0);
-            }
-            else
+            if (summary.result != BuildResult.Succeeded)
             {
                 Fail($"Build {summary.result} with {summary.totalErrors} error(s).");
+                return;
             }
+
+            // BuildResult.Succeeded is not the same as "a package exists at the path we
+            // asked for". A build that reported success while writing its output
+            // somewhere else shipped empty releases for weeks, because nothing between
+            // here and the release step ever checked that the file was real.
+            if (!File.Exists(file))
+            {
+                Fail($"Build reported success but no package exists at '{file}'. " +
+                     $"Contents of '{Path.GetDirectoryName(file)}': {DescribeDirectory(Path.GetDirectoryName(file))}");
+                return;
+            }
+
+            long bytes = new FileInfo(file).Length;
+            Debug.Log($"[Build] SUCCEEDED  {bytes / (1024 * 1024)} MB  in {summary.totalTime}");
+            Debug.Log($"[Build] PACKAGE  {Path.GetFullPath(file)}");
+
+            if (Application.isBatchMode) EditorApplication.Exit(0);
         }
 
         /// <summary>
@@ -91,7 +122,13 @@ namespace HighwayRenegade.Editor
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
 
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel30;
-            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevelAuto;
+
+            // Pinned, not Auto. Auto resolves to whatever SDK happens to be installed on
+            // the machine doing the build, so the target level silently changes when the
+            // CI image updates - and Google Play rejects uploads below its current
+            // minimum. A build's target API is a release decision, not an environment
+            // detail, so it belongs in the diff.
+            PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel35;
 
             // Play Store requires a 64-bit binary; IL2CPP is required for ARM64.
             // NamedBuildTarget is the Unity 6 API — the BuildTargetGroup overloads are obsolete.
@@ -153,7 +190,15 @@ namespace HighwayRenegade.Editor
 
             if (string.IsNullOrEmpty(keystore) || !File.Exists(keystore))
             {
-                Debug.Log("[Build] No keystore supplied — producing an unsigned/debug-signed build.");
+                // Warning, not Log. A debug-signed package installs fine by sideloading
+                // and is rejected by the Play Store, and that difference is invisible in
+                // the file itself - so it has to be loud at build time rather than
+                // discovered at upload time.
+                Debug.LogWarning("[Build] UNSIGNED: no release keystore supplied, so this " +
+                                 "package is debug-signed. Fine for sideloading; the Play " +
+                                 "Store will reject it. Set ANDROID_KEYSTORE_BASE64, " +
+                                 "ANDROID_KEYSTORE_PASS, ANDROID_KEYALIAS_NAME and " +
+                                 "ANDROID_KEYALIAS_PASS to produce a release build.");
                 PlayerSettings.Android.useCustomKeystore = false;
                 return;
             }
@@ -182,18 +227,23 @@ namespace HighwayRenegade.Editor
         /// </summary>
         private static void EnsureScenes()
         {
-            if (!File.Exists(TestTrackGenerator.ScenePath))
-            {
-                Debug.Log("[Build] Generating the placeholder test track.");
-                TestTrackGenerator.Generate();
-            }
+            // Regenerated every build, NOT only when missing.
+            //
+            // "Only if absent" froze the committed TestTrack.unity at whatever it
+            // contained the day it was generated, and the generator kept growing without
+            // it. The shipped scene therefore had no UIDocument, no PoliceAI, no
+            // WeaponGrabber and no RiderRagdoll - so the HUD, pause menu, results screen,
+            // police pursuit, ragdoll and weapon stealing were all wired up in code,
+            // passed every check, and were simply not in the game. The player saw the old
+            // IMGUI debug overlay instead, because that is what the stale scene held.
+            //
+            // The generator is the source of truth for these scenes, so the build must
+            // run it rather than trust a file that cannot say how old it is.
+            Debug.Log("[Build] Regenerating the race track from TestTrackGenerator.");
+            TestTrackGenerator.Generate();
 
-            if (!File.Exists(MenuSceneGenerator.MainMenuPath) ||
-                !File.Exists(MenuSceneGenerator.GaragePath))
-            {
-                Debug.Log("[Build] Generating the menu scenes.");
-                MenuSceneGenerator.GenerateAll();
-            }
+            Debug.Log("[Build] Regenerating the menu scenes.");
+            MenuSceneGenerator.GenerateAll();
 
             RegisterScene(TestTrackGenerator.ScenePath);
             RegisterScene(MenuSceneGenerator.GaragePath);
@@ -235,6 +285,35 @@ namespace HighwayRenegade.Editor
             scenes.RemoveAt(index);
             scenes.Insert(0, entry);
             EditorBuildSettings.scenes = scenes.ToArray();
+        }
+
+        /// <summary>
+        /// Lists a directory for a failure message, so a build that lands its output in
+        /// an unexpected place says where it actually went instead of only where it did
+        /// not.
+        /// </summary>
+        private static string DescribeDirectory(string path)
+        {
+            if (string.IsNullOrEmpty(path) || !Directory.Exists(path)) return "(missing)";
+
+            var entries = new System.Collections.Generic.List<string>();
+            foreach (string entry in Directory.GetFileSystemEntries(path))
+            {
+                bool isDirectory = Directory.Exists(entry);
+                entries.Add(isDirectory ? Path.GetFileName(entry) + "/" : Path.GetFileName(entry));
+            }
+            return entries.Count == 0 ? "(empty)" : string.Join(", ", entries);
+        }
+
+        /// <summary>
+        /// True when a path already names the package file rather than a folder to put
+        /// it in. Extension only - the file does not exist yet at the point this is asked.
+        /// </summary>
+        private static bool HasPackageExtension(string path)
+        {
+            string extension = Path.GetExtension(path);
+            return string.Equals(extension, ".apk", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extension, ".aab", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string[] EnabledScenes() =>

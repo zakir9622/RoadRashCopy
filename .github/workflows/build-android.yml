@@ -76,7 +76,7 @@ jobs:
     needs: preflight
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: true
 
@@ -96,7 +96,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Library
-          key: Library-test-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          key: Library-test-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}
           restore-keys: |
             Library-test-
             Library-
@@ -131,7 +131,7 @@ jobs:
     if: ${{ !cancelled() && needs.preflight.result == 'success' && (needs.test.result == 'success' || inputs.skip_tests) }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           lfs: true
 
@@ -150,7 +150,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Library
-          key: Library-android-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          # Keyed on packages and project settings only, NOT on Assets/**.
+          #
+          # Including Assets/** meant every script edit minted a new key and saved a
+          # fresh 1.7 GB cache. GitHub caps a repository at 10 GB and evicts the oldest
+          # entry, so after a handful of commits the cache thrashed and every run paid
+          # the full import cost it was supposed to avoid. What makes Library expensive
+          # to rebuild is package resolution and asset import settings; changed scripts
+          # recompile in seconds against a restored Library.
+          key: Library-android-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}
           restore-keys: |
             Library-android-
             Library-
@@ -180,11 +188,45 @@ jobs:
           androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
           allowDirtyBuild: true
 
+      # Between the builder and the release there was nothing asserting that an
+      # installable package existed. A build that reported success while writing its
+      # output to an unexpected path produced green runs and empty releases for weeks,
+      # because the release step's glob simply matched nothing and carried on.
+      #
+      # This fails the job instead. -type f matters: the actual defect was a *directory*
+      # named Android.apk, which a naive existence check would have accepted.
+      - name: Locate and verify the package
+        id: package
+        run: |
+          set -euo pipefail
+
+          file="$(find build -type f \( -name '*.apk' -o -name '*.aab' \) \
+                    -size +5M -print 2>/dev/null | head -1 || true)"
+
+          if [ -z "$file" ]; then
+            echo "::error::No .apk or .aab over 5 MB anywhere under build/."
+            echo "--- what the build actually produced ---"
+            find build -maxdepth 4 -exec ls -ld {} + || echo "(no build directory)"
+            exit 1
+          fi
+
+          # Check the content, not the extension. An APK is a zip, so it starts "PK";
+          # anything else with the right name is not installable.
+          if [ "$(head -c 2 "$file")" != "PK" ]; then
+            echo "::error::'$file' is not a zip archive, so it is not a valid package."
+            exit 1
+          fi
+
+          echo "path=$file" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$file")" >> "$GITHUB_OUTPUT"
+          echo "Verified $(ls -lh "$file" | awk '{print $5}') at $file"
+
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: RoadRash-Android-${{ github.run_number }}
-          path: build/Android
+          path: ${{ steps.package.outputs.path }}
+          if-no-files-found: error
           retention-days: 14
 
       - name: Publish to GitHub Releases
@@ -207,8 +249,9 @@ jobs:
             
             ### 📥 Download & Install
             Download the attached `.apk` below and install it directly on your Android device.
-          files: |
-            build/Android/*.apk
-            build/Android/*.aab
+          # The exact verified path, not a glob. A glob that matches nothing is a
+          # warning here, not an error, so it published empty releases silently.
+          files: ${{ steps.package.outputs.path }}
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

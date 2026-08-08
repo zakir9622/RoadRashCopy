@@ -38,10 +38,17 @@ ALLOWED_UNREFERENCED = {
 
 
 def strip_code(src: str) -> str:
-    """Remove comments and string literals so a name in prose is not a reference."""
+    """Remove comments and string literals so a name in prose is not a reference.
+
+    Interpolated strings are left alone. A $"..." literal contains real executable code
+    inside its braces - $"{DescribeDirectory(path)}" is a genuine call - so blanking it
+    loses references and reports live methods as dead. Erring toward keeping text means
+    a name mentioned inside an interpolated literal counts as a reference, which is the
+    safe direction for a check that fails builds.
+    """
     src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
     src = re.sub(r"//.*", "", src)
-    src = re.sub(r'"(?:[^"\\]|\\.)*"', '""', src)
+    src = re.sub(r'(?<![$@])"(?:[^"\\\n]|\\.)*"', '""', src)
     return src
 
 
