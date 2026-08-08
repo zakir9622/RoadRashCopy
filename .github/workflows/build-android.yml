@@ -30,6 +30,10 @@ concurrency:
 
 permissions:
   contents: write
+  # unity-test-runner publishes the pass/fail summary as a check run. Without this it
+  # runs the whole suite, reports "Resource not accessible by integration" and fails the
+  # job at the very last step - so a green 187/187 was being shown as a red build.
+  checks: write
 
 jobs:
   # Runs in seconds and gates everything expensive behind it. Both jobs below pull a
