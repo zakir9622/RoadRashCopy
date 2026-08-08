@@ -36,9 +36,21 @@ namespace HighwayRenegade.Editor
     {
         public const string ScenePath = "Assets/_Project/Scenes/TestTrack.unity";
 
-        private const float RoadWidth = 24f;
-        private const float RoadLength = 1200f;
         private const float BikeMass = 200f;   // bike + rider, kg
+
+        /// <summary>
+        /// The track currently being generated. Set by <see cref="Generate(TrackDefinition)"/>.
+        ///
+        /// Road width and length used to be consts, which is precisely why this game has
+        /// only ever had one track: every dimension in this file was baked in, and the
+        /// separate LevelGenerator written to produce variety was four methods that logged
+        /// and returned. Parameterising the generator that works beats maintaining a
+        /// second one that does not.
+        /// </summary>
+        private static TrackDefinition _track = TrackDefinition.Default;
+
+        private static float RoadWidth => _track.Width;
+        private static float RoadLength => _track.Length;
 
         [MenuItem("Highway Renegade/Generate Test Track")]
         public static void GenerateAndOpen()
@@ -69,6 +81,7 @@ namespace HighwayRenegade.Editor
             SerializedWiring.SetRef(trafficSpawner, "_vehiclePrefab",
                                     trafficPrefabGo.GetComponent<TrafficVehicle>());
             SerializedWiring.SetFloat(trafficSpawner, "_fallbackTrackLength", RoadLength);
+            SerializedWiring.SetInt(trafficSpawner, "_initialVehicleCount", _track.TrafficDensity);
 
             // Deliberately NOT initialised here. A TrackSpline is a plain C# object and
             // cannot be serialised into the scene, so traffic spawned at generation time
@@ -101,8 +114,15 @@ namespace HighwayRenegade.Editor
         }
 
         /// <summary>Creates the scene, saves it, and registers it in Build Settings.</summary>
-        public static string Generate()
+        /// <param name="track">
+        /// Which track to build. Defaults to the original hard-coded one, so every existing
+        /// caller - the build, the tests, the menu item - keeps producing exactly what it
+        /// did before.
+        /// </param>
+        public static string Generate(TrackDefinition track = null)
         {
+            _track = track ?? TrackDefinition.Default;
+
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             // Static cache would otherwise carry materials from a previous generation
@@ -112,14 +132,9 @@ namespace HighwayRenegade.Editor
 
             BuildLighting();
             BuildRoad();
-            BuildObstacleCourse();
+            if (_track.ObstacleCourse) BuildObstacleCourse();
             
-            // Build simple straight spline for the track
-            SplineNode[] nodes = new SplineNode[] {
-                new SplineNode(new Vector3(0, 0, 0), new Vector3(0, 0, 1)),
-                new SplineNode(new Vector3(0, 0, RoadLength), new Vector3(0, 0, 1))
-            };
-            TrackSpline spline = new TrackSpline(nodes);
+            TrackSpline spline = BuildSpline();
             
             BuildEnvironment(spline);
 
@@ -147,6 +162,46 @@ namespace HighwayRenegade.Editor
             return ScenePath;
         }
 
+        /// <summary>
+        /// The track centreline. A sine sweep rather than a straight line when the
+        /// definition asks for one, sampled densely enough that TrackProgress and the
+        /// rival AI follow a smooth path rather than a polygon.
+        /// </summary>
+        private static TrackSpline BuildSpline()
+        {
+            if (_track.Curviness <= 0.01f)
+            {
+                return new TrackSpline(new[]
+                {
+                    new SplineNode(new Vector3(0f, 0f, 0f), new Vector3(0f, 0f, 1f)),
+                    new SplineNode(new Vector3(0f, 0f, RoadLength), new Vector3(0f, 0f, 1f)),
+                });
+            }
+
+            const int Segments = 24;
+            var nodes = new SplineNode[Segments + 1];
+
+            for (int i = 0; i <= Segments; i++)
+            {
+                float u = (float)i / Segments;
+                float z = u * RoadLength;
+                float phase = u * Mathf.PI * 2f * _track.CurvePeriods;
+
+                float x = Mathf.Sin(phase) * _track.Curviness;
+
+                // Tangent is the analytic derivative, not a difference between samples:
+                // a tangent estimated from neighbours lags the curve and makes the AI
+                // steer late into every bend.
+                float dx = Mathf.Cos(phase) * _track.Curviness
+                         * (Mathf.PI * 2f * _track.CurvePeriods / RoadLength);
+
+                nodes[i] = new SplineNode(new Vector3(x, 0f, z),
+                                          new Vector3(dx, 0f, 1f).normalized);
+            }
+
+            return new TrackSpline(nodes);
+        }
+
         private static void BuildLighting()
         {
             var go = new GameObject("Directional Light");
@@ -154,14 +209,16 @@ namespace HighwayRenegade.Editor
 
             var light = go.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.intensity = 1.15f;
+            light.intensity = _track.Night ? 0.35f : 1.15f;
+            light.colorTemperature = _track.Night ? 8500f : 6200f;
+            light.useColorTemperature = true;
             light.shadows = LightShadows.Soft;
 
             // A real sky, and lighting that comes from it. Image-based lighting off an
             // HDRI is the single largest visual return available here - a correctly lit
             // primitive reads as more real than a detailed model under flat ambient - and
             // it costs one material.
-            if (!MaterialGenerator.ApplySky())
+            if (!MaterialGenerator.ApplySky(_track.Night))
             {
                 // The fetcher has not run. Flat trilight so the scene is still lit.
                 RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
@@ -383,7 +440,7 @@ namespace HighwayRenegade.Editor
             };
 
             var roster = RivalDatabase.Rivals;
-            int count = Mathf.Min(3, roster.Count);
+            int count = Mathf.Min(_track.RivalCount, roster.Count);
 
             for (int i = 0; i < count; i++)
             {
@@ -541,7 +598,7 @@ namespace HighwayRenegade.Editor
             // that would have used it silently did nothing.
             go.AddComponent<AndroidHaptics>();
 
-            BuildPolice(player);
+            for (int i = 0; i < _track.PoliceCount; i++) BuildPolice(player, i);
             BuildRaceUI();
         }
 
@@ -553,9 +610,15 @@ namespace HighwayRenegade.Editor
         /// existed and none of it could fire. Built on the same chassis as a rival so it
         /// handles like a bike rather than a scripted follower.
         /// </summary>
-        private static void BuildPolice(BikeController player)
+        private static void BuildPolice(BikeController player, int index)
         {
-            BikeController police = BuildBike("Police", new Vector3(6f, 1f, -14f),
+            // Spread across the road behind the grid rather than stacked in one spot -
+            // two cops spawned inside each other resolve by launching both into the air.
+            float x = 6f - (index * 5f);
+            float z = -14f - (index * 6f);
+
+            BikeController police = BuildBike(index == 0 ? "Police" : $"Police {index + 1}",
+                                              new Vector3(x, 1f, z),
                                               new Color(0.10f, 0.16f, 0.55f));
 
             var ai = police.gameObject.AddComponent<PoliceAI>();

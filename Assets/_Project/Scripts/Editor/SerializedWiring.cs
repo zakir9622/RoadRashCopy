@@ -45,6 +45,13 @@ namespace HighwayRenegade.Editor
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 
+        public static void SetInt(Object target, string field, int value)
+        {
+            var so = new SerializedObject(target);
+            Find(so, target, field).intValue = value;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         /// <summary>Assigns an enum by its underlying value.</summary>
         public static void SetEnum(Object target, string field, int value)
         {
