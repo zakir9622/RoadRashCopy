@@ -95,6 +95,13 @@ namespace HighwayRenegade.Editor
 
             camGo.AddComponent<AudioListener>();
 
+            // The SFX bus existed only in the race scene, so every button in the menus and
+            // the garage - which is where buttons are the entire interaction - would have
+            // clicked silently. AudioManager is a DontDestroyOnLoad singleton and no-ops
+            // on a duplicate, so adding it to the entry scene is safe.
+            var audioGo = new GameObject("Audio");
+            audioGo.AddComponent<HighwayRenegade.Gameplay.Audio.AudioManager>();
+
             UiSceneBuilder.AddEventSystem();
         }
 

@@ -128,7 +128,18 @@ namespace HighwayRenegade.Gameplay.UI
         protected Button OnClick(string elementName, Action handler)
         {
             var button = Require<Button>(elementName);
-            if (button != null && handler != null) button.clicked += handler;
+            if (button == null || handler == null) return button;
+
+            button.clicked += handler;
+
+            // Audible feedback for every button in the game, wired once here because this
+            // is the single funnel they all pass through. Pressing a button and hearing
+            // nothing reads as the press not having registered - which on a touchscreen,
+            // where there is no travel and no click, is most of what tells a player the
+            // UI is alive.
+            button.clicked += static () =>
+                HighwayRenegade.Gameplay.Audio.AudioManager.Instance?.PlayUiClick();
+
             return button;
         }
 

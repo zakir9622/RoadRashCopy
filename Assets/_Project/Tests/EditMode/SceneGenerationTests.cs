@@ -94,6 +94,23 @@ namespace HighwayRenegade.Tests.EditMode
                 Assert.IsNotNull(rival.GetComponent<BikeController>(),
                                  $"{rival.name} is not riding a bike.");
             }
+
+            // Named riders, not "Rival 1". RivalDatabase held Biff, Viper, Natasha and
+            // Axle with personalities and preferred weapons and had zero call sites.
+            foreach (RivalAIController rival in rivals)
+            {
+                Assert.IsNotNull(RivalDatabase.GetProfile(rival.name),
+                    $"'{rival.name}' is not in RivalDatabase - the grid stopped using it.");
+            }
+
+            // Mixed loadouts, so weapon stealing is reachable in the first race rather
+            // than gated behind progression.
+            var weapons = new System.Collections.Generic.HashSet<Core.Combat.WeaponType>();
+            foreach (RivalAIController rival in rivals)
+                weapons.Add(rival.GetComponent<Gameplay.Combat.MeleeCombat>().Weapon);
+
+            Assert.Greater(weapons.Count, 1,
+                "Every rival carries the same weapon, so there is nothing worth stealing.");
         }
 
         [Test]

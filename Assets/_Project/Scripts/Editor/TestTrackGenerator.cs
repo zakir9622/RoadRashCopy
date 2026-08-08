@@ -346,6 +346,12 @@ namespace HighwayRenegade.Editor
             root.AddComponent<AudioSource>();
             root.AddComponent<EngineAudio>();
 
+            // Wind and tyre scrub, synthesised from the bike's own speed and slip. Before
+            // this the only sounds in a race were a crash and a melee hit - nothing
+            // responded to going fast or to losing grip, which are the two things a rider
+            // most needs to hear.
+            root.AddComponent<RideAudio>();
+
             return controller;
         }
 
@@ -357,34 +363,68 @@ namespace HighwayRenegade.Editor
         /// </summary>
         private static void BuildRivals(BikeController player)
         {
+            // The grid comes from RivalDatabase rather than from anonymous numbers.
+            //
+            // Biff, Viper, Natasha and Axle were written with names, personalities and
+            // preferred weapons - and the database had ZERO call sites, so every race was
+            // run against "Rival 1", "Rival 2" and "Rival 3". Naming them is the cheapest
+            // way this game acquires characters, and their personalities already encode
+            // the skill and aggression split that used to be hard-coded here.
+            //
+            // The mixed loadouts still matter: with a bat, a chain and a kick on the grid,
+            // weapon stealing is reachable in the first race rather than gated behind
+            // progression.
             var colours = new[]
             {
                 new Color(0.20f, 0.42f, 0.80f),
                 new Color(0.92f, 0.74f, 0.16f),
-                new Color(0.34f, 0.68f, 0.32f)
+                new Color(0.34f, 0.68f, 0.32f),
+                new Color(0.70f, 0.30f, 0.75f)
             };
-            var skills = new[] { 0.86f, 0.95f, 0.90f };
-            var aggression = new[] { 1.0f, 1.15f, 1.6f };
-            // Give the grid mixed loadouts so weapon stealing is reachable from the
-            // first race rather than gated behind progression.
-            var weapons = new[] { WeaponType.Fists, WeaponType.Chain, WeaponType.Bat };
 
-            for (int i = 0; i < colours.Length; i++)
+            var roster = RivalDatabase.Rivals;
+            int count = Mathf.Min(3, roster.Count);
+
+            for (int i = 0; i < count; i++)
             {
+                RivalProfile profile = roster[i];
                 var pos = new Vector3(-6f + i * 6f, 1f, 12f + i * 5f);
-                BikeController rival = BuildBike($"Rival {i + 1}", pos, colours[i]);
+                BikeController rival = BuildBike(profile.Name, pos, colours[i % colours.Length]);
 
                 var ai = rival.gameObject.AddComponent<RivalAIController>();
                 SerializedWiring.SetRef(ai, "_target", player.transform);
-                SerializedWiring.SetFloat(ai, "_skill", skills[i]);
-                SerializedWiring.SetFloat(ai, "_baseAggression", aggression[i]);
+                SerializedWiring.SetFloat(ai, "_skill", SkillFor(profile.Personality));
+                SerializedWiring.SetFloat(ai, "_baseAggression", AggressionFor(profile.Personality));
 
                 var combat = rival.GetComponent<MeleeCombat>();
-                SerializedWiring.SetEnum(combat, "_weapon", (int)weapons[i]);
+                SerializedWiring.SetEnum(combat, "_weapon", (int)profile.PreferredWeapon);
             }
         }
 
-        /// <summary>Placeholder art: a chassis block and two wheel discs.</summary>
+        /// <summary>
+        /// How well a personality rides. A rider who fights instead of racing is slower,
+        /// and the one who does nothing but race is the fastest thing on the road - so the
+        /// grid has a clear best racer, a clear best fighter, and someone in between.
+        /// </summary>
+        private static float SkillFor(RivalPersonality personality) => personality switch
+        {
+            RivalPersonality.SpeedDemon => 0.97f,
+            RivalPersonality.GrudgeHolder => 0.90f,
+            _ => 0.84f,   // Aggressor: dangerous alongside, beatable on pace
+        };
+
+        /// <summary>
+        /// How readily a personality starts a fight. RivalBrain.AggressionAttackThreshold
+        /// is what actually gates the Attack state, so these are set relative to it rather
+        /// than as free-floating numbers.
+        /// </summary>
+        private static float AggressionFor(RivalPersonality personality) => personality switch
+        {
+            RivalPersonality.Aggressor => 1.70f,
+            RivalPersonality.GrudgeHolder => 1.15f,
+            _ => 1.00f,   // SpeedDemon: only fights when provoked
+        };
+
         /// <summary>
         /// Placeholder art: a chassis block, a rider capsule and two wheel discs.
         /// Returns the rider, which the ragdoll needs to be able to throw off the bike.

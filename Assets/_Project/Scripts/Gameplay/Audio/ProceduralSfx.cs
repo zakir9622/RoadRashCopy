@@ -21,6 +21,8 @@ namespace HighwayRenegade.Gameplay.Audio
         private static AudioClip _crash;
         private static AudioClip _hit;
         private static AudioClip _scrape;
+        private static AudioClip _wind;
+        private static AudioClip _uiClick;
 
         /// <summary>Heavy impact: bike meets road or barrier.</summary>
         public static AudioClip Crash => _crash ??= BuildCrash();
@@ -28,8 +30,14 @@ namespace HighwayRenegade.Gameplay.Audio
         /// <summary>Melee connect: a bat, chain or boot landing on a rider.</summary>
         public static AudioClip Hit => _hit ??= BuildHit();
 
-        /// <summary>Metal sliding on tarmac, for a downed bike.</summary>
+        /// <summary>Metal sliding on tarmac, for a downed bike or a tyre losing grip.</summary>
         public static AudioClip Scrape => _scrape ??= BuildScrape();
+
+        /// <summary>Looping airflow, pitched and mixed by speed.</summary>
+        public static AudioClip Wind => _wind ??= BuildWind();
+
+        /// <summary>Short UI confirmation blip.</summary>
+        public static AudioClip UiClick => _uiClick ??= BuildUiClick();
 
         /// <summary>
         /// A crash is a low body thump plus a wide noise burst: the thump carries the mass
@@ -129,6 +137,73 @@ namespace HighwayRenegade.Gameplay.Audio
             }
 
             return FromSamples("SFX_Scrape", data);
+        }
+
+        /// <summary>
+        /// Looping airflow. Darker and smoother than the scrape - two cascaded low passes
+        /// rather than one - because wind at speed is a broad rush, and anything with grit
+        /// in it reads as tyre noise instead.
+        ///
+        /// Speed is felt more than it is seen, and wind is the cheapest way to sell it:
+        /// the volume rising as the bike accelerates does more for the sense of pace than
+        /// the speedometer does.
+        /// </summary>
+        private static AudioClip BuildWind()
+        {
+            const float duration = 2.0f;
+            int length = (int)(SampleRate * duration);
+            var data = new float[length];
+
+            var random = new System.Random(19911214);
+            float low = 0f, lower = 0f;
+
+            for (int i = 0; i < length; i++)
+            {
+                float t = (float)i / SampleRate;
+
+                float noise = (float)(random.NextDouble() * 2.0 - 1.0);
+
+                low = Mathf.Lerp(low, noise, 0.10f);
+                lower = Mathf.Lerp(lower, low, 0.10f);
+
+                // Two slow, mutually prime swells so the two-second loop does not announce
+                // its own period.
+                float swell = 0.80f
+                            + (0.12f * Mathf.Sin(2f * Mathf.PI * 0.37f * t))
+                            + (0.08f * Mathf.Sin(2f * Mathf.PI * 0.73f * t));
+
+                float edge = Mathf.Sin(Mathf.PI * ((float)i / length));
+
+                data[i] = lower * swell * edge * 3.2f;
+            }
+
+            return FromSamples("SFX_Wind", data);
+        }
+
+        /// <summary>
+        /// UI blip. Two stacked sine partials with a very fast decay - long enough to
+        /// register as a response, short enough that pressing buttons quickly does not
+        /// turn into a drone.
+        /// </summary>
+        private static AudioClip BuildUiClick()
+        {
+            const float duration = 0.07f;
+            int length = (int)(SampleRate * duration);
+            var data = new float[length];
+
+            for (int i = 0; i < length; i++)
+            {
+                float t = (float)i / SampleRate;
+                float progress = (float)i / length;
+
+                float envelope = Mathf.Exp(-34f * progress);
+                float tone = Mathf.Sin(2f * Mathf.PI * 880f * t) * 0.6f
+                           + Mathf.Sin(2f * Mathf.PI * 1320f * t) * 0.25f;
+
+                data[i] = tone * envelope * 0.5f;
+            }
+
+            return FromSamples("SFX_UiClick", data);
         }
 
         private static AudioClip FromSamples(string name, float[] data)
