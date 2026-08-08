@@ -6,7 +6,9 @@
     "HighwayRenegade.Performance",
     "HighwayRenegade.Gameplay",
     "Unity.InputSystem",
-    "HighwayRenegade.Platform"
+    "HighwayRenegade.Platform",
+    "Unity.RenderPipelines.Universal.Runtime",
+    "Unity.RenderPipelines.Core.Runtime"
   ],
   "includePlatforms": [
     "Editor"

@@ -252,6 +252,15 @@ namespace HighwayRenegade.Editor
             //
             // The generator is the source of truth for these scenes, so the build must
             // run it rather than trust a file that cannot say how old it is.
+            // Before any scene is generated, not after.
+            //
+            // PlaceholderArt.MakeMaterial resolves its shader with
+            // Shader.Find("Universal Render Pipeline/Lit"), and every material the
+            // generators bake into a scene is created after this point. Assigning the
+            // pipeline afterwards would leave a scene full of materials built against
+            // whatever pipeline happened to be active when they were made.
+            RenderPipelineGenerator.Ensure();
+
             Debug.Log("[Build] Regenerating the race track from TestTrackGenerator.");
             TestTrackGenerator.Generate();
 

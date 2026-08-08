@@ -409,6 +409,14 @@ namespace HighwayRenegade.Editor
             var cam = go.AddComponent<Camera>();
             cam.nearClipPlane = 0.15f;
             cam.farClipPlane = 600f;
+
+            // URP normally attaches this itself on first render, but a camera created in
+            // edit mode and serialised into a scene can be saved without it - and a URP
+            // camera with no additional data renders nothing. A black screen on device
+            // with no error in the log is the single most expensive way to find that out,
+            // so it is added explicitly.
+            go.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+
             go.AddComponent<AudioListener>();
             go.AddComponent<HighwayRenegade.Gameplay.CameraRig.PostProcessingSetup>();
 

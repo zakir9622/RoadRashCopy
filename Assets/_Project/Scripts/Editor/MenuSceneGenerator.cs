@@ -87,6 +87,12 @@ namespace HighwayRenegade.Editor
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = Background;
             cam.orthographic = true;
+
+            // Same reason as the race camera: a URP camera serialised without its
+            // additional data renders a black screen and logs nothing. The menu going
+            // black would be the first thing a player saw.
+            camGo.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+
             camGo.AddComponent<AudioListener>();
 
             UiSceneBuilder.AddEventSystem();
