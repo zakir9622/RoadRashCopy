@@ -17,6 +17,7 @@ using HighwayRenegade.Gameplay.UI.Screens;
 using HighwayRenegade.Gameplay.Environment;
 using HighwayRenegade.Gameplay.Progression;
 using HighwayRenegade.Performance;
+using HighwayRenegade.Platform;
 
 namespace HighwayRenegade.Editor
 {
@@ -303,9 +304,23 @@ namespace HighwayRenegade.Editor
 
             // Player and rivals get identical combat, progress and crash components
             root.AddComponent<Damageable>();
-            root.AddComponent<MeleeCombat>();
-            root.AddComponent<BikeCrashHandler>();
+            MeleeCombat combat = root.AddComponent<MeleeCombat>();
+            BikeCrashHandler crash = root.AddComponent<BikeCrashHandler>();
             root.AddComponent<TrackProgress>();
+
+            // Taking a rival's weapon off them is the point of the combat system, and the
+            // component that does it was in no scene, so no weapon could ever be stolen.
+            var grabber = root.AddComponent<WeaponGrabber>();
+            var grabberSo = new SerializedObject(grabber);
+            grabberSo.FindProperty("_meleeCombat").objectReferenceValue = combat;
+            grabberSo.ApplyModifiedPropertiesWithoutUndo();
+
+            // Coming off the bike is what a crash means in this game; without the ragdoll
+            // wired, going down was a physics event with no rider attached to it.
+            var ragdoll = root.AddComponent<RiderRagdoll>();
+            var ragdollSo = new SerializedObject(ragdoll);
+            ragdollSo.FindProperty("_crashHandler").objectReferenceValue = crash;
+            ragdollSo.ApplyModifiedPropertiesWithoutUndo();
 
             // Engine note is synthesised from the bike's own RPM, so it needs no audio
             // asset and always matches the physics. 3D so rivals are audible in position.
@@ -444,7 +459,33 @@ namespace HighwayRenegade.Editor
             // procedural engine synthesis.
             go.AddComponent<AudioManager>();
 
+            // Haptics. The whole Android vibration layer existed and was instantiated
+            // nowhere, so its static Instance was permanently null and every call site
+            // that would have used it silently did nothing.
+            go.AddComponent<AndroidHaptics>();
+
+            BuildPolice(player);
             BuildRaceUI();
+        }
+
+        /// <summary>
+        /// Adds the police unit that chases and busts the player.
+        ///
+        /// The pursuit system, the bust, and the fine that comes out of the balance were
+        /// all implemented; the component was in no scene, so no police officer ever
+        /// existed and none of it could fire. Built on the same chassis as a rival so it
+        /// handles like a bike rather than a scripted follower.
+        /// </summary>
+        private static void BuildPolice(BikeController player)
+        {
+            BikeController police = BuildBike("Police", new Vector3(6f, 1f, -14f),
+                                              new Color(0.10f, 0.16f, 0.55f));
+
+            var ai = police.gameObject.AddComponent<PoliceAI>();
+            var so = new SerializedObject(ai);
+            so.FindProperty("_bike").objectReferenceValue = police;
+            so.FindProperty("_target").objectReferenceValue = player.transform;
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         /// <summary>

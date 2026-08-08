@@ -142,6 +142,15 @@ namespace HighwayRenegade.Gameplay.Combat
             // confirmation at all - at speed the sparks alone are easy to miss.
             HighwayRenegade.Gameplay.Audio.AudioManager.Instance?.PlayHit(impactPoint);
 
+            // Only the player feels the hit; rivals trading blows offscreen buzzing the
+            // handset would be constant meaningless noise. The whole haptics layer was
+            // written and called from nowhere, so nothing in the game ever vibrated.
+            if (GetComponent<Bike.PlayerBikeInput>() != null
+                && HighwayRenegade.Core.App.SettingsManager.Current.Vibration)
+            {
+                HighwayRenegade.Platform.AndroidHaptics.Instance?.PlayCombatImpact(damage);
+            }
+
             // Handlebar strike induces steering deflection on victim
             if (hitZone == 1 && victim.TryGetComponent(out Rigidbody victimRb))
             {

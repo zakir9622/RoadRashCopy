@@ -236,6 +236,11 @@ python3 "$HERE/check-serialized-refs.py" || FAILED=1
 # reference errors that Unity fails on. Checked statically instead.
 python3 "$HERE/check-assembly-refs.py" || FAILED=1
 
+# Code that compiles is not the same as code that runs. Twelve systems here were fully
+# written and reachable from nothing - no script, no scene, no generator - so they were
+# dead in the shipped build with no error anywhere to say so.
+python3 "$HERE/check-reachability.py" || FAILED=1
+
 echo
 if [[ $PASSES_DONE -ne 2 ]]; then
   err "only $PASSES_DONE of 2 configurations completed - the harness itself failed"
