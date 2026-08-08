@@ -121,13 +121,26 @@ namespace HighwayRenegade.Editor
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
 
-            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel30;
+            // Android 15. Chosen deliberately, and it is a narrow floor: it excludes every
+            // device that has not taken the Android 15 update, which in practice is most
+            // Android hardware in the field and possibly the project's own test tablet.
+            // Play Store only requires API 35 as a *target*, never as a minimum, so this
+            // costs reach and buys nothing from the store's point of view. Lower it to 30
+            // the moment testing on older hardware matters more than the floor does.
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel35;
 
             // Pinned, not Auto. Auto resolves to whatever SDK happens to be installed on
             // the machine doing the build, so the target level silently changes when the
             // CI image updates - and Google Play rejects uploads below its current
             // minimum. A build's target API is a release decision, not an environment
             // detail, so it belongs in the diff.
+            //
+            // 35 rather than 36 because the target is bounded by the toolchain, not by
+            // preference: Unity 6000.0.38f1 predates the API 36 enum member, and the
+            // game-ci editor image only carries the SDK platforms that editor build
+            // shipped with. Raising this needs an image that has platform 36 installed
+            // and is worth one deliberate build to verify, not a guess folded into an
+            // unrelated fix. 35 is also exactly what the Play Store currently requires.
             PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel35;
 
             // Play Store requires a 64-bit binary; IL2CPP is required for ARM64.

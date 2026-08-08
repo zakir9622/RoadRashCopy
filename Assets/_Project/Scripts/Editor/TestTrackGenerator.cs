@@ -66,10 +66,9 @@ namespace HighwayRenegade.Editor
             Paint(trafficPrefabGo, new Color(0.8f, 0.8f, 0.8f));
 
             var trafficSpawner = root.AddComponent<TrafficSpawner>();
-            var soTraffic = new SerializedObject(trafficSpawner);
-            soTraffic.FindProperty("_vehiclePrefab").objectReferenceValue = trafficPrefabGo.GetComponent<TrafficVehicle>();
-            soTraffic.FindProperty("_fallbackTrackLength").floatValue = RoadLength;
-            soTraffic.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetRef(trafficSpawner, "_vehiclePrefab",
+                                    trafficPrefabGo.GetComponent<TrafficVehicle>());
+            SerializedWiring.SetFloat(trafficSpawner, "_fallbackTrackLength", RoadLength);
 
             // Deliberately NOT initialised here. A TrackSpline is a plain C# object and
             // cannot be serialised into the scene, so traffic spawned at generation time
@@ -96,10 +95,8 @@ namespace HighwayRenegade.Editor
             signPrefabGo.transform.SetParent(root.transform);
 
             var scenerySpawner = root.AddComponent<ScenerySpawner>();
-            var soScenery = new SerializedObject(scenerySpawner);
-            soScenery.FindProperty("_treePrefab").objectReferenceValue = treePrefabGo;
-            soScenery.FindProperty("_signPrefab").objectReferenceValue = signPrefabGo;
-            soScenery.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetRef(scenerySpawner, "_treePrefab", treePrefabGo);
+            SerializedWiring.SetRef(scenerySpawner, "_signPrefab", signPrefabGo);
             scenerySpawner.Generate(spline);
         }
 
@@ -311,16 +308,12 @@ namespace HighwayRenegade.Editor
             // Taking a rival's weapon off them is the point of the combat system, and the
             // component that does it was in no scene, so no weapon could ever be stolen.
             var grabber = root.AddComponent<WeaponGrabber>();
-            var grabberSo = new SerializedObject(grabber);
-            grabberSo.FindProperty("_meleeCombat").objectReferenceValue = combat;
-            grabberSo.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetRef(grabber, "_meleeCombat", combat);
 
             // Coming off the bike is what a crash means in this game; without the ragdoll
             // wired, going down was a physics event with no rider attached to it.
             var ragdoll = root.AddComponent<RiderRagdoll>();
-            var ragdollSo = new SerializedObject(ragdoll);
-            ragdollSo.FindProperty("_crashHandler").objectReferenceValue = crash;
-            ragdollSo.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetRef(ragdoll, "_crashHandler", crash);
 
             // Engine note is synthesised from the bike's own RPM, so it needs no audio
             // asset and always matches the physics. 3D so rivals are audible in position.
@@ -356,16 +349,12 @@ namespace HighwayRenegade.Editor
                 BikeController rival = BuildBike($"Rival {i + 1}", pos, colours[i]);
 
                 var ai = rival.gameObject.AddComponent<RivalAIController>();
-                var so = new SerializedObject(ai);
-                so.FindProperty("_target").objectReferenceValue = player.transform;
-                so.FindProperty("_skill").floatValue = skills[i];
-                so.FindProperty("_baseAggression").floatValue = aggression[i];
-                so.ApplyModifiedPropertiesWithoutUndo();
+                SerializedWiring.SetRef(ai, "_target", player.transform);
+                SerializedWiring.SetFloat(ai, "_skill", skills[i]);
+                SerializedWiring.SetFloat(ai, "_baseAggression", aggression[i]);
 
                 var combat = rival.GetComponent<MeleeCombat>();
-                var cso = new SerializedObject(combat);
-                cso.FindProperty("_weapon").enumValueIndex = (int)weapons[i];
-                cso.ApplyModifiedPropertiesWithoutUndo();
+                SerializedWiring.SetEnum(combat, "_weapon", (int)weapons[i]);
             }
         }
 
@@ -408,10 +397,8 @@ namespace HighwayRenegade.Editor
         /// </summary>
         private static void AssignPrivateReferences(BikeController controller, Transform front, Transform rear)
         {
-            var so = new SerializedObject(controller);
-            so.FindProperty("_frontWheel").objectReferenceValue = front;
-            so.FindProperty("_rearWheel").objectReferenceValue = rear;
-            so.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetRef(controller, "_frontWheel", front);
+            SerializedWiring.SetRef(controller, "_rearWheel", rear);
         }
 
         private static void BuildCamera(BikeController bike)
@@ -426,9 +413,7 @@ namespace HighwayRenegade.Editor
             go.AddComponent<HighwayRenegade.Gameplay.CameraRig.PostProcessingSetup>();
 
             var chase = go.AddComponent<ChaseCamera>();
-            var so = new SerializedObject(chase);
-            so.FindProperty("_target").objectReferenceValue = bike;
-            so.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetRef(chase, "_target", bike);
         }
 
         private static void BuildManagers(BikeController player)
@@ -437,17 +422,13 @@ namespace HighwayRenegade.Editor
             ThermalManager thermal = go.AddComponent<ThermalManager>();
 
             RaceManager race = go.AddComponent<RaceManager>();
-            var rso = new SerializedObject(race);
             // Finish just short of the road's end so the line is never past the geometry.
-            rso.FindProperty("_finishLineZ").floatValue = RoadLength - 120f;
-            rso.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetFloat(race, "_finishLineZ", RoadLength - 120f);
 
             SpeedHud hud = go.AddComponent<SpeedHud>();
-            var so = new SerializedObject(hud);
-            so.FindProperty("_bike").objectReferenceValue = player;
-            so.FindProperty("_thermal").objectReferenceValue = thermal;
-            so.FindProperty("_race").objectReferenceValue = race;
-            so.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetRef(hud, "_bike", player);
+            SerializedWiring.SetRef(hud, "_thermal", thermal);
+            SerializedWiring.SetRef(hud, "_race", race);
 
             // CampaignSession was absent from the generated scene entirely, which meant
             // none of the progression layer ever ran: no prize money, no rival grudges
@@ -482,10 +463,8 @@ namespace HighwayRenegade.Editor
                                               new Color(0.10f, 0.16f, 0.55f));
 
             var ai = police.gameObject.AddComponent<PoliceAI>();
-            var so = new SerializedObject(ai);
-            so.FindProperty("_bike").objectReferenceValue = police;
-            so.FindProperty("_target").objectReferenceValue = player.transform;
-            so.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetRef(ai, "_bike", police);
+            SerializedWiring.SetRef(ai, "_target", player.transform);
         }
 
         /// <summary>
@@ -514,11 +493,9 @@ namespace HighwayRenegade.Editor
             SetVisibleOnStart(results, false);
         }
 
-        private static void SetVisibleOnStart(MonoBehaviour screen, bool visible)
+        private static void SetVisibleOnStart(UIScreen screen, bool visible)
         {
-            var so = new SerializedObject(screen);
-            so.FindProperty("_visibleOnStart").boolValue = visible;
-            so.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetBool(screen, "_visibleOnStart", visible);
         }
 
         /// <summary>

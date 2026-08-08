@@ -218,8 +218,16 @@ for CONFIG in player editor; do
   fi
 
   if [[ $RUN_TESTS -eq 1 ]]; then
-    csc_build HighwayRenegade.Tests.EditMode "$TESTS/EditMode" HighwayRenegade.Core \
-      HighwayRenegade.Performance HighwayRenegade.Platform HighwayRenegade.Gameplay "$NUNIT_DLL"
+    # EditMode tests are editor-only, exactly as their asmdef declares
+    # ("includePlatforms": ["Editor"]), and they reference HighwayRenegade.Editor so
+    # they can run the scene generators. Compiling them in the player pass would fail
+    # on an assembly that legitimately does not exist there.
+    if [[ "$CONFIG" == "editor" ]]; then
+      csc_build HighwayRenegade.Tests.EditMode "$TESTS/EditMode" HighwayRenegade.Core \
+        HighwayRenegade.Performance HighwayRenegade.Platform HighwayRenegade.Gameplay \
+        HighwayRenegade.Editor "$NUNIT_DLL"
+    fi
+
     csc_build HighwayRenegade.Tests.PlayMode "$TESTS/PlayMode" HighwayRenegade.Core \
       HighwayRenegade.Performance HighwayRenegade.Platform HighwayRenegade.Gameplay "$NUNIT_DLL"
   fi

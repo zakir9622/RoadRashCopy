@@ -7,7 +7,8 @@
     "HighwayRenegade.Core",
     "HighwayRenegade.Performance",
     "HighwayRenegade.Platform",
-    "HighwayRenegade.Gameplay"
+    "HighwayRenegade.Gameplay",
+    "HighwayRenegade.Editor"
   ],
   "includePlatforms": [
     "Editor"

@@ -4,6 +4,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using HighwayRenegade.Core.App;
+using HighwayRenegade.Gameplay.UI;
 using HighwayRenegade.Gameplay.UI.Screens;
 
 namespace HighwayRenegade.Editor
@@ -50,9 +51,7 @@ namespace HighwayRenegade.Editor
             var settings = UiSceneBuilder.AddScreen<SettingsScreen>("Settings", UiSceneBuilder.ModalLayer);
             SetVisibleOnStart(settings, false);
 
-            var so = new SerializedObject(menu);
-            so.FindProperty("_settings").objectReferenceValue = settings;
-            so.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetRef(menu, "_settings", settings);
 
             // The flow manager and scene loader survive scene changes, so the menu is the
             // natural place to create them: it is the first scene the game boots into.
@@ -97,11 +96,9 @@ namespace HighwayRenegade.Editor
         /// Sets a screen's start-up visibility through its serialized field, so the value
         /// is baked into the scene rather than depending on execution order at runtime.
         /// </summary>
-        private static void SetVisibleOnStart(MonoBehaviour screen, bool visible)
+        private static void SetVisibleOnStart(UIScreen screen, bool visible)
         {
-            var so = new SerializedObject(screen);
-            so.FindProperty("_visibleOnStart").boolValue = visible;
-            so.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetBool(screen, "_visibleOnStart", visible);
         }
 
         private static void Save(Scene scene, string path)

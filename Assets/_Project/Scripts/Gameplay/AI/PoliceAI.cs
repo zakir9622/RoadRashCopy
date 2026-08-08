@@ -39,8 +39,16 @@ namespace HighwayRenegade.Gameplay.AI
         [Tooltip("How hard the cop corrects toward the target. Higher is twitchier.")]
         [SerializeField] private float _steerGain = 0.2f;
 
-        private Transform _target;
-        private BikeController _targetBike;
+        // Serialized so the scene generator can hand the cop its quarry directly.
+        //
+        // These were plain private fields, and TestTrackGenerator.BuildPolice wired them
+        // through SerializedObject.FindProperty - which returns null for a field Unity
+        // does not serialize. Assigning through that null threw, aborting every Android
+        // build six minutes in. AcquireTarget still re-resolves at runtime, so the
+        // serialized value is a starting point rather than the only source.
+        [SerializeField] private Transform _target;
+        [SerializeField] private BikeController _targetBike;
+
         private BikeCrashHandler _targetCrash;
         private CampaignSession _session;
 
