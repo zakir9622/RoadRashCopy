@@ -132,3 +132,43 @@ namespace UnityEngine.UI
         public float preferredHeight { get; set; }
     }
 }
+
+namespace UnityEngine.EventSystems
+{
+    /// <summary>
+    /// Ships inside the UnityEngine.UI assembly rather than a separate one, so any
+    /// assembly referencing UnityEngine.UI can already see these. Without an EventSystem
+    /// in a scene, uGUI renders normally and silently receives no input at all.
+    /// </summary>
+    public class UIBehaviour : MonoBehaviour
+    {
+    }
+
+    public class BaseInputModule : UIBehaviour
+    {
+    }
+
+    public class PointerInputModule : BaseInputModule
+    {
+    }
+
+    public class StandaloneInputModule : PointerInputModule
+    {
+        public string horizontalAxis { get; set; }
+        public string verticalAxis { get; set; }
+        public string submitButton { get; set; }
+        public string cancelButton { get; set; }
+    }
+
+    public class EventSystem : UIBehaviour
+    {
+        public static EventSystem current { get; set; }
+
+        public BaseInputModule currentInputModule { get; }
+        public GameObject firstSelectedGameObject { get; set; }
+        public bool sendNavigationEvents { get; set; }
+
+        public void SetSelectedGameObject(GameObject selected) { }
+        public GameObject currentSelectedGameObject { get; }
+    }
+}

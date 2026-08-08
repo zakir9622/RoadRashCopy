@@ -5,6 +5,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using HighwayRenegade.Core.Combat;
+using HighwayRenegade.Core.Race;
 using HighwayRenegade.Gameplay.AI;
 using HighwayRenegade.Gameplay.Audio;
 using HighwayRenegade.Gameplay.Bike;

@@ -208,6 +208,15 @@ for CONFIG in player editor; do
   csc_build HighwayRenegade.Gameplay    "$SRC/Gameplay"    HighwayRenegade.Core \
     HighwayRenegade.Performance HighwayRenegade.Platform
 
+  # The Editor assembly compiles only in the editor pass - UNITY_EDITOR and the
+  # UnityEditor stubs are both required. Three Editor-assembly failures reached CI
+  # before this was covered, every one a type-resolution error that a stub compile
+  # catches. See Stubs/UnityEditorApi.cs for the fidelity caveat.
+  if [[ "$CONFIG" == "editor" ]]; then
+    csc_build HighwayRenegade.Editor "$SRC/Editor" HighwayRenegade.Core \
+      HighwayRenegade.Performance HighwayRenegade.Platform HighwayRenegade.Gameplay
+  fi
+
   if [[ $RUN_TESTS -eq 1 ]]; then
     csc_build HighwayRenegade.Tests.EditMode "$TESTS/EditMode" HighwayRenegade.Core \
       HighwayRenegade.Performance HighwayRenegade.Platform HighwayRenegade.Gameplay "$NUNIT_DLL"

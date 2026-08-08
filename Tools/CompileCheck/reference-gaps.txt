@@ -24,3 +24,11 @@
 # "extern public Vector3 linearVelocity { get; set; }". The 2021.3 references
 # predate the rename.
 'Rigidbody' does not contain a definition for 'linearVelocity'
+
+# Rigidbody.linearDamping / angularDamping - Unity 6 renamed drag/angularDrag, the same
+# rename that produced linearVelocity. Machine-verified against Unity's published
+# source: 6000.0 branch, Modules/Physics/ScriptBindings/Rigidbody.bindings.cs lines
+# 37-38, "extern public float linearDamping { get; set; }" and "angularDamping". The
+# 2021.3 references predate the rename.
+'Rigidbody' does not contain a definition for 'linearDamping'
+'Rigidbody' does not contain a definition for 'angularDamping'
