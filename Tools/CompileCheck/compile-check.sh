@@ -223,6 +223,10 @@ done
 echo
 python3 "$HERE/check-serialized-refs.py" || FAILED=1
 
+# This harness references every Unity module at once, so it cannot see per-assembly
+# reference errors that Unity fails on. Checked statically instead.
+python3 "$HERE/check-assembly-refs.py" || FAILED=1
+
 echo
 if [[ $PASSES_DONE -ne 2 ]]; then
   err "only $PASSES_DONE of 2 configurations completed - the harness itself failed"
