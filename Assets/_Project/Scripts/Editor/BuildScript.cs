@@ -227,18 +227,23 @@ namespace HighwayRenegade.Editor
         /// </summary>
         private static void EnsureScenes()
         {
-            if (!File.Exists(TestTrackGenerator.ScenePath))
-            {
-                Debug.Log("[Build] Generating the placeholder test track.");
-                TestTrackGenerator.Generate();
-            }
+            // Regenerated every build, NOT only when missing.
+            //
+            // "Only if absent" froze the committed TestTrack.unity at whatever it
+            // contained the day it was generated, and the generator kept growing without
+            // it. The shipped scene therefore had no UIDocument, no PoliceAI, no
+            // WeaponGrabber and no RiderRagdoll - so the HUD, pause menu, results screen,
+            // police pursuit, ragdoll and weapon stealing were all wired up in code,
+            // passed every check, and were simply not in the game. The player saw the old
+            // IMGUI debug overlay instead, because that is what the stale scene held.
+            //
+            // The generator is the source of truth for these scenes, so the build must
+            // run it rather than trust a file that cannot say how old it is.
+            Debug.Log("[Build] Regenerating the race track from TestTrackGenerator.");
+            TestTrackGenerator.Generate();
 
-            if (!File.Exists(MenuSceneGenerator.MainMenuPath) ||
-                !File.Exists(MenuSceneGenerator.GaragePath))
-            {
-                Debug.Log("[Build] Generating the menu scenes.");
-                MenuSceneGenerator.GenerateAll();
-            }
+            Debug.Log("[Build] Regenerating the menu scenes.");
+            MenuSceneGenerator.GenerateAll();
 
             RegisterScene(TestTrackGenerator.ScenePath);
             RegisterScene(MenuSceneGenerator.GaragePath);
