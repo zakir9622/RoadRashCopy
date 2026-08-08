@@ -1,5 +1,6 @@
 using System.Collections;
 using NUnit.Framework;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
@@ -247,6 +248,30 @@ namespace HighwayRenegade.Tests.PlayMode
 
             const int Steps = 200;
 
+            // Measured with ProfilerRecorder, NOT GC.GetTotalMemory.
+            //
+            // The previous version sampled total heap size before and after each loop.
+            // Heap size is not allocation: it moves when the collector happens to run,
+            // so the reading depended on GC timing rather than on the code under test.
+            // That made it flaky, and it proved it - the identical runtime code passed
+            // 193/193 on one run and failed the next, with only workflow and docs
+            // changing in between. A test that fails at random is worse than no test,
+            // because it teaches everyone to ignore a red build.
+            //
+            // "GC Allocated In Frame" counts bytes actually allocated per frame, so a
+            // collection landing mid-window cannot corrupt it.
+            using var recorder = ProfilerRecorder.StartNew(
+                ProfilerCategory.Memory, "GC Allocated In Frame", Steps + 16);
+
+            if (!recorder.Valid)
+            {
+                // Say so rather than passing silently: a green tick from an instrument
+                // that was never running is exactly the false assurance this whole file
+                // exists to avoid.
+                Assert.Ignore("The GC allocation profiler counter is unavailable in this " +
+                              "player, so allocation cannot be measured here.");
+            }
+
             // Warm up so one-time JIT and lazy init are not counted in either sample.
             yield return Hold(input, 0.5f);
 
@@ -254,44 +279,53 @@ namespace HighwayRenegade.Tests.PlayMode
             _bike.enabled = false;
             yield return FixedStep;
 
-            long b0 = System.GC.GetTotalMemory(false);
+            recorder.Reset();
+            recorder.Start();
             for (int i = 0; i < Steps; i++) yield return FixedStep;
-            long baseline = System.GC.GetTotalMemory(false) - b0;
+            recorder.Stop();
+            long baseline = SumSamples(recorder);
 
             // --- Measured: same loop with the bike simulating ---
             _bike.enabled = true;
             yield return Hold(input, 0.3f);   // re-warm after re-enable
 
-            long m0 = System.GC.GetTotalMemory(false);
+            recorder.Reset();
+            recorder.Start();
             for (int i = 0; i < Steps; i++)
             {
                 _bike.SetInput(input);
                 yield return FixedStep;
             }
-            long measured = System.GC.GetTotalMemory(false) - m0;
+            recorder.Stop();
+            long measured = SumSamples(recorder);
 
+            // Still a differential. Unity's PlayMode test runner allocates several KB
+            // per frame on its own, which would swamp anything the bike does, so an
+            // absolute threshold would measure the harness rather than the code.
             long attributable = measured - baseline;
 
             Debug.Log($"[AllocTest] baseline={baseline / 1024} KB  measured={measured / 1024} KB  " +
                       $"attributable={attributable / 1024} KB over {Steps} steps");
 
-            // Threshold is a REGRESSION guard, not proof of zero allocation.
+            // A regression guard, not proof of zero allocation. The bike model uses only
+            // non-allocating physics queries; what remains is Unity's own contact
+            // processing, which the disabled baseline never generates because the bike
+            // is not moving. Confirming that split needs an on-device Profiler capture.
             //
-            // Measured on 2026-08-08: baseline ~5.0 MB, attributable ~1.5 MB over 200 steps.
-            // The bike model itself uses only non-allocating physics queries, so the
-            // attributable figure is believed to be Unity's own contact processing - once
-            // enabled, the bike is moving at speed across speed bumps and a MeshCollider,
-            // generating contacts the disabled baseline never produces. That cannot be
-            // proven from batch mode; confirming it needs an on-device Profiler capture,
-            // tracked in IMPROVEMENTS.md.
-            //
-            // So this catches a doubling - the signature of someone adding a `new` to
-            // FixedUpdate - without pretending to verify the mandate outright.
+            // Negative is fine and expected sometimes - it means the simulating pass
+            // allocated no more than the idle one, which is the outcome we want.
             Assert.Less(attributable, 3 * 1024 * 1024,
                 $"Bike simulation allocated {attributable / 1024} KB over {Steps} physics " +
-                $"steps beyond the harness baseline ({baseline / 1024} KB). That is well " +
-                "above the ~1.5 MB observed when this was written - something new in the " +
-                "FixedUpdate path is allocating per step.");
+                $"steps beyond the harness baseline ({baseline / 1024} KB) - something in " +
+                "the FixedUpdate path is allocating per step.");
+        }
+
+        /// <summary>Total bytes across every frame the recorder captured.</summary>
+        private static long SumSamples(ProfilerRecorder recorder)
+        {
+            long total = 0;
+            for (int i = 0; i < recorder.Count; i++) total += recorder.GetSample(i).Value;
+            return total;
         }
     }
 }
