@@ -12,7 +12,6 @@ namespace HighwayRenegade.Gameplay.Race
     {
         private TrackSpline _spline;
         private float _distance;
-        private float _lastUpdateTime;
 
         /// <summary>Current distance travelled along the track spline, in metres.</summary>
         public float DistanceAlongTrack => _distance;

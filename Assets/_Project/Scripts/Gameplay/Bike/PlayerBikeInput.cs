@@ -28,6 +28,12 @@ namespace HighwayRenegade.Gameplay.Bike
                  "of screen height. Left of centre swings left, right swings right.")]
         [Range(0.1f, 0.4f)][SerializeField] private float _attackStripHeight = 0.22f;
 
+        [Header("Keyboard")]
+        [Tooltip("Seconds for a held key to reach full lock. Digital keys would otherwise " +
+                 "deliver instant full steering, which feels nothing like the analogue " +
+                 "devices the handling is tuned around.")]
+        [Range(0f, 1f)][SerializeField] private float _keyboardSteerRamp = 0.18f;
+
         [Header("Gyroscope Tilt Steering")]
         [SerializeField] private bool _enableGyro = false;
         [SerializeField] private float _gyroSensitivity = 2.4f;

@@ -219,6 +219,17 @@ namespace HighwayRenegade.Core.Vehicle
         /// gearing at author time: if top gear redlines below the target top speed, the
         /// bike is geared too short.
         /// </summary>
+        public static float TopSpeedInGear(in EngineSpec spec, int gear)
+        {
+            // Exact inverse of EngineRpm at the redline, so the two can never disagree
+            // about where a gear runs out.
+            float ratio = TotalRatio(spec, gear);
+            if (ratio <= 0.0001f) return 0f;
+
+            float radius = spec.WheelRadius > 0.01f ? spec.WheelRadius : 0.3f;
+            return spec.RedlineRpm * radius / (RadPerSecToRpm * ratio);
+        }
+
         /// <summary>
         /// Gearbox tooth mesh frequency (Hz) for procedural transmission whine synthesis.
         /// Derived from pinion speed and typical gear tooth counts (28-36 teeth).

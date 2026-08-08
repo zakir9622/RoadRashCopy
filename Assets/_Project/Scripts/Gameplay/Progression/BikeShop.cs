@@ -28,5 +28,26 @@ namespace HighwayRenegade.Gameplay.Progression
         {
             return AvailableBikes.Find(b => b.Id == id);
         }
+
+        /// <summary>
+        /// Shop price of a bike, or zero if the id is unknown.
+        ///
+        /// Shared because repair pricing scales with bike value, and the garage, the
+        /// campaign session and the results screen each had their own copy of the same
+        /// "look it up, cope with null, take Price" dance. Three copies is three chances
+        /// for a repair to be quoted at one price and charged at another.
+        /// </summary>
+        public static int ValueOf(string id)
+        {
+            BikeDef def = GetBike(id);
+            return def != null ? def.Price : 0;
+        }
+
+        /// <summary>Index of a bike in the catalogue, or 0 when unknown.</summary>
+        public static int IndexOf(string id)
+        {
+            int index = AvailableBikes.FindIndex(b => b.Id == id);
+            return index >= 0 ? index : 0;
+        }
     }
 }

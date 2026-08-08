@@ -1,0 +1,34 @@
+# Known gaps between the offline reference assemblies and the Unity version this
+# project actually targets (6000.0.x).
+#
+# The harness compiles against UnityEngine.Modules 2021.3.33 from NuGet, because
+# Unity does not publish 6000.x reference assemblies anywhere publicly reachable.
+# A handful of APIs the project legitimately uses are therefore missing from the
+# references and produce errors that Unity itself would not produce.
+#
+# Every entry here is an admission that one line is NOT machine-verified, so each
+# one needs a justification recorded against it. Keep this list as short as
+# possible - the default answer to a compile error is "fix the code", not
+# "add it here". Entries are matched as substrings against Roslyn error lines.
+
+# Resolution.refreshRateRatio - added in Unity 2022.2 (type RefreshRate, with a
+# double 'value'), and is the non-deprecated way to read panel refresh rate in
+# Unity 6; the older int Resolution.refreshRate is obsolete there. Postdates the
+# 2021.3 references, and the symbol is absent from those assemblies entirely.
+# NOT machine-verified against 6000.x source - the real Unity build is the check.
+'Resolution' does not contain a definition for 'refreshRateRatio'
+
+# Rigidbody.linearVelocity - Unity 6 renamed Rigidbody.velocity to linearVelocity
+# (velocity is obsolete there). Machine-verified against Unity's published source:
+# 6000.0 branch, Modules/Physics/ScriptBindings/Rigidbody.bindings.cs line 35,
+# "extern public Vector3 linearVelocity { get; set; }". The 2021.3 references
+# predate the rename.
+'Rigidbody' does not contain a definition for 'linearVelocity'
+
+# Rigidbody.linearDamping / angularDamping - Unity 6 renamed drag/angularDrag, the same
+# rename that produced linearVelocity. Machine-verified against Unity's published
+# source: 6000.0 branch, Modules/Physics/ScriptBindings/Rigidbody.bindings.cs lines
+# 37-38, "extern public float linearDamping { get; set; }" and "angularDamping". The
+# 2021.3 references predate the rename.
+'Rigidbody' does not contain a definition for 'linearDamping'
+'Rigidbody' does not contain a definition for 'angularDamping'

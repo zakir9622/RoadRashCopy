@@ -33,7 +33,16 @@ namespace HighwayRenegade.Gameplay.Environment
             _spline = spline;
             Clear();
 
-            if (_treePrefab == null && _signPrefab == null) return;
+            // Fall back to primitives when no art is assigned. Returning early here used
+            // to leave the roadside completely bare, which costs the player the parallax
+            // that sells speed - the one cue a racer cannot do without.
+            GameObject tree = _treePrefab != null ? _treePrefab : PlaceholderArt.CreateTreeTemplate();
+            GameObject sign = _signPrefab != null ? _signPrefab : PlaceholderArt.CreateSignTemplate();
+            GameObject livestock = _livestockPrefab != null
+                ? _livestockPrefab
+                : PlaceholderArt.CreateLivestockTemplate();
+
+            if (tree == null && sign == null) return;
 
             int count = Mathf.CeilToInt((spline.TotalLength / 100f) * _densityPer100m);
             float step = spline.TotalLength / (float)count;
@@ -59,19 +68,20 @@ namespace HighwayRenegade.Gameplay.Environment
                 // Alternate between tree, sign, and livestock
                 GameObject prefab = null;
                 float rnd = Random.value;
-                if (rnd > 0.9f && _livestockPrefab != null)
+                if (rnd > 0.9f && livestock != null)
                 {
-                    prefab = _livestockPrefab;
+                    prefab = livestock;
                     // Livestock might wander onto the track slightly
                     finalPos = pos + (right * (isRightSide ? 3f : -3f));
                 }
-                else if (rnd > 0.2f && _treePrefab != null) prefab = _treePrefab;
-                else if (_signPrefab != null) prefab = _signPrefab;
-                else prefab = _treePrefab;
+                else if (rnd > 0.2f && tree != null) prefab = tree;
+                else if (sign != null) prefab = sign;
+                else prefab = tree;
 
                 if (prefab != null)
                 {
                     var instance = Instantiate(prefab, finalPos, Quaternion.LookRotation(tangent, Vector3.up), transform);
+                    instance.SetActive(true);   // templates are inactive by design
                     
                     // Add random rotation and scale for variety
                     instance.transform.Rotate(0f, Random.Range(0f, 360f), 0f, Space.Self);

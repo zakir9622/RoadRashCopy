@@ -109,8 +109,13 @@ namespace HighwayRenegade.Tests.EditMode
         [Test]
         public void ImpulseTracksDamage()
         {
-            Assert.AreEqual(0f, CombatMath.ComputeImpulse(0f), 0.0001f);
-            Assert.Greater(CombatMath.ComputeImpulse(30f), CombatMath.ComputeImpulse(10f));
+            Assert.AreEqual(0f, CombatMath.ComputeImpulse(WeaponType.Bat, 0f), 0.0001f);
+            Assert.Greater(CombatMath.ComputeImpulse(WeaponType.Bat, 30f),
+                           CombatMath.ComputeImpulse(WeaponType.Bat, 10f));
+
+            // A kick is the deliberate exception: little damage, enormous knockback.
+            Assert.Greater(CombatMath.ComputeImpulse(WeaponType.Kick, 10f),
+                           CombatMath.ComputeImpulse(WeaponType.Bat, 10f));
         }
 
         // --- Weapon stealing ---

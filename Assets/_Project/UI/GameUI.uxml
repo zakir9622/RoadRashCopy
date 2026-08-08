@@ -8,18 +8,21 @@
     <ui:Style src="GameUI.uss" />
 
     <ui:VisualElement class="hud-container">
-        <!-- Top Left: Position & Lap -->
+        <!-- Top Left: Position & distance to the finish.
+             Not laps: RaceManager has no concept of one. The race is point-to-point
+             down a highway, so "LAP 1 / 3" could never have been anything but a
+             decorative lie. Distance remaining is the number that actually exists. -->
         <ui:VisualElement class="top-left-panel panel">
             <ui:Label text="POS" class="label-small" />
             <ui:Label name="PositionLabel" text="1 / 8" class="label-large accent-color" />
-            <ui:Label text="LAP" class="label-small mt-2" />
-            <ui:Label name="LapLabel" text="1 / 3" class="label-medium" />
+            <ui:Label text="TO FINISH" class="label-small mt-2" />
+            <ui:Label name="DistanceLabel" text="-" class="label-medium" />
         </ui:VisualElement>
 
-        <!-- Top Right: Score / Bounty -->
+        <!-- Top Right: knockouts banked this race -->
         <ui:VisualElement class="top-right-panel panel">
-            <ui:Label text="BOUNTY" class="label-small" />
-            <ui:Label name="BountyLabel" text="$0" class="label-medium text-right" />
+            <ui:Label text="KNOCKOUTS" class="label-small" />
+            <ui:Label name="KnockoutLabel" text="0" class="label-medium text-right" />
         </ui:VisualElement>
 
         <!-- Bottom Right: Speedometer -->

@@ -4,7 +4,9 @@
   "references": [
     "HighwayRenegade.Core",
     "HighwayRenegade.Performance",
-    "HighwayRenegade.Gameplay"
+    "HighwayRenegade.Gameplay",
+    "Unity.InputSystem",
+    "HighwayRenegade.Platform"
   ],
   "includePlatforms": [
     "Editor"

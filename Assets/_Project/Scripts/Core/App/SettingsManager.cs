@@ -11,6 +11,9 @@ namespace HighwayRenegade.Core.App
         public float SfxVolume = 1f;
         public int QualityLevel = 2; // 0 = Low, 1 = Med, 2 = High
         public bool UseTiltSteering = true;
+
+        /// <summary>Haptic feedback on impacts, tyre scrub and gearshifts.</summary>
+        public bool Vibration = true;
     }
 
     /// <summary>
@@ -41,6 +44,17 @@ namespace HighwayRenegade.Core.App
                 Current = new GameSettings();
             }
             ApplySettings();
+        }
+
+        /// <summary>
+        /// Adopts an edited settings object and persists it. Callers that mutate
+        /// <see cref="Current"/> in place can pass it straight back.
+        /// </summary>
+        public static void Apply(GameSettings settings)
+        {
+            if (settings == null) return;
+            Current = settings;
+            Save();
         }
 
         public static void Save()

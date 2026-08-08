@@ -5,24 +5,26 @@
     xmlns:editor="UnityEditor.UIElements"
     xsi:noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd">
 
+    <!-- Theme first, then this screen's layout: later sheets win on equal specificity. -->
+    <ui:Style src="Theme.uss" />
     <ui:Style src="MainMenu.uss" />
 
-    <ui:VisualElement class="menu-container">
-        <!-- The background image (set in the USS) -->
-        <ui:VisualElement class="background-image" />
-        
-        <!-- Left side navigation panel -->
+    <ui:VisualElement class="screen">
+        <!-- Decoration first, controls last. Later siblings draw on top AND receive
+             picking, so the vignette used to sit over the nav panel and eat every
+             button click - the menu would have looked perfect and responded to
+             nothing. picking-mode="Ignore" makes that independent of order. -->
+        <ui:VisualElement class="background-image" picking-mode="Ignore" />
+        <ui:VisualElement class="vignette-overlay" picking-mode="Ignore" />
+
         <ui:VisualElement class="nav-panel">
-            <ui:Label text="HIGHWAY RENEGADE" class="title-label" />
-            
+            <ui:Label text="HIGHWAY RENEGADE" class="title" />
+
             <ui:Button name="BtnCampaign" text="CAMPAIGN" class="menu-button" />
             <ui:Button name="BtnGarage" text="GARAGE" class="menu-button" />
             <ui:Button name="BtnSettings" text="SETTINGS" class="menu-button" />
             <ui:Button name="BtnExit" text="EXIT" class="menu-button" />
         </ui:VisualElement>
-        
-        <!-- Optional overlay gradient for readability -->
-        <ui:VisualElement class="vignette-overlay" />
     </ui:VisualElement>
 
 </ui:UXML>

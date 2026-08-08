@@ -24,10 +24,10 @@ namespace HighwayRenegade.Gameplay.Combat
         {
             if (Time.time <= _grabActiveUntil)
             {
-                if (incomingAttacker != null && incomingAttacker.CurrentWeapon != WeaponType.Kick)
+                if (incomingAttacker != null && incomingAttacker.Weapon != WeaponType.Kick)
                 {
                     // Successful disarm!
-                    WeaponType stolen = incomingAttacker.CurrentWeapon;
+                    WeaponType stolen = incomingAttacker.Weapon;
                     incomingAttacker.SetWeapon(WeaponType.Kick); // Enemy is disarmed, resorts to kicks
                     _meleeCombat.SetWeapon(stolen); // We steal it
                     

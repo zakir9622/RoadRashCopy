@@ -38,6 +38,15 @@ namespace HighwayRenegade.Gameplay.AI
         [SerializeField] private LayerMask _obstacleMask = ~0;
         [SerializeField] private float _avoidanceDistance = 18f;
 
+        [Header("Decision Cadence")]
+        [Tooltip("Seconds between state re-evaluations. Deciding every frame makes rivals " +
+                 "twitch between tactics; this is slow enough to read as intent.")]
+        [Range(0.1f, 2f)][SerializeField] private float _decisionInterval = 0.4f;
+
+        [Tooltip("How far ahead the rival aims, metres. Short values make it saw at the " +
+                 "bars; long values make it cut corners.")]
+        [Range(5f, 60f)][SerializeField] private float _lookAheadDistance = 22f;
+
         private BikeController _bike;
         private Damageable _damageable;
         private MeleeCombat _combat;

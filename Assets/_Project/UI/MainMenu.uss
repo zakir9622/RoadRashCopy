@@ -1,14 +1,12 @@
-.menu-container {
-    width: 100%;
-    height: 100%;
-    position: absolute;
-}
+/*
+ * Layout for the title screen. Colours, buttons and type come from Theme.uss - only the
+ * things unique to this screen live here.
+ */
 
 .background-image {
     position: absolute;
     width: 100%;
     height: 100%;
-    background-image: resource("UI/Textures/MainMenuBackground"); /* Needs to be in a Resources folder, or assigned directly in the editor, we'll assign via USS url */
     background-image: url('Textures/MainMenuBackground.png');
     -unity-background-scale-mode: scale-and-crop;
 }
@@ -20,6 +18,8 @@
     background-color: rgba(0, 0, 0, 0.4);
 }
 
+/* Anchored left and vertically centred rather than laid out in a flow, so the artwork
+   behind it stays visible on a wide phone screen. */
 .nav-panel {
     position: absolute;
     left: 100px;
@@ -27,36 +27,7 @@
     translate: 0 -50%;
     width: 400px;
     padding: 30px;
-    background-color: rgba(10, 15, 20, 0.85);
+    background-color: var(--panel);
     border-left-width: 4px;
-    border-left-color: #00ffcc;
-}
-
-.title-label {
-    font-size: 48px;
-    color: #ffffff;
-    -unity-font-style: bold;
-    margin-bottom: 40px;
-    letter-spacing: 2px;
-}
-
-.menu-button {
-    font-size: 24px;
-    color: #a0a0a0;
-    background-color: transparent;
-    border-width: 0;
-    -unity-text-align: middle-left;
-    padding: 15px 0;
-    margin: 5px 0;
-    transition-property: color, padding-left;
-    transition-duration: 0.2s;
-}
-
-.menu-button:hover {
-    color: #00ffcc;
-    padding-left: 20px;
-}
-
-.menu-button:active {
-    color: #ffffff;
+    border-left-color: var(--accent);
 }

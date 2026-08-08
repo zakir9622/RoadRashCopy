@@ -75,3 +75,6 @@ crashlytics-build.properties
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# CompileCheck reference cache
+Tools/CompileCheck/.work/

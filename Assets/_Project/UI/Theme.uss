@@ -1,0 +1,166 @@
+/*
+ * Shared visual language for every screen.
+ *
+ * Why this file exists: MainMenu.uss and GameUI.uss each hard-coded the same palette -
+ * the cyan accent, the near-black panel fill, the muted label grey - as raw hex in a
+ * dozen places. Adding a screen meant copying those literals again, and changing the
+ * accent would have meant finding every one of them. The colours and the reusable
+ * component classes live here once; per-screen stylesheets carry layout only.
+ *
+ * Attach alongside the screen's own sheet:
+ *     <ui:Style src="Theme.uss" />
+ *     <ui:Style src="Settings.uss" />
+ */
+
+:root {
+    --accent: #00ffcc;
+    --accent-dim: #00b894;
+    --danger: #ff3366;
+    --ink: #ffffff;
+    --ink-muted: #a0a0a0;
+    --panel: rgba(10, 15, 20, 0.85);
+    --scrim: rgba(0, 0, 0, 0.72);
+}
+
+/* ---------- surfaces ---------- */
+
+.screen {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+}
+
+/* Full-screen dim behind a modal. Also the thing that stops clicks reaching the
+   screen underneath, which is why it covers the whole area rather than just the panel. */
+.scrim {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    background-color: var(--scrim);
+    align-items: center;
+    justify-content: center;
+}
+
+.panel {
+    background-color: var(--panel);
+    padding: 30px;
+    border-left-width: 4px;
+    border-left-color: var(--accent);
+}
+
+.panel-centred {
+    width: 620px;
+    background-color: var(--panel);
+    padding: 36px;
+    border-width: 2px;
+    border-color: var(--accent);
+}
+
+/* ---------- type ---------- */
+
+.title {
+    font-size: 48px;
+    color: var(--ink);
+    -unity-font-style: bold;
+    margin-bottom: 28px;
+    letter-spacing: 2px;
+}
+
+.subtitle {
+    font-size: 28px;
+    color: var(--accent);
+    -unity-font-style: bold;
+    margin-bottom: 16px;
+}
+
+.label-row {
+    font-size: 20px;
+    color: var(--ink-muted);
+    margin-bottom: 6px;
+}
+
+.value {
+    font-size: 22px;
+    color: var(--ink);
+}
+
+.value-strong {
+    font-size: 32px;
+    color: var(--accent);
+    -unity-font-style: bold;
+}
+
+.danger {
+    color: var(--danger);
+}
+
+/* ---------- controls ---------- */
+
+.menu-button {
+    font-size: 24px;
+    color: var(--ink-muted);
+    background-color: transparent;
+    border-width: 0;
+    -unity-text-align: middle-left;
+    padding: 15px 0;
+    margin: 5px 0;
+    transition-property: color, padding-left;
+    transition-duration: 0.2s;
+}
+
+.menu-button:hover {
+    color: var(--accent);
+    padding-left: 20px;
+}
+
+.menu-button:active {
+    color: var(--ink);
+}
+
+/* Buttons inside a modal need a visible hit area, unlike the flat menu list. */
+.action-button {
+    font-size: 22px;
+    color: var(--ink);
+    background-color: rgba(255, 255, 255, 0.08);
+    border-width: 1px;
+    border-color: var(--accent-dim);
+    padding: 12px 28px;
+    margin: 6px;
+    min-width: 160px;
+}
+
+.action-button:hover {
+    background-color: rgba(0, 255, 204, 0.18);
+    border-color: var(--accent);
+}
+
+.action-button:disabled {
+    color: var(--ink-muted);
+    border-color: var(--ink-muted);
+    opacity: 0.5;
+}
+
+/* One labelled control per line: caption left, control right. */
+.setting-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.setting-row > Label {
+    font-size: 20px;
+    color: var(--ink-muted);
+    min-width: 240px;
+}
+
+.setting-row Slider {
+    flex-grow: 1;
+    min-width: 260px;
+}
+
+.button-row {
+    flex-direction: row;
+    justify-content: center;
+    margin-top: 24px;
+}

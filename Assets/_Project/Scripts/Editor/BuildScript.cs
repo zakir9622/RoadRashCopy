@@ -28,7 +28,12 @@ namespace HighwayRenegade.Editor
         [MenuItem("Highway Renegade/Build Android (AAB)")]
         public static void BuildAndroid()
         {
-            string outputPath = GetArg("-customBuildPath") ?? "build/Android";
+            // An empty value must fall back too, not just a missing switch:
+            // Directory.CreateDirectory("") throws, which would abort the build before it
+            // started with an error that says nothing about the real cause.
+            string outputPath = GetArg("-customBuildPath");
+            if (string.IsNullOrWhiteSpace(outputPath)) outputPath = "build/Android";
+
             bool appBundle = GetArg("-buildApk") == null;   // default to .aab; pass -buildApk for .apk
 
             Directory.CreateDirectory(outputPath);
@@ -37,21 +42,13 @@ namespace HighwayRenegade.Editor
 
             ApplyAndroidSettings(appBundle);
 
+            EnsureScenes();
+
             string[] scenes = EnabledScenes();
             if (scenes.Length == 0)
             {
-                // A build with no scenes "succeeds" and produces a black app. While the
-                // project is still on placeholder art, generate the test track rather than
-                // failing — this is what lets CI produce a runnable APK on a clean clone.
-                Debug.Log("[Build] No scenes registered — generating the placeholder test track.");
-                TestTrackGenerator.Generate();
-                scenes = EnabledScenes();
-
-                if (scenes.Length == 0)
-                {
-                    Fail("Scene generation produced no enabled scenes.");
-                    return;
-                }
+                Fail("Scene generation produced no enabled scenes.");
+                return;
             }
 
             Debug.Log($"[Build] {ext.ToUpperInvariant()} -> {file}");
@@ -122,15 +119,37 @@ namespace HighwayRenegade.Editor
         }
 
         /// <summary>
-        /// Reads signing config from environment variables so keystore secrets never
-        /// enter the repository. Unsigned debug builds are fine locally; CI injects these.
+        /// Reads signing config so keystore secrets never enter the repository.
+        ///
+        /// Command line first, then environment. This order matters: game-ci/unity-builder
+        /// decodes ANDROID_KEYSTORE_BASE64 to a file in the project and then passes the
+        /// keystore settings to Unity as <c>-androidKeystoreName</c> and friends. Its own
+        /// build script reads those arguments - but a custom buildMethod like this one is
+        /// invoked instead of it, so nothing was reading them.
+        ///
+        /// This method previously looked only at ANDROID_KEYSTORE_PATH, which nothing
+        /// sets, so it always took the "no keystore" branch and forced
+        /// useCustomKeystore = false. Supplying the signing secrets correctly would still
+        /// have produced an unsigned build, and an unsigned build cannot go to the Play
+        /// Store - the failure would only have shown up at upload time.
         /// </summary>
         private static void ApplyKeystoreFromEnvironment()
         {
-            string keystore = Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PATH");
-            string storePass = Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PASS");
-            string alias = Environment.GetEnvironmentVariable("ANDROID_KEYALIAS_NAME");
-            string aliasPass = Environment.GetEnvironmentVariable("ANDROID_KEYALIAS_PASS");
+            string keystore = GetArg("-androidKeystoreName")
+                           ?? Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PATH");
+            string storePass = GetArg("-androidKeystorePass")
+                            ?? Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PASS");
+            string alias = GetArg("-androidKeyaliasName")
+                        ?? Environment.GetEnvironmentVariable("ANDROID_KEYALIAS_NAME");
+            string aliasPass = GetArg("-androidKeyaliasPass")
+                            ?? Environment.GetEnvironmentVariable("ANDROID_KEYALIAS_PASS");
+
+            // The keystore path may be relative to the project root.
+            if (!string.IsNullOrEmpty(keystore) && !File.Exists(keystore))
+            {
+                string absolute = Path.Combine(Directory.GetCurrentDirectory(), keystore);
+                if (File.Exists(absolute)) keystore = absolute;
+            }
 
             if (string.IsNullOrEmpty(keystore) || !File.Exists(keystore))
             {
@@ -147,15 +166,99 @@ namespace HighwayRenegade.Editor
             Debug.Log("[Build] Release keystore applied from environment.");
         }
 
+        /// <summary>
+        /// Generates any missing scene and puts the main menu first.
+        ///
+        /// Both halves fix a shipped defect. Only TestTrack.unity is committed; MainMenu
+        /// and Garage are produced by MenuSceneGenerator, which nothing outside the Unity
+        /// editor menu ever invoked. So the APK contained one scene, and the entire front
+        /// end - title screen, garage, settings - was dead code in the binary. Worse, it
+        /// failed quietly: GameFlowManager checks CanStreamedLevelBeLoaded, logs, and
+        /// stays put, so the game simply never left the track.
+        ///
+        /// Order then matters because Unity boots scene 0. With TestTrack first the app
+        /// dropped the player straight onto the road with no menu, so the fix is not
+        /// complete until the main menu is the entry point.
+        /// </summary>
+        private static void EnsureScenes()
+        {
+            if (!File.Exists(TestTrackGenerator.ScenePath))
+            {
+                Debug.Log("[Build] Generating the placeholder test track.");
+                TestTrackGenerator.Generate();
+            }
+
+            if (!File.Exists(MenuSceneGenerator.MainMenuPath) ||
+                !File.Exists(MenuSceneGenerator.GaragePath))
+            {
+                Debug.Log("[Build] Generating the menu scenes.");
+                MenuSceneGenerator.GenerateAll();
+            }
+
+            RegisterScene(TestTrackGenerator.ScenePath);
+            RegisterScene(MenuSceneGenerator.GaragePath);
+            RegisterScene(MenuSceneGenerator.MainMenuPath);
+
+            MoveToFront(MenuSceneGenerator.MainMenuPath);
+        }
+
+        /// <summary>Adds a scene to Build Settings if it is not already listed.</summary>
+        private static void RegisterScene(string path)
+        {
+            if (!File.Exists(path))
+            {
+                Debug.LogWarning($"[Build] Scene '{path}' does not exist and cannot be registered.");
+                return;
+            }
+
+            var scenes = EditorBuildSettings.scenes.ToList();
+            int existing = scenes.FindIndex(s => s.path == path);
+            if (existing >= 0)
+            {
+                scenes[existing].enabled = true;
+            }
+            else
+            {
+                scenes.Add(new EditorBuildSettingsScene(path, true));
+            }
+
+            EditorBuildSettings.scenes = scenes.ToArray();
+        }
+
+        private static void MoveToFront(string path)
+        {
+            var scenes = EditorBuildSettings.scenes.ToList();
+            int index = scenes.FindIndex(s => s.path == path);
+            if (index <= 0) return;   // absent, or already first
+
+            EditorBuildSettingsScene entry = scenes[index];
+            scenes.RemoveAt(index);
+            scenes.Insert(0, entry);
+            EditorBuildSettings.scenes = scenes.ToArray();
+        }
+
         private static string[] EnabledScenes() =>
             EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();
 
+        /// <summary>
+        /// Value of a command-line switch, or null when absent.
+        ///
+        /// A flag with no value returns string.Empty rather than null, which is what lets
+        /// a bare <c>-buildApk</c> be detected. A following token that is itself a switch
+        /// is not treated as a value, so <c>-buildApk -someOtherFlag</c> cannot be
+        /// misread as a keystore path or an output directory.
+        /// </summary>
         private static string GetArg(string name)
         {
             string[] args = Environment.GetCommandLineArgs();
             for (int i = 0; i < args.Length; i++)
-                if (args[i] == name)
-                    return i + 1 < args.Length ? args[i + 1] : string.Empty;
+            {
+                if (args[i] != name) continue;
+
+                if (i + 1 >= args.Length) return string.Empty;
+                string next = args[i + 1];
+                return next.StartsWith("-") ? string.Empty : next;
+            }
             return null;
         }
 

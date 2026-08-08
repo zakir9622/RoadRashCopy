@@ -16,6 +16,11 @@ namespace HighwayRenegade.Gameplay.Audio
         private AudioSource _musicSource;
         private AudioSource _engineSource;
         
+        [Header("Impact SFX")]
+        [Tooltip("Leave empty to use synthesised audio from ProceduralSfx.")]
+        [SerializeField] private AudioClip _crashClip;
+        [SerializeField] private AudioClip _hitClip;
+
         [Header("Engine Audio Settings")]
         [SerializeField] private AudioClip _engineClip;
         [SerializeField] private float _basePitch = 0.5f;
@@ -83,6 +88,36 @@ namespace HighwayRenegade.Gameplay.Audio
             }
             
             Debug.LogWarning("[AudioManager] SFX Pool exhausted!");
+        }
+
+        /// <summary>
+        /// Impact of a crash, loudness scaled by how bad it was.
+        ///
+        /// Falls back to synthesised audio when no clip is assigned, which is currently
+        /// always: the project ships no audio assets, so every crash and every landed
+        /// punch was silent. Assigning a real clip in the inspector takes precedence.
+        /// </summary>
+        public void PlayCrash(Vector3 position, float severity01 = 1f)
+        {
+            AudioClip clip = _crashClip != null ? _crashClip : ProceduralSfx.Crash;
+
+            // Pitch down the heavier impacts. The same sample played at a lower pitch
+            // reads as a bigger object hitting the ground, which is most of what sells
+            // the difference between a tip-over and a wipeout.
+            float severity = Mathf.Clamp01(severity01);
+            PlaySfx(clip, position,
+                    volume: Mathf.Lerp(0.55f, 1f, severity),
+                    pitch: Mathf.Lerp(1.15f, 0.8f, severity));
+        }
+
+        /// <summary>A melee blow connecting.</summary>
+        public void PlayHit(Vector3 position)
+        {
+            AudioClip clip = _hitClip != null ? _hitClip : ProceduralSfx.Hit;
+
+            // Slight random detune so repeated swings do not machine-gun the identical
+            // sample, which is what makes synthesised combat audio sound cheap.
+            PlaySfx(clip, position, volume: 0.85f, pitch: Random.Range(0.92f, 1.08f));
         }
 
         public void PlayMusic(AudioClip track)

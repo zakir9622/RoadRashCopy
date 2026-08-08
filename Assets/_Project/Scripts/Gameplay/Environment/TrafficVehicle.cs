@@ -50,11 +50,15 @@ namespace HighwayRenegade.Gameplay.Environment
             float direction = _isOncoming ? -1f : 1f;
             _currentDistance += _speed * direction * dt;
 
-            // Loop or clamp if needed, but for now just clamp
-            if (_currentDistance < 0f || _currentDistance > _spline.TotalLength)
+            // Wrap rather than despawn. Destroying at the ends meant the traffic
+            // population only ever shrank: every car that ran off either end was gone for
+            // good, so a long race finished on a completely empty road. Wrapping keeps the
+            // count constant for the whole race at no allocation cost.
+            float length = _spline.TotalLength;
+            if (length > 1f)
             {
-                Destroy(gameObject); // Despawn when it reaches the end
-                return;
+                if (_currentDistance > length) _currentDistance -= length;
+                else if (_currentDistance < 0f) _currentDistance += length;
             }
 
             Vector3 centerPos = _spline.SamplePosition(_currentDistance);

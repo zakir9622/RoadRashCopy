@@ -36,51 +36,41 @@ namespace HighwayRenegade.Gameplay.CameraRig
 
         private void SetupMotionBlur()
         {
-            if (_volume.profile.TryAdd(out MotionBlur mb))
-            {
-                mb.active = true;
-                mb.intensity.Override(0.8f);
-                mb.quality.Override(MotionBlurQuality.Medium);
-            }
+            var mb = _volume.profile.Add<MotionBlur>(true);
+            mb.active = true;
+            mb.intensity.Override(0.8f);
+            mb.quality.Override(MotionBlurQuality.Medium);
         }
 
         private void SetupBloom()
         {
-            if (_volume.profile.TryAdd(out Bloom bloom))
-            {
-                bloom.active = true;
-                bloom.intensity.Override(1.5f);
-                bloom.threshold.Override(1f);
-                bloom.tint.Override(new Color(1f, 0.9f, 0.7f));
-            }
+            var bloom = _volume.profile.Add<Bloom>(true);
+            bloom.active = true;
+            bloom.intensity.Override(1.5f);
+            bloom.threshold.Override(1f);
+            bloom.tint.Override(new Color(1f, 0.9f, 0.7f));
         }
 
         private void SetupVignette()
         {
-            if (_volume.profile.TryAdd(out Vignette vignette))
-            {
-                vignette.active = true;
-                vignette.intensity.Override(0.35f);
-                vignette.smoothness.Override(0.5f);
-                vignette.color.Override(Color.black);
-            }
+            var vignette = _volume.profile.Add<Vignette>(true);
+            vignette.active = true;
+            vignette.intensity.Override(0.35f);
+            vignette.smoothness.Override(0.5f);
+            vignette.color.Override(Color.black);
         }
 
         private void SetupColorGrading()
         {
-            if (_volume.profile.TryAdd(out ColorAdjustments ca))
-            {
-                ca.active = true;
-                ca.contrast.Override(20f); // Gritty, high contrast
-                ca.saturation.Override(-10f); // Slightly desaturated
-            }
+            var ca = _volume.profile.Add<ColorAdjustments>(true);
+            ca.active = true;
+            ca.contrast.Override(20f); // Gritty, high contrast
+            ca.saturation.Override(-10f); // Slightly desaturated
 
-            if (_volume.profile.TryAdd(out FilmGrain grain))
-            {
-                grain.active = true;
-                grain.type.Override(FilmGrainLookup.Medium1);
-                grain.intensity.Override(0.4f);
-            }
+            var grain = _volume.profile.Add<FilmGrain>(true);
+            grain.active = true;
+            grain.type.Override(FilmGrainLookup.Medium1);
+            grain.intensity.Override(0.4f);
         }
     }
 }

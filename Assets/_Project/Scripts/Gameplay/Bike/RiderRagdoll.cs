@@ -1,5 +1,5 @@
 using UnityEngine;
-using HighwayRenegade.Core.Bike;
+using HighwayRenegade.Core.Vehicle;
 
 namespace HighwayRenegade.Gameplay.Bike
 {
@@ -34,7 +34,8 @@ namespace HighwayRenegade.Gameplay.Bike
 
         private void OnCrashed(CrashSeverity severity, GameObject responsibleSource)
         {
-            if (severity == CrashSeverity.Wreck || severity == CrashSeverity.Knockdown)
+            // The two worst tiers are the ones where rider and bike part company.
+            if (severity == CrashSeverity.Wipeout || severity == CrashSeverity.Major)
             {
                 // Detach rider
                 _riderRb.isKinematic = false;

@@ -5,6 +5,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using HighwayRenegade.Core.Combat;
+using HighwayRenegade.Core.Race;
 using HighwayRenegade.Gameplay.AI;
 using HighwayRenegade.Gameplay.Audio;
 using HighwayRenegade.Gameplay.Bike;
@@ -12,8 +13,11 @@ using HighwayRenegade.Gameplay.Combat;
 using HighwayRenegade.Gameplay.CameraRig;
 using HighwayRenegade.Gameplay.Race;
 using HighwayRenegade.Gameplay.UI;
+using HighwayRenegade.Gameplay.UI.Screens;
 using HighwayRenegade.Gameplay.Environment;
+using HighwayRenegade.Gameplay.Progression;
 using HighwayRenegade.Performance;
+using HighwayRenegade.Platform;
 
 namespace HighwayRenegade.Editor
 {
@@ -64,8 +68,13 @@ namespace HighwayRenegade.Editor
             var trafficSpawner = root.AddComponent<TrafficSpawner>();
             var soTraffic = new SerializedObject(trafficSpawner);
             soTraffic.FindProperty("_vehiclePrefab").objectReferenceValue = trafficPrefabGo.GetComponent<TrafficVehicle>();
+            soTraffic.FindProperty("_fallbackTrackLength").floatValue = RoadLength;
             soTraffic.ApplyModifiedPropertiesWithoutUndo();
-            trafficSpawner.Initialize(spline);
+
+            // Deliberately NOT initialised here. A TrackSpline is a plain C# object and
+            // cannot be serialised into the scene, so traffic spawned at generation time
+            // loads with a null spline and never moves. The spawner initialises itself in
+            // Start() instead, against a spline that actually exists at runtime.
 
             // Hide the prefab
             trafficPrefabGo.SetActive(false);
@@ -119,6 +128,10 @@ namespace HighwayRenegade.Editor
             BikeController player = BuildBike("Bike (Player)", new Vector3(0f, 1f, 0f),
                                               new Color(0.75f, 0.18f, 0.12f));
             player.gameObject.AddComponent<PlayerBikeInput>();
+
+            // Applies the saved bike, purchased upgrades and accumulated wear to the
+            // machine. Without it the garage's upgrades are money burnt for no effect.
+            player.gameObject.AddComponent<BikeLoadout>();
 
             BuildRivals(player);
             BuildCamera(player);
@@ -291,9 +304,23 @@ namespace HighwayRenegade.Editor
 
             // Player and rivals get identical combat, progress and crash components
             root.AddComponent<Damageable>();
-            root.AddComponent<MeleeCombat>();
-            root.AddComponent<BikeCrashHandler>();
+            MeleeCombat combat = root.AddComponent<MeleeCombat>();
+            BikeCrashHandler crash = root.AddComponent<BikeCrashHandler>();
             root.AddComponent<TrackProgress>();
+
+            // Taking a rival's weapon off them is the point of the combat system, and the
+            // component that does it was in no scene, so no weapon could ever be stolen.
+            var grabber = root.AddComponent<WeaponGrabber>();
+            var grabberSo = new SerializedObject(grabber);
+            grabberSo.FindProperty("_meleeCombat").objectReferenceValue = combat;
+            grabberSo.ApplyModifiedPropertiesWithoutUndo();
+
+            // Coming off the bike is what a crash means in this game; without the ragdoll
+            // wired, going down was a physics event with no rider attached to it.
+            var ragdoll = root.AddComponent<RiderRagdoll>();
+            var ragdollSo = new SerializedObject(ragdoll);
+            ragdollSo.FindProperty("_crashHandler").objectReferenceValue = crash;
+            ragdollSo.ApplyModifiedPropertiesWithoutUndo();
 
             // Engine note is synthesised from the bike's own RPM, so it needs no audio
             // asset and always matches the physics. 3D so rivals are audible in position.
@@ -420,6 +447,77 @@ namespace HighwayRenegade.Editor
             so.FindProperty("_bike").objectReferenceValue = player;
             so.FindProperty("_thermal").objectReferenceValue = thermal;
             so.FindProperty("_race").objectReferenceValue = race;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            // CampaignSession was absent from the generated scene entirely, which meant
+            // none of the progression layer ever ran: no prize money, no rival grudges
+            // carried between races, no bike damage, no bust handling. Every race was a
+            // sealed sandbox that wrote nothing to the save file.
+            go.AddComponent<CampaignSession>();
+
+            // Music and SFX bus. Without it the only audio in the scene is the bike's own
+            // procedural engine synthesis.
+            go.AddComponent<AudioManager>();
+
+            // Haptics. The whole Android vibration layer existed and was instantiated
+            // nowhere, so its static Instance was permanently null and every call site
+            // that would have used it silently did nothing.
+            go.AddComponent<AndroidHaptics>();
+
+            BuildPolice(player);
+            BuildRaceUI();
+        }
+
+        /// <summary>
+        /// Adds the police unit that chases and busts the player.
+        ///
+        /// The pursuit system, the bust, and the fine that comes out of the balance were
+        /// all implemented; the component was in no scene, so no police officer ever
+        /// existed and none of it could fire. Built on the same chassis as a rival so it
+        /// handles like a bike rather than a scripted follower.
+        /// </summary>
+        private static void BuildPolice(BikeController player)
+        {
+            BikeController police = BuildBike("Police", new Vector3(6f, 1f, -14f),
+                                              new Color(0.10f, 0.16f, 0.55f));
+
+            var ai = police.gameObject.AddComponent<PoliceAI>();
+            var so = new SerializedObject(ai);
+            so.FindProperty("_bike").objectReferenceValue = police;
+            so.FindProperty("_target").objectReferenceValue = player.transform;
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// Places the in-race UI.
+        ///
+        /// All three of these screens were written and then placed in no scene at all, so
+        /// racing meant no HUD, no way to pause, and nothing shown when you crossed the
+        /// line. The race simply ended and sat there. They are created here for the same
+        /// reason everything else in this file is: a generated scene is the only scene,
+        /// so anything absent from the generator does not exist in the game.
+        /// </summary>
+        private static void BuildRaceUI()
+        {
+            // UI Toolkit delivers pointer input through the EventSystem. Without one the
+            // pause and results buttons draw correctly and ignore every tap.
+            UiSceneBuilder.AddEventSystem();
+
+            UiSceneBuilder.AddScreen<RaceHudScreen>("GameUI", UiSceneBuilder.BaseLayer);
+
+            // Both modals start hidden and raise themselves: pause on the back button,
+            // results when the race enters PostRace.
+            var pause = UiSceneBuilder.AddScreen<PauseScreen>("Pause", UiSceneBuilder.ModalLayer);
+            SetVisibleOnStart(pause, false);
+
+            var results = UiSceneBuilder.AddScreen<RaceResultsScreen>("Results", UiSceneBuilder.ModalLayer);
+            SetVisibleOnStart(results, false);
+        }
+
+        private static void SetVisibleOnStart(MonoBehaviour screen, bool visible)
+        {
+            var so = new SerializedObject(screen);
+            so.FindProperty("_visibleOnStart").boolValue = visible;
             so.ApplyModifiedPropertiesWithoutUndo();
         }
 

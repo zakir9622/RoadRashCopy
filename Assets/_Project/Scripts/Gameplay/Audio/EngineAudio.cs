@@ -50,6 +50,18 @@ namespace HighwayRenegade.Gameplay.Audio
         [Tooltip("Exhaust overrun crackle and backfire burst volume.")]
         [Range(0f, 0.6f)][SerializeField] private float _popVolume = 0.45f;
 
+        [Header("Mix")]
+        [Tooltip("Overall engine bus level before load shaping.")]
+        [Range(0f, 1f)][SerializeField] private float _volume = 0.7f;
+
+        [Tooltip("How much of the level is driven by engine load rather than sitting at a " +
+                 "constant idle floor. At 0 the engine is equally loud on and off throttle.")]
+        [Range(0f, 1f)][SerializeField] private float _loadInfluence = 0.6f;
+
+        [Tooltip("Glide time, seconds, for amplitude and frequency targets. Too low and " +
+                 "the synth zippers on gearchanges; too high and it lags the throttle.")]
+        [Range(0.001f, 0.2f)][SerializeField] private float _smoothing = 0.03f;
+
         // --- Written by Update (main thread), read by OnAudioFilterRead (audio thread).
         //     Plain floats: torn reads are harmless here and cost nothing, whereas a lock
         //     on the audio thread risks a dropout. ---

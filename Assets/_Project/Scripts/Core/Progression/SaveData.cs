@@ -70,7 +70,14 @@ namespace HighwayRenegade.Core.Progression
         public List<RivalRecord> Rivals = new List<RivalRecord>();
 
         /// <summary>Identifier of the bike the player is riding.</summary>
-        public string BikeId = "superbike";
+        public string BikeId = StarterBikeId;
+
+        /// <summary>
+        /// Id of the free starter bike. Must match an entry in BikeShop: the default used
+        /// to be "superbike", which matches nothing in the shop, so every lookup for the
+        /// player's bike returned null and its value read as zero.
+        /// </summary>
+        public const string StarterBikeId = "bike_rat";
 
         /// <summary>Total races finished, for stats and pacing decisions.</summary>
         public int RacesFinished;
@@ -95,6 +102,33 @@ namespace HighwayRenegade.Core.Progression
 
         /// <summary>Whether gyroscope tilt steering is enabled.</summary>
         public bool GyroSteering = false;
+
+        /// <summary>
+        /// Condition of the current bike, 0..1. Crashing degrades it, repairs cost money,
+        /// and a wrecked bike you cannot afford to fix ends the run. See RepairRules.
+        /// </summary>
+        public float BikeCondition = RepairRules.PristineCondition;
+
+        /// <summary>
+        /// Every bike the player has paid for.
+        ///
+        /// Without this the garage only knew which bike was equipped, so switching back
+        /// to a bike you already owned charged you for it a second time - and there was
+        /// no way to own two bikes at once.
+        /// </summary>
+        public List<string> OwnedBikeIds = new List<string>();
+
+        /// <summary>True if this bike has been bought, or is the free starter.</summary>
+        public bool Owns(string bikeId) =>
+            !string.IsNullOrEmpty(bikeId) &&
+            (bikeId == StarterBikeId || OwnedBikeIds.Contains(bikeId));
+
+        /// <summary>Records a purchase. Idempotent.</summary>
+        public void MarkOwned(string bikeId)
+        {
+            if (string.IsNullOrEmpty(bikeId) || OwnedBikeIds.Contains(bikeId)) return;
+            OwnedBikeIds.Add(bikeId);
+        }
 
         /// <summary>Cost to purchase the next stage of an upgrade (0-5).</summary>
         public static int UpgradeCost(int currentStage) => (currentStage + 1) * 600;
@@ -171,7 +205,13 @@ namespace HighwayRenegade.Core.Progression
             data.CompletedEvents ??= new List<string>();
             data.Rivals ??= new List<RivalRecord>();
 
-            if (string.IsNullOrEmpty(data.BikeId)) data.BikeId = "superbike";
+            if (string.IsNullOrEmpty(data.BikeId)) data.BikeId = SaveData.StarterBikeId;
+
+            // "superbike" was the old default and matches no entry in BikeShop, so any
+            // save carrying it looked up as null and valued the player's bike at zero.
+            // Mapped to the real superbike rather than the starter: these players were
+            // riding it, and demoting them to fix our own naming mistake is not a repair.
+            if (data.BikeId == "superbike") data.BikeId = "bike_super";
 
             // Clamp values that would break gameplay if a file were hand-edited or a
             // previous version wrote something nonsensical.
@@ -184,6 +224,18 @@ namespace HighwayRenegade.Core.Progression
             data.ArmorStage = Math.Max(0, Math.Min(5, data.ArmorStage));
             data.EquippedWeapon = Math.Max(0, Math.Min(2, data.EquippedWeapon));
             data.AssistSetting = Math.Max(0, Math.Min(2, data.AssistSetting));
+
+            // A save written before bike condition existed deserialises the field as 0,
+            // which would read as a wrecked bike and strand the player behind a repair
+            // bill for damage they never did. Treat "absent" as pristine.
+            if (data.BikeCondition <= 0f) data.BikeCondition = RepairRules.PristineCondition;
+            else if (data.BikeCondition > 1f) data.BikeCondition = RepairRules.PristineCondition;
+
+            // A save written before ownership was tracked has an empty list, which would
+            // read as "you do not own the bike you are sitting on" and offer to sell it
+            // back to you. Whatever is equipped was, by definition, already paid for.
+            if (data.OwnedBikeIds == null) data.OwnedBikeIds = new List<string>();
+            data.MarkOwned(data.BikeId);
 
             for (int i = 0; i < data.Rivals.Count; i++)
             {

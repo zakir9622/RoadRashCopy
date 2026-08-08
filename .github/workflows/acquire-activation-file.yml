@@ -1,23 +1,167 @@
 name: Acquire Unity License Activation File
 
+# Produces the .alf file for Unity's manual activation flow.
+#
+# MEASURED, 2026-08-08: batch-mode account activation does NOT work for this account.
+# Running the editor with -username/-password on 6000.0.38f1 authenticates cleanly:
+#
+#   User *** logged in successfully
+#   [UnityConnect::TryLogin] Request Succeeded.
+#
+# and is then refused a licence, because the account holds no CI entitlement:
+#
+#   Code 404 ... Found 0 entitlement groups and 0 free entitlements matching
+#                requested entitlement ids
+#   [Licensing::Module] Error: 'com.unity.editor.headless' was not found.
+#   No valid Unity Editor license found. Please activate your license.
+#
+# So UNITY_EMAIL/UNITY_PASSWORD alone can never activate a runner here, and the
+# licence has to arrive as a .ulf (or a Plus/Pro serial). unity-builder extracts the
+# 27-character serial out of the .ulf and activates the container with that, which is
+# why the file route still works where account login does not.
+#
+# NOTE: Unity has been retiring manual .alf activation for Personal licences -
+# license.unity3d.com/manual now asks for a Plus/Pro serial rather than offering a
+# Personal option. If that is what you are shown, this workflow is not the route:
+# activate Unity once on your own machine and copy Unity_lic.ulf into UNITY_LICENSE
+# instead. The workflow is kept because it still works where manual activation is
+# offered, and because the disk fix below is worth preserving either way.
+#
+# This previously failed on every run, and not for a licensing reason:
+#
+#   failed to register layer: .../libOpenImageDenoise.dylib: no space left on device
+#   Docker pull failed with exit code 1
+#
+# The job declared the full Android editor image as a job-level `container:`, which
+# Actions pulls *before any step runs*. There was therefore no opportunity to free disk
+# first, and a GitHub runner does not have room for that image out of the box. The job
+# died during the pull, so Unity never started and no .alf was ever produced - which is
+# why the licence secrets could not be created, which is why every Android build failed.
+#
+# Two changes fix it: free the runner's disk before pulling anything, and pull the
+# `base` image instead of `android`. Requesting an activation file does not need the
+# Android module, and base is ~2 GB smaller compressed and much smaller unpacked.
+
 on:
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Must match the unityVersion used by build-android.yml: a licence file is tied to the
+  # editor version that requested it.
+  UNITY_IMAGE: unityci/editor:ubuntu-6000.0.38f1-base-3
 
 jobs:
   activation:
     name: Request .alf Activation File
     runs-on: ubuntu-latest
-    container:
-      image: unityci/editor:ubuntu-6000.0.38f1-android-3
+
+    # Deliberately NOT a job-level `container:`. That is what made this unfixable before:
+    # the image is pulled before the first step, so nothing can clear space ahead of it.
     steps:
-      - name: Generate Manual Activation File
+      - name: Free runner disk space
         run: |
-          /opt/unity/Editor/Unity -quit -batchmode -nographics -createManualActivationFile -logfile /dev/stdout || true
-          find . -name "*.alf" -exec cp {} ./Unity_v6000.alf \;
+          echo "Before cleanup:"
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache \
+                      /usr/local/share/powershell /usr/share/swift \
+                      "$AGENT_TOOLSDIRECTORY" || true
+          docker image prune -af || true
+          echo "After cleanup:"
+          df -h / | tail -1
+
+      - name: Generate manual activation file
+        run: |
+          # --entrypoint is explicit: these images define one, and without overriding it
+          # the Unity path below would be passed as arguments to the entrypoint instead
+          # of being executed. The old job-level `container:` form did not need this
+          # because Actions overrides the entrypoint itself.
+          #
+          # Unity exits non-zero when it has no licence - precisely the state this
+          # workflow exists to resolve - so the exit code is ignored and the real check
+          # is whether a .alf actually landed. The file is also located from inside the
+          # container, because Unity does not always write it to the working directory.
+          docker run --rm --entrypoint /bin/bash \
+            -v "${{ github.workspace }}:/work" -w /work "$UNITY_IMAGE" -c '
+              /opt/unity/Editor/Unity \
+                -quit -batchmode -nographics \
+                -createManualActivationFile \
+                -logfile /dev/stdout || true
+
+              alf="$(find / -maxdepth 6 -name "*.alf" -print -quit 2>/dev/null)"
+              if [ -n "$alf" ]; then cp "$alf" /work/Unity_v6000.alf; fi
+            '
+
+          if [ ! -s Unity_v6000.alf ]; then
+            echo "::error::Unity did not produce a .alf file. See the Unity log above."
+            exit 1
+          fi
+          ls -l Unity_v6000.alf
 
       - name: Upload .alf Artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: Unity-Activation-File
           path: Unity_v6000.alf
-          retention-days: 1
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: What to do next
+        if: success()
+        run: |
+          cat <<'EOF'
+          ==========================================================
+          HOW TO TURN THIS INTO A UNITY_LICENSE SECRET
+          ==========================================================
+          Unity has been retiring manual .alf activation for Personal
+          licences: license.unity3d.com/manual now asks for a Plus/Pro
+          serial rather than offering a Personal option. If that is what
+          you see, use route A - it does not need this .alf at all.
+
+          ----------------------------------------------------------
+          ROUTE A (recommended): copy the .ulf from a local install
+          ----------------------------------------------------------
+          Activating Unity normally on your own machine - open Unity
+          Hub and sign in - writes the licence file to disk. Copy its
+          entire contents into the UNITY_LICENSE secret.
+
+            Windows  C:\ProgramData\Unity\Unity_lic.ulf
+            macOS    /Library/Application Support/Unity/Unity_lic.ulf
+            Linux    ~/.local/share/unity3d/Unity/Unity_lic.ulf
+
+          ----------------------------------------------------------
+          ROUTE B: paid Plus/Pro seat
+          ----------------------------------------------------------
+          Skip the licence file entirely and set UNITY_SERIAL to your
+          serial instead. unity-builder accepts either one.
+
+          ----------------------------------------------------------
+          ROUTE C: manual activation, if Unity still offers it to you
+          ----------------------------------------------------------
+          Download the "Unity-Activation-File" artifact from this run,
+          unzip it, and upload Unity_v6000.alf at
+          https://license.unity3d.com/manual - then download the .ulf.
+
+          ----------------------------------------------------------
+          THEN, whichever route you used
+          ----------------------------------------------------------
+          Settings -> Secrets and variables -> Actions
+            -> New repository secret
+
+              UNITY_LICENSE   the entire .ulf contents (XML, <?xml ...)
+                              -- or --
+              UNITY_SERIAL    your Plus/Pro serial
+
+          Add UNITY_EMAIL and UNITY_PASSWORD as well.
+
+          Then run "Android Build & Release".
+          ==========================================================
+          EOF
