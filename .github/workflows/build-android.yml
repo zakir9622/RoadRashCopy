@@ -92,6 +92,32 @@ jobs:
           docker image prune -af || true
           df -h / | tail -1
 
+      # The 18 CC0 textures and both HDRIs have never been in a CI build. They are
+      # gitignored on purpose - the repository stores the recipe, not the output - and
+      # nothing ever ran the fetcher, so every APK shipped to date has contained zero
+      # textures and rendered entirely on runtime-generated flat colours.
+      #
+      # Cached on the manifest hash with no restore-keys. A partial restore keyed on an
+      # older manifest is worse than a clean fetch: it mixes files pinned to different
+      # SHA-256s, and --verify would then fail on assets that are individually fine.
+      - name: Cache fetched CC0 art
+        uses: actions/cache@v4
+        with:
+          path: Assets/_Project/Art
+          key: art-${{ hashFiles('Tools/Assets/manifest.json') }}
+
+      # continue-on-error: an upstream outage should degrade the build to the placeholder
+      # look, not turn the whole pipeline red. Integrity is enforced by the next step,
+      # which is not forgiving.
+      - name: Fetch CC0 art
+        continue-on-error: true
+        run: python3 Tools/Assets/fetch-assets.py
+
+      # Every asset carries a pinned SHA-256. A hash mismatch means the bytes changed
+      # under a URL we do not control, and that is a hard stop rather than a warning.
+      - name: Verify art integrity
+        run: python3 Tools/Assets/fetch-assets.py --verify
+
       - name: Cache Unity Library
         uses: actions/cache@v4
         with:
@@ -145,6 +171,32 @@ jobs:
                       "$AGENT_TOOLSDIRECTORY" || true
           docker image prune -af || true
           df -h / | tail -1
+
+      # The 18 CC0 textures and both HDRIs have never been in a CI build. They are
+      # gitignored on purpose - the repository stores the recipe, not the output - and
+      # nothing ever ran the fetcher, so every APK shipped to date has contained zero
+      # textures and rendered entirely on runtime-generated flat colours.
+      #
+      # Cached on the manifest hash with no restore-keys. A partial restore keyed on an
+      # older manifest is worse than a clean fetch: it mixes files pinned to different
+      # SHA-256s, and --verify would then fail on assets that are individually fine.
+      - name: Cache fetched CC0 art
+        uses: actions/cache@v4
+        with:
+          path: Assets/_Project/Art
+          key: art-${{ hashFiles('Tools/Assets/manifest.json') }}
+
+      # continue-on-error: an upstream outage should degrade the build to the placeholder
+      # look, not turn the whole pipeline red. Integrity is enforced by the next step,
+      # which is not forgiving.
+      - name: Fetch CC0 art
+        continue-on-error: true
+        run: python3 Tools/Assets/fetch-assets.py
+
+      # Every asset carries a pinned SHA-256. A hash mismatch means the bytes changed
+      # under a URL we do not control, and that is a hard stop rather than a warning.
+      - name: Verify art integrity
+        run: python3 Tools/Assets/fetch-assets.py --verify
 
       - name: Cache Unity Library
         uses: actions/cache@v4

@@ -58,6 +58,50 @@ namespace UnityEditor
         public static string AssetPathToGUID(string path) => string.Empty;
     }
 
+    /// <summary>
+    /// Import settings. Modelled because MaterialGenerator forces mobile compression and,
+    /// more importantly, correctness: a normal map imported as a colour texture lights
+    /// backwards, and an ARM map read as sRGB gives wrong roughness across the whole
+    /// scene. Both look like lighting bugs rather than import settings.
+    /// </summary>
+    public class AssetImporter
+    {
+        public static AssetImporter GetAtPath(string path) => null;
+        public string assetPath { get; set; }
+        public void SaveAndReimport() { }
+    }
+
+    public class TextureImporter : AssetImporter
+    {
+        public TextureImporterType textureType { get; set; }
+        public bool sRGBTexture { get; set; }
+        public int maxTextureSize { get; set; }
+        public bool isReadable { get; set; }
+        public bool mipmapEnabled { get; set; }
+        public bool crunchedCompression { get; set; }
+        public TextureImporterCompression textureCompression { get; set; }
+    }
+
+    public enum TextureImporterType
+    {
+        Default,
+        NormalMap,
+        GUI,
+        Sprite,
+        Cursor,
+        Cookie,
+        Lightmap,
+        SingleChannel,
+    }
+
+    public enum TextureImporterCompression
+    {
+        Uncompressed,
+        Compressed,
+        CompressedHQ,
+        CompressedLQ,
+    }
+
     public sealed class EditorBuildSettingsScene
     {
         public EditorBuildSettingsScene() { }

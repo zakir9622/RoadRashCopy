@@ -254,6 +254,11 @@ python3 "$HERE/check-reachability.py" || FAILED=1
 # clean import, so any reference to it breaks and reports as "script missing".
 python3 "$HERE/check-meta-files.py" || FAILED=1
 
+# A Git LFS pointer that was never resolved is a text file wearing a .png extension.
+# Unity imports it as a broken texture and reports nothing, so the artwork is simply
+# absent with no error to explain it. Two of these shipped in this repository.
+python3 "$HERE/check-lfs-pointers.py" || FAILED=1
+
 echo
 if [[ $PASSES_DONE -ne 2 ]]; then
   err "only $PASSES_DONE of 2 configurations completed - the harness itself failed"

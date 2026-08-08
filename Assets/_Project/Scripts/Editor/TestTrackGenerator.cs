@@ -108,6 +108,7 @@ namespace HighwayRenegade.Editor
             // Static cache would otherwise carry materials from a previous generation
             // into a brand-new scene, where those objects no longer exist.
             MaterialCache.Clear();
+            MaterialGenerator.Clear();
 
             BuildLighting();
             BuildRoad();
@@ -156,10 +157,18 @@ namespace HighwayRenegade.Editor
             light.intensity = 1.15f;
             light.shadows = LightShadows.Soft;
 
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.45f, 0.55f, 0.70f);
-            RenderSettings.ambientEquatorColor = new Color(0.32f, 0.34f, 0.38f);
-            RenderSettings.ambientGroundColor = new Color(0.16f, 0.15f, 0.14f);
+            // A real sky, and lighting that comes from it. Image-based lighting off an
+            // HDRI is the single largest visual return available here - a correctly lit
+            // primitive reads as more real than a detailed model under flat ambient - and
+            // it costs one material.
+            if (!MaterialGenerator.ApplySky())
+            {
+                // The fetcher has not run. Flat trilight so the scene is still lit.
+                RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+                RenderSettings.ambientSkyColor = new Color(0.45f, 0.55f, 0.70f);
+                RenderSettings.ambientEquatorColor = new Color(0.32f, 0.34f, 0.38f);
+                RenderSettings.ambientGroundColor = new Color(0.16f, 0.15f, 0.14f);
+            }
         }
 
         private static void BuildRoad()
@@ -171,7 +180,11 @@ namespace HighwayRenegade.Editor
             surface.transform.SetParent(root);
             surface.transform.localScale = new Vector3(RoadWidth, 1f, RoadLength);
             surface.transform.position = new Vector3(0f, -0.5f, RoadLength * 0.5f - 40f);
-            Paint(surface, new Color(0.20f, 0.20f, 0.22f));
+
+            // Real asphalt where the fetcher has run, flat grey where it has not. The
+            // tiling factor is what stops one 1k texture being stretched over 1,200 m of
+            // road and reading as a gradient.
+            Surface(surface, MaterialGenerator.Surface.Road, 60f, new Color(0.20f, 0.20f, 0.22f));
 
             // Barriers stop the bike leaving the world during handling tests.
             for (int side = -1; side <= 1; side += 2)
@@ -182,7 +195,8 @@ namespace HighwayRenegade.Editor
                 barrier.transform.localScale = new Vector3(0.6f, 1.4f, RoadLength);
                 barrier.transform.position =
                     new Vector3(side * (RoadWidth * 0.5f), 0.7f, RoadLength * 0.5f - 40f);
-                Paint(barrier, new Color(0.62f, 0.60f, 0.55f));
+                Surface(barrier, MaterialGenerator.Surface.Concrete, 40f,
+                        new Color(0.62f, 0.60f, 0.55f));
             }
 
             // Shoulder rumble strips with tagged friction surfaces (mu = 0.45)
@@ -195,7 +209,8 @@ namespace HighwayRenegade.Editor
                 rumble.transform.localScale = new Vector3(1.2f, 0.08f, RoadLength);
                 rumble.transform.position =
                     new Vector3(side * (RoadWidth * 0.5f - 1.2f), 0.04f, RoadLength * 0.5f - 40f);
-                Paint(rumble, new Color(0.72f, 0.42f, 0.20f));
+                Surface(rumble, MaterialGenerator.Surface.Shoulder, 80f,
+                        new Color(0.72f, 0.42f, 0.20f));
             }
 
             // Lane stripes with tagged painted friction (mu = 0.82)
@@ -525,6 +540,29 @@ namespace HighwayRenegade.Editor
         /// to avoid.
         /// </summary>
         private static readonly Dictionary<Color, Material> MaterialCache = new Dictionary<Color, Material>();
+
+        /// <summary>
+        /// Applies a real textured material when the fetched art is present, and falls
+        /// back to a flat colour when it is not.
+        ///
+        /// Degrading rather than failing matters: the CC0 textures are gitignored and
+        /// fetched by CI, so a developer who has never run Tools/Assets/fetch-assets.py,
+        /// or a runner where the CDN was unreachable, must still get a working build.
+        /// They get the placeholder look instead of a broken one.
+        /// </summary>
+        private static void Surface(GameObject go, MaterialGenerator.Surface surface,
+                                    float tiling, Color fallback)
+        {
+            Material material = MaterialGenerator.Get(surface, tiling);
+            if (material == null)
+            {
+                Paint(go, fallback);
+                return;
+            }
+
+            var renderer = go.GetComponent<Renderer>();
+            if (renderer != null) renderer.sharedMaterial = material;
+        }
 
         private static void Paint(GameObject go, Color color)
         {

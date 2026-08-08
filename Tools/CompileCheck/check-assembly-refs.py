@@ -72,8 +72,21 @@ COMMENT = re.compile(r"^\s*(//|/\*|\*)")
 
 
 def strip_comments(source: str) -> str:
-    """Crude but sufficient: drop // and /* */ so a type named only in prose is ignored."""
+    """
+    Drop comments AND string literals, so a type named only in prose or in a path is
+    ignored.
+
+    String literals matter as much as comments here. A file-path constant like
+    "Assets/_Project/Art/Surfaces/Terrain" contains the word Terrain, and matching it
+    reported that the file "uses Terrain, which needs com.unity.modules.terrain" - a
+    module the project has no reason to ship. A guard that cries wolf about a folder name
+    is a guard people start ignoring.
+
+    Interpolated strings are deliberately kept: code inside $"...{Foo()}..." really does
+    reference Foo, and blanking those would hide genuine usage.
+    """
     source = re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+    source = re.sub(r'(?<![$@])"(?:[^"\\\n]|\\.)*"', '""', source)
     return "\n".join(l for l in source.splitlines() if not COMMENT.match(l))
 
 

@@ -3,12 +3,24 @@
  * things unique to this screen live here.
  */
 
+/*
+ * The title backdrop.
+ *
+ * This used to be `background-image: url('Textures/MainMenuBackground.png')`, pointing at
+ * a file that was committed as an unresolved Git LFS pointer - 131 bytes of text that
+ * Unity happily imported as a broken texture. So the title screen has never had a
+ * background, and nothing anywhere said so.
+ *
+ * A gradient until a real plate arrives through the asset fetcher. The old image also had
+ * buttons painted into the artwork, which fought the live UI Toolkit controls drawn on
+ * top of it; the replacement needs to be a clean plate with no UI in it.
+ */
 .background-image {
     position: absolute;
     width: 100%;
     height: 100%;
-    background-image: url('Textures/MainMenuBackground.png');
-    -unity-background-scale-mode: scale-and-crop;
+    background-color: #0b1016;
+    background-image: none;
 }
 
 .vignette-overlay {
