@@ -31,6 +31,7 @@ namespace HighwayRenegade.Tests.PlayMode
     /// error as a test failure catches the whole family at once, including ones nobody
     /// has thought to assert on yet.
     /// </summary>
+    [PrebuildSetup("HighwayRenegade.Tests.EditMode.PlayModeSceneSetup")]
     public sealed class BootFlowTests
     {
         [SetUp]

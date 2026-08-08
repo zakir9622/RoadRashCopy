@@ -56,6 +56,19 @@ namespace UnityEngine.TestTools
         void Cleanup();
     }
 
+    /// <summary>
+    /// Runs a setup class before a test assembly executes. The string overload is what
+    /// lets a PlayMode test reach a setup type that lives in an Editor-only assembly it
+    /// cannot reference at compile time.
+    /// </summary>
+    [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Method
+                         | System.AttributeTargets.Assembly, AllowMultiple = true)]
+    public class PrebuildSetupAttribute : System.Attribute
+    {
+        public PrebuildSetupAttribute(System.Type targetClass) { }
+        public PrebuildSetupAttribute(string targetClassName) { }
+    }
+
     public static class TestTools
     {
     }

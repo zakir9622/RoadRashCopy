@@ -23,6 +23,7 @@ namespace HighwayRenegade.Tests.PlayMode
     /// picked a rival, and reported it "drifting" 110 m under no input while its AI held
     /// full throttle.
     /// </summary>
+    [PrebuildSetup("HighwayRenegade.Tests.EditMode.PlayModeSceneSetup")]
     public sealed class BikePhysicsTests
     {
         private const string SceneName = "TestTrack";

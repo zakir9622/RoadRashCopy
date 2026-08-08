@@ -40,7 +40,24 @@ namespace UnityEditor
         public static bool isPaused { get; set; }
         public static bool isCompiling { get; }
 
+        /// <summary>Fires once on the next editor tick, clear of the domain reload.</summary>
+        public static event Action delayCall;
+
         public static void Exit(int returnValue) { }
+    }
+
+    /// <summary>
+    /// Runs a static constructor when the editor loads or reloads its domain. Used by
+    /// EditorSceneBootstrap to fill in scenes that were never committed.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class)]
+    public sealed class InitializeOnLoadAttribute : Attribute
+    {
+    }
+
+    [AttributeUsage(AttributeTargets.Method)]
+    public sealed class InitializeOnLoadMethodAttribute : Attribute
+    {
     }
 
     public static class AssetDatabase
