@@ -1,6 +1,13 @@
 name: Acquire Unity License Activation File
 
-# Produces the .alf file you upload to license.unity3d.com to get a Unity licence.
+# Produces the .alf file for Unity's manual activation flow.
+#
+# NOTE: Unity has been retiring manual .alf activation for Personal licences -
+# license.unity3d.com/manual now asks for a Plus/Pro serial rather than offering a
+# Personal option. If that is what you are shown, this workflow is not the route:
+# activate Unity once on your own machine and copy Unity_lic.ulf into UNITY_LICENSE
+# instead. The workflow is kept because it still works where manual activation is
+# offered, and because the disk fix below is worth preserving either way.
 #
 # This previously failed on every run, and not for a licensing reason:
 #
@@ -94,26 +101,49 @@ jobs:
         run: |
           cat <<'EOF'
           ==========================================================
-          NEXT STEPS
+          HOW TO TURN THIS INTO A UNITY_LICENSE SECRET
           ==========================================================
-          1. Download the "Unity-Activation-File" artifact from this
-             run and unzip it to get Unity_v6000.alf.
+          Unity has been retiring manual .alf activation for Personal
+          licences: license.unity3d.com/manual now asks for a Plus/Pro
+          serial rather than offering a Personal option. If that is what
+          you see, use route A - it does not need this .alf at all.
 
-          2. Go to https://license.unity3d.com/manual
-             Upload Unity_v6000.alf, pick Unity Personal, and
-             download the .ulf licence file it returns.
+          ----------------------------------------------------------
+          ROUTE A (recommended): copy the .ulf from a local install
+          ----------------------------------------------------------
+          Activating Unity normally on your own machine - open Unity
+          Hub and sign in - writes the licence file to disk. Copy its
+          entire contents into the UNITY_LICENSE secret.
 
-          3. Open the .ulf in a text editor and copy ALL of it
-             (it is XML, starting with <?xml).
+            Windows  C:\ProgramData\Unity\Unity_lic.ulf
+            macOS    /Library/Application Support/Unity/Unity_lic.ulf
+            Linux    ~/.local/share/unity3d/Unity/Unity_lic.ulf
 
-          4. In this repository: Settings -> Secrets and variables
-             -> Actions -> New repository secret
-                 Name:   UNITY_LICENSE
-                 Value:  the entire .ulf contents
+          ----------------------------------------------------------
+          ROUTE B: paid Plus/Pro seat
+          ----------------------------------------------------------
+          Skip the licence file entirely and set UNITY_SERIAL to your
+          serial instead. unity-builder accepts either one.
 
-          5. Also add UNITY_EMAIL and UNITY_PASSWORD for your Unity
-             account.
+          ----------------------------------------------------------
+          ROUTE C: manual activation, if Unity still offers it to you
+          ----------------------------------------------------------
+          Download the "Unity-Activation-File" artifact from this run,
+          unzip it, and upload Unity_v6000.alf at
+          https://license.unity3d.com/manual - then download the .ulf.
 
-          6. Run the "Android Build & Release" workflow.
+          ----------------------------------------------------------
+          THEN, whichever route you used
+          ----------------------------------------------------------
+          Settings -> Secrets and variables -> Actions
+            -> New repository secret
+
+              UNITY_LICENSE   the entire .ulf contents (XML, <?xml ...)
+                              -- or --
+              UNITY_SERIAL    your Plus/Pro serial
+
+          Add UNITY_EMAIL and UNITY_PASSWORD as well.
+
+          Then run "Android Build & Release".
           ==========================================================
           EOF

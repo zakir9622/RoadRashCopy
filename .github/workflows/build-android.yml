@@ -55,7 +55,7 @@ jobs:
           # unity-builder needs a .ulf licence file or a serial - it derives the serial
           # from the licence file. Email and password alone are never sufficient.
           if [ -z "$HAS_LICENSE" ] && [ -z "$HAS_SERIAL" ]; then
-            echo "::error::No Unity licence configured. Run the 'Acquire Unity License Activation File' workflow, upload the .alf it produces to https://license.unity3d.com/manual, then save the returned .ulf as the UNITY_LICENSE secret (plus UNITY_EMAIL and UNITY_PASSWORD)."
+            echo "::error::No Unity licence configured. Easiest route: activate Unity once on your own machine, then copy the whole of Unity_lic.ulf (Windows C:\\ProgramData\\Unity, macOS /Library/Application Support/Unity, Linux ~/.local/share/unity3d/Unity) into a UNITY_LICENSE secret. With a paid seat, set UNITY_SERIAL instead. Unity has been retiring manual .alf activation for Personal licences, so license.unity3d.com/manual may only offer a Plus/Pro serial."
             exit 1
           fi
 
