@@ -2,6 +2,24 @@ name: Acquire Unity License Activation File
 
 # Produces the .alf file for Unity's manual activation flow.
 #
+# MEASURED, 2026-08-08: batch-mode account activation does NOT work for this account.
+# Running the editor with -username/-password on 6000.0.38f1 authenticates cleanly:
+#
+#   User *** logged in successfully
+#   [UnityConnect::TryLogin] Request Succeeded.
+#
+# and is then refused a licence, because the account holds no CI entitlement:
+#
+#   Code 404 ... Found 0 entitlement groups and 0 free entitlements matching
+#                requested entitlement ids
+#   [Licensing::Module] Error: 'com.unity.editor.headless' was not found.
+#   No valid Unity Editor license found. Please activate your license.
+#
+# So UNITY_EMAIL/UNITY_PASSWORD alone can never activate a runner here, and the
+# licence has to arrive as a .ulf (or a Plus/Pro serial). unity-builder extracts the
+# 27-character serial out of the .ulf and activates the container with that, which is
+# why the file route still works where account login does not.
+#
 # NOTE: Unity has been retiring manual .alf activation for Personal licences -
 # license.unity3d.com/manual now asks for a Plus/Pro serial rather than offering a
 # Personal option. If that is what you are shown, this workflow is not the route:
@@ -26,14 +44,6 @@ name: Acquire Unity License Activation File
 
 on:
   workflow_dispatch:
-    inputs:
-      mode:
-        description: 'alf = manual activation file; account = probe batch-mode account activation'
-        type: choice
-        options:
-          - alf
-          - account
-        default: 'alf'
 
 concurrency:
   group: ${{ github.workflow }}
@@ -51,7 +61,6 @@ jobs:
   activation:
     name: Request .alf Activation File
     runs-on: ubuntu-latest
-    if: ${{ inputs.mode != 'account' }}
 
     # Deliberately NOT a job-level `container:`. That is what made this unfixable before:
     # the image is pulled before the first step, so nothing can clear space ahead of it.
@@ -156,69 +165,3 @@ jobs:
           Then run "Android Build & Release".
           ==========================================================
           EOF
-
-  account_probe:
-    name: Probe batch-mode account activation
-    runs-on: ubuntu-latest
-    if: ${{ inputs.mode == 'account' }}
-    steps:
-      - name: Require account credentials
-        run: |
-          if [ -z "${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}" ] \
-          || [ -z "${{ secrets.UNITY_PASSWORD }}" ]; then
-            echo "::error::UNITY_EMAIL and UNITY_PASSWORD must both be set."
-            exit 1
-          fi
-          echo "Account credentials present."
-
-      - name: Free runner disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-                      /usr/local/share/boost /opt/hostedtoolcache \
-                      /usr/local/share/powershell /usr/share/swift \
-                      "$AGENT_TOOLSDIRECTORY" || true
-          docker image prune -af || true
-          df -h / | tail -1
-
-      - name: Attempt activation
-        env:
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        run: |
-          # -e passes the values by name: they are never interpolated into the command
-          # line, so they cannot leak into the log or the process table.
-          docker run --rm --entrypoint /bin/bash \
-            -e UNITY_EMAIL -e UNITY_PASSWORD \
-            "$UNITY_IMAGE" -c '
-              set +e
-              /opt/unity/Editor/Unity \
-                -quit -batchmode -nographics \
-                -username "$UNITY_EMAIL" -password "$UNITY_PASSWORD" \
-                -logfile /dev/stdout
-              echo "=== Unity exit code: $? ==="
-
-              found=""
-              for candidate in \
-                /root/.local/share/unity3d/Unity/Unity_lic.ulf \
-                /usr/share/unity3d/Unity/Unity_lic.ulf
-              do
-                [ -s "$candidate" ] && found="$candidate" && break
-              done
-              [ -z "$found" ] && found="$(find / -maxdepth 8 -name "*.ulf" -size +0 -print -quit 2>/dev/null)"
-
-              echo "=== RESULT ==="
-              if [ -n "$found" ]; then
-                # Location and size only. The contents are a credential and are never
-                # printed, uploaded, or otherwise moved off this runner.
-                echo "ACTIVATION_OK  path=$found  bytes=$(wc -c < "$found")"
-              else
-                echo "ACTIVATION_FAILED  no .ulf produced"
-              fi
-            ' | tee activation.log
-
-          if grep -q "ACTIVATION_OK" activation.log; then
-            echo "::notice::Batch-mode account activation WORKS. The build can activate itself on the runner; no UNITY_LICENSE secret is required."
-          else
-            echo "::error::Batch-mode account activation did not produce a licence. Read the Unity log above for the reason. Fallback: copy Unity_lic.ulf from a machine where Unity is already activated into the UNITY_LICENSE secret."
-            exit 1
-          fi
