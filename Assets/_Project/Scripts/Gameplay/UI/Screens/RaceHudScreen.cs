@@ -90,7 +90,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             if (kmh != _lastSpeed)
             {
                 _lastSpeed = kmh;
-                if (_speed != null) _speed.text = kmh.ToString();
+                if (_speed != null) _speed.text = NumberText.Of(kmh);
             }
 
             // Gear is 0-based internally; riders count from one.
@@ -98,7 +98,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             if (gear != _lastGear)
             {
                 _lastGear = gear;
-                if (_gear != null) _gear.text = gear.ToString();
+                if (_gear != null) _gear.text = NumberText.Of(gear);
             }
         }
 
@@ -145,7 +145,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
                 if (downed != _lastKnockouts)
                 {
                     _lastKnockouts = downed;
-                    _knockouts.text = downed.ToString();
+                    _knockouts.text = NumberText.Of(downed);
                 }
             }
         }

@@ -16,13 +16,19 @@ namespace HighwayRenegade.Tests.PlayMode
     /// a screen opens. The symptom is settings that appear to reset themselves on every
     /// launch, and nothing in the stack trace points at the cause.
     ///
-    /// These construct bare UI Toolkit controls rather than loading a screen: the elements
-    /// work standalone, so the rule is tested without a UIDocument, a panel or a scene -
-    /// which keeps the whole file at a few milliseconds instead of several frames each.
+    /// The controls are attached to a real UIDocument panel, which is not incidental.
+    /// BaseField.value only raises a ChangeEvent when the element belongs to a panel -
+    /// the setter checks and falls back to SetValueWithoutNotify otherwise. A first
+    /// version of these tests used bare detached controls, and the two write-through
+    /// cases failed for that reason alone while the binding was perfectly correct.
+    /// Detached elements would have made this file assert something the game never does.
     /// </summary>
     public sealed class SettingsBindingTests
     {
         private GameSettings _original;
+        private GameObject _panelObject;
+        private PanelSettings _panelSettings;
+        private VisualElement _root;
 
         [SetUp]
         public void SetUp()
@@ -31,17 +37,55 @@ namespace HighwayRenegade.Tests.PlayMode
             // with the editor. Snapshot it so a test run cannot rewrite the settings of
             // whoever is sitting at this machine.
             _original = Clone(SettingsManager.Current);
+
+            _panelSettings = ScriptableObject.CreateInstance<PanelSettings>();
+
+            // Built inactive, then activated. UIDocument joins its root to the panel in
+            // OnEnable, which runs the instant AddComponent lands on an active object -
+            // so assigning panelSettings afterwards is too late and leaves the root
+            // panel-less, which is exactly the state where change events never fire.
+            _panelObject = new GameObject("SettingsBindingTestPanel");
+            _panelObject.SetActive(false);
+
+            var document = _panelObject.AddComponent<UIDocument>();
+            document.panelSettings = _panelSettings;
+            _panelObject.SetActive(true);
+
+            _root = document.rootVisualElement;
+            Assert.IsNotNull(_root, "UIDocument produced no root; controls would not " +
+                                    "belong to a panel and would never raise change events.");
         }
 
         [TearDown]
-        public void TearDown() => SettingsManager.Apply(_original);
+        public void TearDown()
+        {
+            if (_panelObject != null) Object.DestroyImmediate(_panelObject);
+            if (_panelSettings != null) Object.DestroyImmediate(_panelSettings);
+            SettingsManager.Apply(_original);
+        }
+
+        /// <summary>Creates a control that belongs to the panel, so it notifies on change.</summary>
+        private T Attached<T>() where T : VisualElement, new()
+        {
+            var element = new T();
+            _root.Add(element);
+
+            // Stated explicitly so that if panel attachment ever breaks, the failure
+            // names that cause instead of surfacing as "the binding did not write
+            // through" - which is what sent the first version of this file chasing a
+            // bug that was not in the binding at all.
+            Assert.IsNotNull(element.panel,
+                             $"{typeof(T).Name} is not attached to a panel, so setting " +
+                             ".value will not raise a change event.");
+            return element;
+        }
 
         [Test]
         public void SliderSeedsFromTheSavedValue()
         {
             SettingsManager.Apply(new GameSettings { MasterVolume = 0.25f });
 
-            var slider = new Slider();
+            var slider = Attached<Slider>();
             SettingsBinding.Bind(slider, s => s.MasterVolume, (s, v) => s.MasterVolume = v);
 
             Assert.AreEqual(0.25f, slider.value, 0.001f,
@@ -54,7 +98,7 @@ namespace HighwayRenegade.Tests.PlayMode
             // The regression this whole class exists for.
             SettingsManager.Apply(new GameSettings { MasterVolume = 0.25f });
 
-            var slider = new Slider();
+            var slider = Attached<Slider>();
             SettingsBinding.Bind(slider, s => s.MasterVolume, (s, v) => s.MasterVolume = v);
 
             Assert.AreEqual(0.25f, SettingsManager.Current.MasterVolume, 0.001f,
@@ -67,7 +111,7 @@ namespace HighwayRenegade.Tests.PlayMode
         {
             SettingsManager.Apply(new GameSettings { MasterVolume = 1f });
 
-            var slider = new Slider();
+            var slider = Attached<Slider>();
             SettingsBinding.Bind(slider, s => s.MasterVolume, (s, v) => s.MasterVolume = v);
 
             slider.value = 0.4f;
@@ -86,7 +130,7 @@ namespace HighwayRenegade.Tests.PlayMode
         {
             SettingsManager.Apply(new GameSettings { Vibration = true });
 
-            var toggle = new Toggle();
+            var toggle = Attached<Toggle>();
             SettingsBinding.Bind(toggle, s => s.Vibration, (s, v) => s.Vibration = v);
 
             Assert.IsTrue(toggle.value, "Toggle did not take the saved value.");
@@ -102,7 +146,7 @@ namespace HighwayRenegade.Tests.PlayMode
         [Test]
         public void SliderRangeComesFromTheBinding()
         {
-            var slider = new Slider();
+            var slider = Attached<Slider>();
             SettingsBinding.Bind(slider, s => s.MasterVolume, (s, v) => s.MasterVolume = v);
 
             Assert.AreEqual(0f, slider.lowValue, 0.001f);
