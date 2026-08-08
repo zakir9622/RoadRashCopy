@@ -309,7 +309,13 @@ namespace HighwayRenegade.Editor
             rear.SetParent(root.transform);
             rear.localPosition = new Vector3(0f, 0.15f, -0.72f);
 
-            BuildBikeVisual(root.transform, front, rear, colour);
+            GameObject rider = BuildBikeVisual(root.transform, front, rear, colour);
+
+            // Where the rider sits, and where FootLocomotion walks back to. Separate from
+            // the rider itself because the rider leaves and this has to stay behind.
+            var mount = new GameObject("RiderMount").transform;
+            mount.SetParent(root.transform);
+            mount.localPosition = rider.transform.localPosition;
 
             var controller = root.AddComponent<BikeController>();
             AssignPrivateReferences(controller, front, rear);
@@ -325,10 +331,15 @@ namespace HighwayRenegade.Editor
             var grabber = root.AddComponent<WeaponGrabber>();
             SerializedWiring.SetRef(grabber, "_meleeCombat", combat);
 
-            // Coming off the bike is what a crash means in this game; without the ragdoll
-            // wired, going down was a physics event with no rider attached to it.
+            // Coming off the bike is what a crash means in this game. Only _crashHandler
+            // was ever wired, so OnCrashed dereferenced a null _riderRb on the first Major
+            // or Wipeout - a guaranteed NullReferenceException in the middle of the exact
+            // physics event the component exists to handle.
             var ragdoll = root.AddComponent<RiderRagdoll>();
             SerializedWiring.SetRef(ragdoll, "_crashHandler", crash);
+            SerializedWiring.SetRef(ragdoll, "_riderRb", rider.GetComponent<Rigidbody>());
+            SerializedWiring.SetRef(ragdoll, "_footLocomotion", rider.GetComponent<FootLocomotion>());
+            SerializedWiring.SetRef(ragdoll, "_mountPoint", mount);
 
             // Engine note is synthesised from the bike's own RPM, so it needs no audio
             // asset and always matches the physics. 3D so rivals are audible in position.
@@ -374,7 +385,11 @@ namespace HighwayRenegade.Editor
         }
 
         /// <summary>Placeholder art: a chassis block and two wheel discs.</summary>
-        private static void BuildBikeVisual(Transform root, Transform front, Transform rear, Color colour)
+        /// <summary>
+        /// Placeholder art: a chassis block, a rider capsule and two wheel discs.
+        /// Returns the rider, which the ragdoll needs to be able to throw off the bike.
+        /// </summary>
+        private static GameObject BuildBikeVisual(Transform root, Transform front, Transform rear, Color colour)
         {
             GameObject chassis = GameObject.CreatePrimitive(PrimitiveType.Cube);
             chassis.name = "Visual_Chassis";
@@ -389,8 +404,24 @@ namespace HighwayRenegade.Editor
             rider.transform.SetParent(root);
             rider.transform.localPosition = new Vector3(0f, 0.95f, -0.15f);
             rider.transform.localScale = new Vector3(0.42f, 0.45f, 0.42f);
-            Object.DestroyImmediate(rider.GetComponent<CapsuleCollider>());
             Paint(rider, new Color(0.15f, 0.16f, 0.20f));
+
+            // The rider is a physics body, not just a shape. RiderRagdoll unparents it and
+            // throws it down the road on a Major or Wipeout, and FootLocomotion then walks
+            // it back to the bike - neither of which can happen to a bare mesh.
+            //
+            // Kinematic while mounted: an active body here would fight the bike's own
+            // rigidbody for the same volume every frame.
+            var riderRb = rider.AddComponent<Rigidbody>();
+            riderRb.isKinematic = true;
+            riderRb.mass = 75f;
+            riderRb.interpolation = RigidbodyInterpolation.Interpolate;
+            riderRb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+
+            var riderCollider = rider.GetComponent<CapsuleCollider>();
+            if (riderCollider != null) riderCollider.isTrigger = false;
+
+            rider.AddComponent<FootLocomotion>();
 
             foreach (var (mount, label) in new[] { (front, "Front"), (rear, "Rear") })
             {
@@ -403,6 +434,8 @@ namespace HighwayRenegade.Editor
                 Object.DestroyImmediate(wheel.GetComponent<CapsuleCollider>());
                 Paint(wheel, new Color(0.09f, 0.09f, 0.10f));
             }
+
+            return rider;
         }
 
         /// <summary>

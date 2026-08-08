@@ -188,6 +188,29 @@ namespace HighwayRenegade.Gameplay.Bike
         }
 
         /// <summary>
+        /// Ends the crash immediately, without waiting out the recovery timer.
+        /// </summary>
+        /// <remarks>
+        /// Exists because <see cref="FootLocomotion"/> needs it when the rider reaches the
+        /// bike on foot, and was reaching for it by reflection:
+        ///
+        ///     GetType().GetMethod("EndCrash", NonPublic | Instance)?.Invoke(...)
+        ///
+        /// against a method called EndCrash that has never existed on this class - the
+        /// recovery method is Remount. GetMethod returned null, the null-conditional
+        /// swallowed it, and reaching the bike on foot silently did nothing at all. Even
+        /// with the right name it would have been deleted by IL2CPP managed stripping and
+        /// failed only on device, where it is hardest to see.
+        ///
+        /// A no-op when the rider is not down, so calling it twice is harmless.
+        /// </remarks>
+        public void EndCrashEarly()
+        {
+            if (!IsCrashed) return;
+            Remount();
+        }
+
+        /// <summary>
         /// Stands the bike back up on the road, pointing the way it was travelling.
         /// </summary>
         private void Remount()

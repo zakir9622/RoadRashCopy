@@ -39,12 +39,15 @@ namespace HighwayRenegade.Gameplay.Bike
             float distance = direction.magnitude;
             if (distance < _mountRadius)
             {
-                // Reached bike!
-                if (_crashHandler != null && _crashHandler.IsCrashed)
-                {
-                    // Manually trigger recovery instead of waiting for timer
-                    _crashHandler.GetType().GetMethod("EndCrash", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.Invoke(_crashHandler, null);
-                }
+                // Reached the bike - remount now rather than waiting out the timer.
+                //
+                // This was a reflection call to a method named "EndCrash" that has never
+                // existed on BikeCrashHandler; the recovery method is Remount. GetMethod
+                // returned null, the null-conditional swallowed it, and running back to
+                // your bike therefore did nothing whatsoever. A direct call also survives
+                // IL2CPP managed stripping, which would have deleted a reflection-only
+                // target and failed on device rather than in the editor.
+                _crashHandler?.EndCrashEarly();
                 return;
             }
 
