@@ -419,16 +419,16 @@ namespace HighwayRenegade.Editor
         private static void BuildManagers(BikeController player)
         {
             var go = new GameObject("Managers");
-            ThermalManager thermal = go.AddComponent<ThermalManager>();
+            go.AddComponent<ThermalManager>();
 
             RaceManager race = go.AddComponent<RaceManager>();
             // Finish just short of the road's end so the line is never past the geometry.
             SerializedWiring.SetFloat(race, "_finishLineZ", RoadLength - 120f);
 
-            SpeedHud hud = go.AddComponent<SpeedHud>();
-            SerializedWiring.SetRef(hud, "_bike", player);
-            SerializedWiring.SetRef(hud, "_thermal", thermal);
-            SerializedWiring.SetRef(hud, "_race", race);
+            // No SpeedHud here any more. It was added alongside RaceHudScreen, and both
+            // drew speed, gear and race position - two speedometers and two position
+            // readouts stacked on one screen, which is what players were actually seeing.
+            // RaceHudScreen is the HUD; the IMGUI one is gone.
 
             // CampaignSession was absent from the generated scene entirely, which meant
             // none of the progression layer ever ran: no prize money, no rival grudges
