@@ -28,7 +28,12 @@ namespace HighwayRenegade.Editor
         [MenuItem("Highway Renegade/Build Android (AAB)")]
         public static void BuildAndroid()
         {
-            string outputPath = GetArg("-customBuildPath") ?? "build/Android";
+            // An empty value must fall back too, not just a missing switch:
+            // Directory.CreateDirectory("") throws, which would abort the build before it
+            // started with an error that says nothing about the real cause.
+            string outputPath = GetArg("-customBuildPath");
+            if (string.IsNullOrWhiteSpace(outputPath)) outputPath = "build/Android";
+
             bool appBundle = GetArg("-buildApk") == null;   // default to .aab; pass -buildApk for .apk
 
             Directory.CreateDirectory(outputPath);
@@ -122,15 +127,37 @@ namespace HighwayRenegade.Editor
         }
 
         /// <summary>
-        /// Reads signing config from environment variables so keystore secrets never
-        /// enter the repository. Unsigned debug builds are fine locally; CI injects these.
+        /// Reads signing config so keystore secrets never enter the repository.
+        ///
+        /// Command line first, then environment. This order matters: game-ci/unity-builder
+        /// decodes ANDROID_KEYSTORE_BASE64 to a file in the project and then passes the
+        /// keystore settings to Unity as <c>-androidKeystoreName</c> and friends. Its own
+        /// build script reads those arguments - but a custom buildMethod like this one is
+        /// invoked instead of it, so nothing was reading them.
+        ///
+        /// This method previously looked only at ANDROID_KEYSTORE_PATH, which nothing
+        /// sets, so it always took the "no keystore" branch and forced
+        /// useCustomKeystore = false. Supplying the signing secrets correctly would still
+        /// have produced an unsigned build, and an unsigned build cannot go to the Play
+        /// Store - the failure would only have shown up at upload time.
         /// </summary>
         private static void ApplyKeystoreFromEnvironment()
         {
-            string keystore = Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PATH");
-            string storePass = Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PASS");
-            string alias = Environment.GetEnvironmentVariable("ANDROID_KEYALIAS_NAME");
-            string aliasPass = Environment.GetEnvironmentVariable("ANDROID_KEYALIAS_PASS");
+            string keystore = GetArg("-androidKeystoreName")
+                           ?? Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PATH");
+            string storePass = GetArg("-androidKeystorePass")
+                            ?? Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PASS");
+            string alias = GetArg("-androidKeyaliasName")
+                        ?? Environment.GetEnvironmentVariable("ANDROID_KEYALIAS_NAME");
+            string aliasPass = GetArg("-androidKeyaliasPass")
+                            ?? Environment.GetEnvironmentVariable("ANDROID_KEYALIAS_PASS");
+
+            // The keystore path may be relative to the project root.
+            if (!string.IsNullOrEmpty(keystore) && !File.Exists(keystore))
+            {
+                string absolute = Path.Combine(Directory.GetCurrentDirectory(), keystore);
+                if (File.Exists(absolute)) keystore = absolute;
+            }
 
             if (string.IsNullOrEmpty(keystore) || !File.Exists(keystore))
             {
@@ -150,12 +177,25 @@ namespace HighwayRenegade.Editor
         private static string[] EnabledScenes() =>
             EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();
 
+        /// <summary>
+        /// Value of a command-line switch, or null when absent.
+        ///
+        /// A flag with no value returns string.Empty rather than null, which is what lets
+        /// a bare <c>-buildApk</c> be detected. A following token that is itself a switch
+        /// is not treated as a value, so <c>-buildApk -someOtherFlag</c> cannot be
+        /// misread as a keystore path or an output directory.
+        /// </summary>
         private static string GetArg(string name)
         {
             string[] args = Environment.GetCommandLineArgs();
             for (int i = 0; i < args.Length; i++)
-                if (args[i] == name)
-                    return i + 1 < args.Length ? args[i + 1] : string.Empty;
+            {
+                if (args[i] != name) continue;
+
+                if (i + 1 >= args.Length) return string.Empty;
+                string next = args[i + 1];
+                return next.StartsWith("-") ? string.Empty : next;
+            }
             return null;
         }
 
