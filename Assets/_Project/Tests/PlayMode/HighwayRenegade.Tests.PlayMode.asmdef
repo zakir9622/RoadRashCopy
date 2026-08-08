@@ -6,7 +6,8 @@
     "UnityEditor.TestRunner",
     "HighwayRenegade.Core",
     "HighwayRenegade.Performance",
-    "HighwayRenegade.Gameplay"
+    "HighwayRenegade.Gameplay",
+    "UnityEngine.UI"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

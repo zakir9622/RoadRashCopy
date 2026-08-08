@@ -81,11 +81,16 @@ namespace UnityEngine.UI
         [System.Serializable]
         public class SliderEvent : UnityEvent<float> { }
 
+        public enum Direction { LeftToRight, RightToLeft, BottomToTop, TopToBottom }
+
         public float minValue { get; set; }
         public float maxValue { get; set; }
         public float value { get; set; }
         public float normalizedValue { get; set; }
         public bool wholeNumbers { get; set; }
+        public Direction direction { get; set; }
+        public RectTransform fillRect { get; set; }
+        public RectTransform handleRect { get; set; }
         public SliderEvent onValueChanged { get; set; }
 
         public virtual void SetValueWithoutNotify(float input) { }
