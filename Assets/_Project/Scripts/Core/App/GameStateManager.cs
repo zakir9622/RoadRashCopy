@@ -38,6 +38,25 @@ namespace HighwayRenegade.Core.App
 
         public static event Action<GameState, GameState> OnStateChanged;
 
+        /// <summary>
+        /// Resets the static state and clears every subscriber when play mode starts.
+        ///
+        /// Static state does not survive a build, but it does survive the Editor's "enter
+        /// play mode without domain reload" - which is standard for fast iteration on a
+        /// mobile project. Without this reset, CurrentState kept whatever the last session
+        /// left it at, and OnStateChanged still held subscribers pointing at GameObjects
+        /// from the previous session. The second play began with a stale state and a
+        /// handler list full of destroyed objects, and PlayMode tests became order-
+        /// dependent. RuntimeInitializeOnLoadMethod runs before the first scene loads in
+        /// both a player and the editor, so this restores a clean slate every time.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            CurrentState = GameState.Booting;
+            OnStateChanged = null;
+        }
+
         public static void ChangeState(GameState newState)
         {
             if (CurrentState == newState) return;
