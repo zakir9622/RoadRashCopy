@@ -203,7 +203,20 @@ namespace HighwayRenegade.Editor
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Skybox;
             RenderSettings.defaultReflectionMode =
                 UnityEngine.Rendering.DefaultReflectionMode.Skybox;
-            DynamicGI.UpdateEnvironment();
+
+            // Editor-preview only, and only in an interactive session. This refreshes the
+            // ambient/reflection probes immediately so a human looking at the Scene view
+            // sees correct lighting without clicking something first - the runtime render
+            // pipeline recomputes ambient from the skybox on its own once the game is
+            // actually playing, so a shipped build does not depend on this having run.
+            //
+            // Two PlayMode test runs hung for 20+ minutes with the log stopping right after
+            // this generator ran and play mode began, on the exact CI job where the fetched
+            // HDRI first made ApplySky take this branch instead of returning early. Skipping
+            // it in batch mode - which is what every CI job, test and build alike, runs
+            // under - costs nothing at runtime and removes a call with no synchronous
+            // completion guarantee from a job that needs one.
+            if (!Application.isBatchMode) DynamicGI.UpdateEnvironment();
 
             return true;
         }
