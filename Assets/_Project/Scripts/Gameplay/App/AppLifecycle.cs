@@ -61,7 +61,11 @@ namespace HighwayRenegade.Gameplay.App
             else AudioListener.pause = false;
         }
 
-        private void OnApplicationQuit() => FlushSave();
+        private void OnApplicationQuit()
+        {
+            FlushSave();
+            SettingsManager.Flush();
+        }
 
         private static void HandleBackgrounded()
         {
@@ -77,6 +81,11 @@ namespace HighwayRenegade.Gameplay.App
 
             AudioListener.pause = true;
             FlushSave();
+
+            // Device settings (volume, quality, haptics) are written to PlayerPrefs in memory
+            // on every change to keep the drag responsive; this is the moment they become
+            // durable on disk. Cheap when nothing changed.
+            SettingsManager.Flush();
         }
 
         private static void FlushSave()

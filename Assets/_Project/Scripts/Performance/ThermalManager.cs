@@ -50,6 +50,17 @@ namespace HighwayRenegade.Performance
         private int _candidateStreak;
         private float _nextPollTime;
 
+        // The URP asset is a shared ScriptableObject that outlives this component - the same
+        // instance is used by every scene for the whole session. Writing renderScale and
+        // shadowDistance onto it is a global, sticky mutation: throttle during a race and the
+        // menu you return to stays at 0.6 render scale and 30 fps until the app restarts.
+        // Capture the values as they were before we touched them so OnDestroy can put them
+        // back when this scene's manager goes away.
+        private float _originalRenderScale;
+        private float _originalShadowDistance;
+        private int _originalTargetFrameRate;
+        private bool _capturedOriginal;
+
         /// <summary>Thermal tier currently in effect.</summary>
         public ThermalTier CurrentTier => _currentTier;
 
@@ -67,7 +78,26 @@ namespace HighwayRenegade.Performance
             int panelHz = Mathf.RoundToInt((float)Screen.currentResolution.refreshRateRatio.value);
             if (panelHz > 0) _preferredFrameRate = Mathf.Min(_preferredFrameRate, panelHz);
 
+            if (_urpAsset != null && !_capturedOriginal)
+            {
+                _originalRenderScale = _urpAsset.renderScale;
+                _originalShadowDistance = _urpAsset.shadowDistance;
+                _originalTargetFrameRate = Application.targetFrameRate;
+                _capturedOriginal = true;
+            }
+
             ApplyThermalPolicy(ThermalTier.Nominal);
+        }
+
+        private void OnDestroy()
+        {
+            // Undo the global mutation so the next scene does not inherit a throttled asset.
+            if (_capturedOriginal && _urpAsset != null)
+            {
+                _urpAsset.renderScale = _originalRenderScale;
+                _urpAsset.shadowDistance = _originalShadowDistance;
+                Application.targetFrameRate = _originalTargetFrameRate;
+            }
         }
 
         private void Update()
