@@ -60,6 +60,19 @@ namespace UnityEditor
     {
     }
 
+    /// <summary>
+    /// Key/value store that outlives a domain reload but not the editor session.
+    ///
+    /// EditorSceneBootstrap uses it to make "regenerate the scenes" happen once per
+    /// session. A static field cannot express that: the reload it needs to survive is
+    /// exactly the thing that resets statics.
+    /// </summary>
+    public static class SessionState
+    {
+        public static bool GetBool(string key, bool defaultValue) => defaultValue;
+        public static void SetBool(string key, bool value) { }
+    }
+
     public static class AssetDatabase
     {
         public static void SaveAssets() { }

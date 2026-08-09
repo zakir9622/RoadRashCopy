@@ -57,6 +57,33 @@ namespace HighwayRenegade.Editor
         /// </summary>
         public static void RegenerateAllScenes()
         {
+            // Once per editor session, and the guard has to survive a domain reload.
+            //
+            // Regenerating writes scenes and calls AssetDatabase.SaveAssets, which triggers
+            // an import and a domain reload. The test runner re-runs IPrebuildSetup after
+            // that reload, so an unguarded regenerate rebuilds and saves again, reloads
+            // again, and never converges: PlayMode printed its banner and then produced no
+            // output at all until the job was cancelled 24 minutes later.
+            //
+            // EnsureMissingScenes never hit this because it is idempotent - once the scenes
+            // exist it does nothing and never saves. Regenerating unconditionally is not,
+            // so it needs an explicit fixed point.
+            //
+            // SessionState, not a static field: statics are wiped by the very domain reload
+            // this is guarding against, so a static bool would reset to false every cycle
+            // and guard nothing.
+            const string guard = "HighwayRenegade.ScenesRegeneratedThisSession";
+
+            if (SessionState.GetBool(guard, false))
+            {
+                Debug.Log("[SceneBootstrap] Scenes already regenerated this session; skipping.");
+                return;
+            }
+
+            // Set before generating, not after. If the reload lands mid-generation this
+            // still terminates, and EnsureMissingScenes backfills anything left absent.
+            SessionState.SetBool(guard, true);
+
             Debug.Log("[SceneBootstrap] Regenerating every scene from its generator.");
 
             TestTrackGenerator.Generate();
