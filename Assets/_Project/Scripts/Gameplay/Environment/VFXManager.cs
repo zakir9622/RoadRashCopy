@@ -26,6 +26,14 @@ namespace HighwayRenegade.Gameplay.Environment
             }
         }
 
+        // See AudioManager.OnDestroy: null the static so `VFXManager.Instance?.` sees a real
+        // null after teardown instead of a destroyed object, guarded so it cannot clear a
+        // scene-load replacement.
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
         private void InitParticleSystems()
         {
             // Instead of loading heavy prefabs, we build lightweight particle systems dynamically

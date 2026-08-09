@@ -33,6 +33,15 @@ namespace HighwayRenegade.Gameplay.Audio
             }
         }
 
+        // Null the static on teardown so `AudioManager.Instance?.` call sites see a genuine
+        // null rather than a destroyed object (C#'s ?. skips Unity's == overload and would
+        // otherwise throw MissingReferenceException). Guarded by `== this` so an outgoing
+        // instance cannot clear a replacement created during a scene load.
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
         private void InitPool()
         {
             _sfxPool = new List<AudioSource>(PoolSize);

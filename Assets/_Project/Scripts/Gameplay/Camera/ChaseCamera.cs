@@ -76,6 +76,19 @@ namespace HighwayRenegade.Gameplay.CameraRig
             }
         }
 
+        // Clear the static when this instance is torn down so a stale, destroyed reference
+        // is never handed out. Nine call sites reach ChaseCamera and the other scene
+        // singletons through `Instance?.` - and `?.` is a plain reference-null check that
+        // does NOT run Unity's overloaded ==, so a destroyed-but-not-collected MonoBehaviour
+        // sails straight through it into a MissingReferenceException. Nulling here (and the
+        // `== this` guard) makes Instance genuinely null after destroy, which is the state
+        // `?.` actually checks for. The guard stops a freshly loaded scene's replacement
+        // instance from being cleared when the outgoing one's OnDestroy runs after it.
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
         public void SetTemporaryTarget(Transform customTarget, float customLookAhead = 0f)
         {
             _overrideTarget = customTarget;

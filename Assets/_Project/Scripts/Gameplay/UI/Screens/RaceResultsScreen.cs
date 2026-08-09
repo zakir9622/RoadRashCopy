@@ -43,7 +43,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             OnClick("BtnContinue", Continue);
 
             GameStateManager.OnStateChanged += HandleStateChanged;
-            SetVisible(GameStateManager.CurrentState == GameState.PostRace);
+            SetVisible(IsEndState(GameStateManager.CurrentState));
         }
 
         private void OnDestroy()
@@ -53,21 +53,32 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             GameStateManager.OnStateChanged -= HandleStateChanged;
         }
 
+        // GameOver as well as PostRace. GameOver was reachable - a police bust while broke
+        // and wrecked sets it (CampaignSession.OnPlayerBusted / OnPlayerFinished) - but no
+        // screen handled it, so every screen hid and the player was left on a live race
+        // with no way out. The results screen already shows the final balance and its
+        // Continue button already returns to the menu, so it is the natural home for the
+        // end-of-run state; it just needs to say so.
+        private static bool IsEndState(GameState state) =>
+            state == GameState.PostRace || state == GameState.GameOver;
+
         private void HandleStateChanged(GameState previous, GameState current) =>
-            SetVisible(current == GameState.PostRace);
+            SetVisible(IsEndState(current));
 
         protected override void OnShown()
         {
             var session = FindFirstObjectByType<CampaignSession>();
-            if (session != null) Present(session.LastSummary);
+            if (session != null)
+                Present(session.LastSummary, GameStateManager.CurrentState == GameState.GameOver);
         }
 
         /// <summary>
         /// Draws a costed race. Pure presentation - safe to call as often as you like.
         /// </summary>
-        public void Present(RaceSummary summary)
+        public void Present(RaceSummary summary, bool gameOver = false)
         {
-            SetText(_placement, summary.IsWin ? "WINNER"
+            SetText(_placement, gameOver ? "GAME OVER"
+                              : summary.IsWin ? "WINNER"
                               : summary.IsValid ? $"FINISHED P{summary.Position}"
                               : "RACE ABANDONED");
 
