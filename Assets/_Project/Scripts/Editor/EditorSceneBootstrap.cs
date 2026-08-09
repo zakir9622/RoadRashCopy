@@ -87,12 +87,9 @@ namespace HighwayRenegade.Editor
             Debug.Log("[SceneBootstrap] Regenerating every scene from its generator.");
 
             TestTrackGenerator.Generate();
-            Debug.Log("[Bisect] TestTrackGenerator.Generate() returned to RegenerateAllScenes");
             MenuSceneGenerator.GenerateAll();
-            Debug.Log("[Bisect] MenuSceneGenerator.GenerateAll() returned");
 
             AssetDatabase.SaveAssets();
-            Debug.Log("[Bisect] RegenerateAllScenes fully complete, about to return to PrebuildSetup");
         }
 
         /// <summary>Generates only the scenes that are absent. Safe to call repeatedly.</summary>

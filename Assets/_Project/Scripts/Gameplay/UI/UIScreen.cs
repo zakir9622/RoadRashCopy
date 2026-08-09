@@ -43,15 +43,8 @@ namespace HighwayRenegade.Gameplay.UI
 
         protected virtual void OnEnable()
         {
-            // TEMPORARY bisection instrumentation - see TestTrackGenerator.Generate() for
-            // why. Every screen funnels through here, so this catches a hang in ANY
-            // screen's Bind/OnBind regardless of which scene happens to be active when
-            // play mode begins. Remove once the culprit is found.
-            Debug.Log($"[Bisect] {ScreenName}.OnEnable: Bind start");
             Bind();
-            Debug.Log($"[Bisect] {ScreenName}.OnEnable: Bind done; SetVisible start");
             SetVisible(_visibleOnStart);
-            Debug.Log($"[Bisect] {ScreenName}.OnEnable done");
         }
 
         protected virtual void OnDisable()

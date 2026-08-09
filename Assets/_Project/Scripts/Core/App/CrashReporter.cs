@@ -45,22 +45,10 @@ namespace HighwayRenegade.Core.App
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         public static void Install()
         {
-            // TEMPORARY bisection instrumentation - see TestTrackGenerator.Generate() for
-            // why. This hook fires automatically the instant play mode begins, before any
-            // scene loads and before any test code runs, which makes it worth clearing
-            // even though nothing in it looks obviously blocking. Remove once the culprit
-            // is found.
-            Debug.Log("[Bisect] CrashReporter.Install start");
-
-            if (_installed)
-            {
-                Debug.Log("[Bisect] CrashReporter.Install already installed, returning");
-                return;
-            }
+            if (_installed) return;
             _installed = true;
 
             _path = Path.Combine(Application.persistentDataPath, FileName);
-            Debug.Log($"[Bisect] CrashReporter path resolved: {_path}");
 
             // Each launch starts clean. A log that accumulates across sessions buries
             // the crash the tester is actually reporting under old ones.
@@ -73,9 +61,7 @@ namespace HighwayRenegade.Core.App
                 // An unreadable log directory must not stop the game from starting.
             }
 
-            Debug.Log("[Bisect] CrashReporter: about to subscribe logMessageReceived");
             Application.logMessageReceived += OnLogMessage;
-            Debug.Log("[Bisect] CrashReporter.Install done");
         }
 
         private static void OnLogMessage(string message, string stackTrace, LogType type)

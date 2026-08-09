@@ -39,16 +39,8 @@ namespace HighwayRenegade.Tests.PlayMode
         [UnitySetUp]
         public IEnumerator SetUp()
         {
-            // TEMPORARY bisection instrumentation - see TestTrackGenerator.Generate() for
-            // why. Generation is now fully cleared (every stage confirmed to complete in
-            // CI); this brackets the next candidate, the LoadScene call that immediately
-            // follows play mode entry, to learn whether it ever starts and whether the
-            // engine ever returns from it. Remove once the culprit is found.
-            Debug.Log($"[Bisect] SetUp: about to LoadScene('{SceneName}')");
             SceneManager.LoadScene(SceneName, LoadSceneMode.Single);
-            Debug.Log($"[Bisect] SetUp: LoadScene('{SceneName}') call returned");
             yield return null;   // scene activates on the next frame
-            Debug.Log("[Bisect] SetUp: first yield return null completed");
 
             // The PLAYER bike specifically, not whichever BikeController is found first.
             var playerInput = Object.FindFirstObjectByType<PlayerBikeInput>();

@@ -130,62 +130,34 @@ namespace HighwayRenegade.Editor
             MaterialCache.Clear();
             MaterialGenerator.Clear();
 
-            // TEMPORARY bisection instrumentation. Two PlayMode CI runs hang for 20+
-            // minutes with the log stopping right after scene regeneration completes and
-            // play mode begins - generation itself always finishes (this method returns
-            // and MenuSceneGenerator's own logs follow it), so the hang is specifically in
-            // loading/activating the SAVED scene, not in building it. These bracket every
-            // stage so the next run's playmode.log names the exact line that never got a
-            // matching "done" - remove once the culprit is found and fixed at its source
-            // rather than merely logged around.
-            Debug.Log("[Bisect] BuildLighting start");
             BuildLighting();
-            Debug.Log("[Bisect] BuildLighting done; BuildRoad start");
             BuildRoad();
-            Debug.Log("[Bisect] BuildRoad done");
-            if (_track.ObstacleCourse)
-            {
-                Debug.Log("[Bisect] BuildObstacleCourse start");
-                BuildObstacleCourse();
-                Debug.Log("[Bisect] BuildObstacleCourse done");
-            }
+            if (_track.ObstacleCourse) BuildObstacleCourse();
 
-            Debug.Log("[Bisect] BuildSpline start");
             TrackSpline spline = BuildSpline();
-            Debug.Log("[Bisect] BuildSpline done; BuildEnvironment start");
 
             BuildEnvironment(spline);
-            Debug.Log("[Bisect] BuildEnvironment done; BuildBike(player) start");
 
             BikeController player = BuildBike("Bike (Player)", new Vector3(0f, 1f, 0f),
                                               new Color(0.75f, 0.18f, 0.12f));
-            Debug.Log("[Bisect] BuildBike(player) done");
             player.gameObject.AddComponent<PlayerBikeInput>();
 
             // Applies the saved bike, purchased upgrades and accumulated wear to the
             // machine. Without it the garage's upgrades are money burnt for no effect.
             player.gameObject.AddComponent<BikeLoadout>();
-            Debug.Log("[Bisect] player extras done; BuildRivals start");
 
             BuildRivals(player);
-            Debug.Log("[Bisect] BuildRivals done; BuildCamera start");
             BuildCamera(player);
-            Debug.Log("[Bisect] BuildCamera done; BuildManagers start");
             BuildManagers(player);
-            Debug.Log("[Bisect] BuildManagers done");
 
             // Add VFXManager to Managers
             var managers = GameObject.Find("Managers");
             if (managers != null) managers.AddComponent<VFXManager>();
-            Debug.Log("[Bisect] VFXManager done; SaveScene start");
 
             Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
             EditorSceneManager.SaveScene(scene, ScenePath);
-            Debug.Log("[Bisect] SaveScene done; RegisterInBuildSettings start");
             RegisterInBuildSettings(ScenePath);
-            Debug.Log("[Bisect] RegisterInBuildSettings done; AssetDatabase.SaveAssets start");
             AssetDatabase.SaveAssets();
-            Debug.Log("[Bisect] Generate() returning");
 
             return ScenePath;
         }
