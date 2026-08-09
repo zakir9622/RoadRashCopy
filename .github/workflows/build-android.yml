@@ -83,16 +83,26 @@ jobs:
   # The project has ~150 EditMode tests covering crash rules, race ordering, rival AI,
   # pooling and progression, and nothing was ever running them. A release build that has
   # not run its own test suite is not a tested release.
-  test:
-    name: Unity Test Suite
+  # EditMode and PlayMode are two SEPARATE jobs, not one `testMode: all` run, for one
+  # concrete reason. game-ci runs both platforms in a single Unity invocation and writes
+  # the result XMLs only when that invocation finishes. PlayMode entry currently hangs on
+  # this Unity/GameCI combination in headless CI (upstream game-ci/unity-test-runner#188),
+  # so the process is killed by the timeout and NO editmode-results.xml is ever produced -
+  # the hung run's artifact contains only playmode.log. Combined, that meant an EditMode
+  # regression was completely invisible in CI: the build proceeded because the run was
+  # "cancelled", never because EditMode actually passed.
+  #
+  # Split, EditMode runs as its own short invocation that does not hang, produces a real
+  # pass/fail, and BLOCKS the build. PlayMode keeps its long timeout and stays advisory
+  # until upstream is fixed.
+
+  test-editmode:
+    name: EditMode Tests
     runs-on: ubuntu-latest
     needs: preflight
-    # GitHub's default is 360 minutes. A clean run finishes this job in under 10 - two
-    # separate PlayMode hangs each ran past 20 minutes producing no output before being
-    # cancelled by hand, and would otherwise have sat there for six hours costing runner
-    # minutes and giving no signal. 25 is generous headroom over the ~8-15 minute range
-    # observed so far, not a tuned bound - a genuine slow day should still fit inside it.
-    timeout-minutes: 25
+    # EditMode does not enter play mode and does not hang; a clean run is ~3-5 minutes.
+    # 15 is generous headroom, not a tuned bound.
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -146,7 +156,7 @@ jobs:
             Library-test-
             Library-
 
-      - name: Run EditMode and PlayMode tests
+      - name: Run EditMode tests
         uses: game-ci/unity-test-runner@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE || secrets.UNITY_LICENCE || secrets.UNITY_LICENSE_FILE }}
@@ -155,42 +165,102 @@ jobs:
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL || secrets.UNITY_SERIAL_KEY || secrets.UNITY_KEY }}
         with:
           unityVersion: 6000.0.38f1
-          testMode: all
-          artifactsPath: test-results
+          testMode: EditMode
+          artifactsPath: test-results-editmode
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload test results
+      - name: Upload EditMode results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: unity-test-results-${{ github.run_number }}
-          path: test-results
+          name: unity-test-results-editmode-${{ github.run_number }}
+          path: test-results-editmode
+          retention-days: 14
+
+  test-playmode:
+    name: PlayMode Tests (advisory)
+    runs-on: ubuntu-latest
+    needs: preflight
+    # Advisory only: PlayMode entry hangs upstream (game-ci/unity-test-runner#188), so this
+    # job is expected to hit the timeout and report 'cancelled' until that is fixed. The
+    # build does not block on it. When upstream recovers, tighten this and promote it to a
+    # blocking gate alongside test-editmode.
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache \
+                      /usr/local/share/powershell /usr/share/swift \
+                      "$AGENT_TOOLSDIRECTORY" || true
+          docker image prune -af || true
+          df -h / | tail -1
+
+      - name: Cache fetched CC0 art
+        uses: actions/cache@v4
+        with:
+          path: Assets/_Project/Art
+          key: art-${{ hashFiles('Tools/Assets/manifest.json') }}
+
+      - name: Fetch CC0 art
+        continue-on-error: true
+        run: python3 Tools/Assets/fetch-assets.py
+
+      - name: Verify art integrity
+        run: python3 Tools/Assets/fetch-assets.py --verify
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-test-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-test-
+            Library-
+
+      - name: Run PlayMode tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE || secrets.UNITY_LICENCE || secrets.UNITY_LICENSE_FILE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL || secrets.UNITY_SERIAL_KEY || secrets.UNITY_KEY }}
+        with:
+          unityVersion: 6000.0.38f1
+          testMode: PlayMode
+          artifactsPath: test-results-playmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload PlayMode results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unity-test-results-playmode-${{ github.run_number }}
+          path: test-results-playmode
           retention-days: 14
 
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
-    needs: [preflight, test]
-    # Same reasoning as the test job's timeout: bound a real Unity build against GitHub's
+    needs: [preflight, test-editmode, test-playmode]
+    # Same reasoning as the test jobs' timeouts: bound a real Unity build against GitHub's
     # 360-minute default so a hang costs 40 minutes of runner time, not six hours.
     timeout-minutes: 40
-    # Tests gate the build by default; the manual trigger can override deliberately.
-    # preflight is never overridable: without a licence there is nothing to build.
-    #
-    # needs.test.result == 'cancelled' is treated the same as success. PlayMode entry
-    # currently hangs on this Unity/GameCI combination in headless CI regardless of what
-    # this repository's code does - proven by exhaustive elimination: every generator
-    # stage, CrashReporter.Install, and the backup scene's own Awake/OnEnable chain all
-    # complete cleanly and are logged doing so, yet the run still stalls past Unity's own
-    # internal play-mode-entry step every time. That leaves the 25-minute test-job timeout
-    # as the only thing that ends the run, which reports as 'cancelled', not 'failure'.
-    #
-    # A genuine EditMode failure is real signal and still blocks the build - EditMode has
-    # passed 216/216 on every run so far and does not hang, so 'failure' here means an
-    # actual regression. Only the PlayMode-hang's specific 'cancelled' outcome is treated
-    # as non-blocking, and only until the upstream issue is fixed (tracked upstream at
-    # game-ci/unity-test-runner#188, an open, unresolved report of the same symptom).
-    if: ${{ !cancelled() && needs.preflight.result == 'success' && (needs.test.result == 'success' || needs.test.result == 'cancelled' || inputs.skip_tests) }}
+    # The gate, in plain terms:
+    #   - preflight must pass (no licence -> nothing to build); never overridable.
+    #   - test-editmode must genuinely SUCCEED. EditMode does not hang, so 'success' here
+    #     is real signal and an EditMode regression correctly blocks the build. This is the
+    #     gate that was missing while the two suites shared one hang-prone invocation.
+    #   - test-playmode is deliberately absent from the condition: it is advisory until the
+    #     upstream hang (game-ci/unity-test-runner#188) is fixed, so its outcome - success,
+    #     cancelled by timeout, or failure - does not gate the build.
+    #   - inputs.skip_tests still forces a build regardless, for the manual dispatch case.
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && (needs.test-editmode.result == 'success' || inputs.skip_tests) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
