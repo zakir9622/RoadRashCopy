@@ -64,6 +64,19 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
         private void OpenSettings() => _settings?.Toggle();
 
+        // The Android hardware/gesture back button reports as Escape once predictive back
+        // is opted out (it is, in ProjectSettings). On the title screen back closes an open
+        // settings modal first, and only exits the app when there is nothing to back out
+        // of - so a stray back press does not drop the player out of the game. Menu and
+        // Garage had no back handling at all before this; back simply closed the app.
+        private void Update()
+        {
+            if (!Input.GetKeyDown(KeyCode.Escape)) return;
+
+            if (_settings != null && _settings.IsOpen) { _settings.Hide(); return; }
+            QuitGame();
+        }
+
         private static void QuitGame()
         {
             // Application.Quit is a no-op in the editor, so state has to be unwound

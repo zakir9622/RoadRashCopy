@@ -61,6 +61,14 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             GameStateManager.OnStateChanged -= HandleStateChanged;
         }
 
+        // Hardware/gesture back (reported as Escape now predictive back is opted out) returns
+        // to the menu, the same as BtnBack. Only while the garage is actually the active
+        // screen, so it does not fire from under another state.
+        private void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.Escape) && IsOpen) Back();
+        }
+
         private void HandleStateChanged(GameState previous, GameState current) =>
             SetVisible(current == GameState.Garage);
 

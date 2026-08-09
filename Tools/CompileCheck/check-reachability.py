@@ -88,6 +88,12 @@ def main() -> int:
         if name in ALLOWED_UNREFERENCED:
             continue
 
+        # A component that bootstraps itself with [RuntimeInitializeOnLoadMethod] is an
+        # entry point Unity calls directly - like BuildScript is a CI entry point. Nothing
+        # in the project references it by design, so it is reachable, not dead.
+        if "RuntimeInitializeOnLoadMethod" in bodies[path]:
+            continue
+
         pattern = re.compile(r"\b%s\b" % re.escape(name))
         referenced = any(
             pattern.search(body) for other, body in bodies.items() if other != path
@@ -151,12 +157,22 @@ def find_uncalled_private_methods(root: pathlib.Path, bodies):
     """
     problems = []
     for path, body in bodies.items():
+        # Methods Unity invokes by attribute rather than by a call site. Collected per file
+        # so a [RuntimeInitializeOnLoadMethod] bootstrap is not reported as never-called.
+        attr_invoked = set(re.findall(
+            r"\[RuntimeInitializeOnLoadMethod[^\]]*\]\s*"
+            r"(?:\[[^\]]*\]\s*)*"
+            r"(?:private|public|internal|protected|static|\s)+"
+            r"[\w<>\[\],\.\?]+\s+(\w+)\s*\(",
+            body,
+        ))
+
         for match in re.finditer(
             r"\bprivate\s+(?:static\s+)?(?:async\s+)?[\w<>\[\],\.\?]+\s+(\w+)\s*\(",
             body,
         ):
             name = match.group(1)
-            if name in UNITY_MESSAGES:
+            if name in UNITY_MESSAGES or name in attr_invoked:
                 continue
 
             # A local function or a constructor-like name is out of scope.
