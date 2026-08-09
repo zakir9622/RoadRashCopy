@@ -22,6 +22,9 @@ namespace HighwayRenegade.Gameplay.Audio
 
         private void Awake()
         {
+            // TEMPORARY bisection instrumentation - see TestTrackGenerator.Generate() for
+            // why. Remove once the culprit is found.
+            Debug.Log("[Bisect] AudioManager.Awake start");
             if (Instance == null)
             {
                 Instance = this;
@@ -31,6 +34,7 @@ namespace HighwayRenegade.Gameplay.Audio
             {
                 Destroy(gameObject);
             }
+            Debug.Log("[Bisect] AudioManager.Awake done");
         }
 
         private void InitPool()

@@ -35,6 +35,14 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
         protected override void OnBind()
         {
+            // TEMPORARY bisection instrumentation - see TestTrackGenerator.Generate() for
+            // why. SaveService.Load() is the one operation here with real file I/O
+            // (AES-encrypted read from disk), and it has never specifically run as part of
+            // Unity's backup-scene restoration during play-mode entry before now - only
+            // via a normal SceneManager.LoadScene call mid-test, which already proved safe.
+            // Remove once the culprit is found.
+            Debug.Log("[Bisect] GarageScreen.OnBind start");
+
             _cash = Require<Label>("Cash");
             _bikeName = Require<Label>("BikeName");
             _ownership = Require<Label>("Ownership");
@@ -42,18 +50,22 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             _accelStat = Require<Label>("AccelStat");
             _handlingStat = Require<Label>("HandlingStat");
             _conditionStat = Require<Label>("ConditionStat");
+            Debug.Log("[Bisect] GarageScreen.OnBind: labels bound; wiring buttons");
 
             OnClick("BtnPrevBike", () => Cycle(-1));
             OnClick("BtnNextBike", () => Cycle(1));
             _buy = OnClick("BtnBuyBike", BuyOrEquip);
             OnClick("BtnRepair", Repair);
             OnClick("BtnBack", Back);
+            Debug.Log("[Bisect] GarageScreen.OnBind: buttons wired; about to SaveService.Load()");
 
             // Open on the bike actually being ridden, not catalogue entry zero.
             _index = BikeShop.IndexOf(SaveService.Load().BikeId);
+            Debug.Log("[Bisect] GarageScreen.OnBind: SaveService.Load() returned");
 
             GameStateManager.OnStateChanged += HandleStateChanged;
             SetVisible(GameStateManager.CurrentState == GameState.Garage);
+            Debug.Log("[Bisect] GarageScreen.OnBind done");
         }
 
         private void OnDestroy()
