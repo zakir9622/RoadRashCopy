@@ -38,21 +38,19 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
         private void StartCampaign()
         {
-            if (SceneLoader.Instance != null)
+            // GameFlowManager owns scene loading. It is the hardened path: it refuses to
+            // change state when the target scene is missing from the build settings, rather
+            // than desyncing game state from the loaded scene (the failure the deleted
+            // SceneLoader had). A scene opened directly in the editor may have no GameFlow
+            // object, so this is guarded.
+            if (GameFlowManager.Instance != null)
             {
-                SceneLoader.Instance.LoadSceneAsync(SceneNames.Race, GameState.Racing);
-            }
-            else if (GameFlowManager.Instance != null)
-            {
-                // SceneLoader lives on the same object as the flow manager, but a scene
-                // opened directly in the editor may have neither. Falling through to the
-                // flow manager keeps CAMPAIGN working in that case.
                 GameFlowManager.Instance.StartRace();
             }
             else
             {
-                Debug.LogError("[MainMenuScreen] Nothing can load the race scene: neither " +
-                               "SceneLoader nor GameFlowManager is present.", this);
+                Debug.LogError("[MainMenuScreen] No GameFlowManager present to load the race " +
+                               "scene. It is created by the MainMenu scene generator.", this);
             }
         }
 

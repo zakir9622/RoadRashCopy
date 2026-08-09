@@ -26,7 +26,7 @@ namespace HighwayRenegade.Tests.PlayMode
     ///
     /// The most valuable assertion in the file is LogAssert.NoUnexpectedReceived(). Most
     /// of this project's failures announce themselves as a Debug.LogError and then carry
-    /// on - UIScreen.Require logs when markup and code drift, SceneLoader logs when a
+    /// on - UIScreen.Require logs when markup and code drift, GameFlowManager logs when a
     /// scene will not load, RiderRagdoll logs when it cannot arm. Treating any logged
     /// error as a test failure catches the whole family at once, including ones nobody
     /// has thought to assert on yet.

@@ -77,9 +77,17 @@ recur.
 
 - ✅ Reset `GameStateManager` statics via `[RuntimeInitializeOnLoadMethod]` (they survive
   the editor's domain-reload-off, which broke PlayMode test isolation).
-- ⬜ Delete `Core/App/SceneLoader.cs`; repoint `MainMenuScreen` at the hardened flow.
-- ⬜ Move the remaining MonoBehaviours out of `HighwayRenegade.Core` and set
-  `noEngineReferences: true` so the compiler permanently enforces the pure boundary.
+- ✅ Delete `Core/App/SceneLoader.cs`; repoint `MainMenuScreen` at the hardened
+  `GameFlowManager` flow (it refuses to change state when the target scene is missing from
+  the build settings, the desync bug `SceneLoader` had).
+- ⬜ `noEngineReferences: true` on `HighwayRenegade.Core`. The domain layer (Vehicle,
+  Combat, AI, RaceRules, Story, SaveData) is *already* engine-free; only seven files still
+  touch `UnityEngine`. Six of them (`Pooling/*`, `App/GameFlowManager`, `App/GameStateManager`,
+  `App/SettingsManager`, `App/CrashReporter`) are relocatable to Gameplay. The blocker is
+  `Race/TrackSpline`: it is built on `Vector3`/`Mathf` and is referenced by `Race/TrackDefinition`
+  (which must stay in Core as domain data), so the flip needs a pure-vector rewrite of the
+  spline first. Moving the six without that rewrite is churn with no enforcement payoff, so
+  it is deferred as one deliberate change.
 - ⬜ Extract `ISaveStore` behind `SaveService` (test corruption/partial-write/backup
   recovery without touching disk).
 - ⬜ Extract a pure `CampaignLedger` from `CampaignSession`.
