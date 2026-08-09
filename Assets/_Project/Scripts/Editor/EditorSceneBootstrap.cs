@@ -36,6 +36,35 @@ namespace HighwayRenegade.Editor
             EditorApplication.delayCall += EnsureMissingScenes;
         }
 
+        /// <summary>
+        /// Regenerates every scene, overwriting what is on disk.
+        ///
+        /// This is what the test job needs, and it is deliberately not what
+        /// <see cref="EnsureMissingScenes"/> does. Filling gaps is right for an editor
+        /// session, where clobbering someone's open work would be worse than the staleness.
+        /// It is wrong for a test run: TestTrack.unity *is* committed, so the gap-filler
+        /// never touched it, and the PlayMode suite spent its life asserting against a
+        /// scene frozen at whatever the generator produced months ago.
+        ///
+        /// That is not hypothetical. The committed scene carried none of RaceHudScreen,
+        /// PauseScreen, RaceResultsScreen or TouchControlsScreen, and still referenced
+        /// SpeedHud after that component was deleted - so it logged missing-script errors
+        /// on load and failed every assertion about what a race scene contains, while the
+        /// generator that actually defines those scenes was correct the whole time.
+        ///
+        /// The generator is the source of truth, so the tests have to run against its
+        /// output rather than against a file that cannot say how old it is.
+        /// </summary>
+        public static void RegenerateAllScenes()
+        {
+            Debug.Log("[SceneBootstrap] Regenerating every scene from its generator.");
+
+            TestTrackGenerator.Generate();
+            MenuSceneGenerator.GenerateAll();
+
+            AssetDatabase.SaveAssets();
+        }
+
         /// <summary>Generates only the scenes that are absent. Safe to call repeatedly.</summary>
         public static void EnsureMissingScenes()
         {
