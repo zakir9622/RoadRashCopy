@@ -87,6 +87,12 @@ jobs:
     name: Unity Test Suite
     runs-on: ubuntu-latest
     needs: preflight
+    # GitHub's default is 360 minutes. A clean run finishes this job in under 10 - two
+    # separate PlayMode hangs each ran past 20 minutes producing no output before being
+    # cancelled by hand, and would otherwise have sat there for six hours costing runner
+    # minutes and giving no signal. 25 is generous headroom over the ~8-15 minute range
+    # observed so far, not a tuned bound - a genuine slow day should still fit inside it.
+    timeout-minutes: 25
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -165,6 +171,9 @@ jobs:
     name: Build Android APK
     runs-on: ubuntu-latest
     needs: [preflight, test]
+    # Same reasoning as the test job's timeout: bound a real Unity build against GitHub's
+    # 360-minute default so a hang costs 40 minutes of runner time, not six hours.
+    timeout-minutes: 40
     # Tests gate the build by default; the manual trigger can override deliberately.
     # preflight is never overridable: without a licence there is nothing to build.
     if: ${{ !cancelled() && needs.preflight.result == 'success' && (needs.test.result == 'success' || inputs.skip_tests) }}
