@@ -107,11 +107,14 @@ namespace UnityEngine.InputSystem
         public KeyControl dKey { get; }
         public KeyControl qKey { get; }
         public KeyControl eKey { get; }
+        public KeyControl fKey { get; }
+        public KeyControl gKey { get; }
         public KeyControl rKey { get; }
         public KeyControl spaceKey { get; }
         public KeyControl escapeKey { get; }
         public KeyControl enterKey { get; }
         public KeyControl leftShiftKey { get; }
+        public KeyControl rightShiftKey { get; }
         public KeyControl upArrowKey { get; }
         public KeyControl downArrowKey { get; }
         public KeyControl leftArrowKey { get; }

@@ -26,7 +26,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SCRIPTS = ROOT / "Assets" / "_Project" / "Scripts"
+# Scans the whole project, not just Scripts/.
+#
+# It used to scan Scripts/ alone, so the two test assemblies were never checked at all -
+# and that is exactly how RenderPipelineTests reached CI using
+# UnityEngine.Rendering.Universal from an assembly that did not reference URP. The
+# compile harness cannot catch this class either, because it hands every assembly the
+# whole Unity module set at once; per-assembly resolution is only ever checked here.
+PROJECT = ROOT / "Assets" / "_Project"
 MANIFEST = ROOT / "Packages" / "manifest.json"
 
 # Namespaces that live in a package assembly and need an explicit .asmdef reference.
@@ -72,15 +79,29 @@ COMMENT = re.compile(r"^\s*(//|/\*|\*)")
 
 
 def strip_comments(source: str) -> str:
-    """Crude but sufficient: drop // and /* */ so a type named only in prose is ignored."""
+    """
+    Drop comments AND string literals, so a type named only in prose or in a path is
+    ignored.
+
+    String literals matter as much as comments here. A file-path constant like
+    "Assets/_Project/Art/Surfaces/Terrain" contains the word Terrain, and matching it
+    reported that the file "uses Terrain, which needs com.unity.modules.terrain" - a
+    module the project has no reason to ship. A guard that cries wolf about a folder name
+    is a guard people start ignoring.
+
+    Interpolated strings are deliberately kept: code inside $"...{Foo()}..." really does
+    reference Foo, and blanking those would hide genuine usage.
+    """
     source = re.sub(r"/\*.*?\*/", "", source, flags=re.S)
+    source = re.sub(r'(?<![$@])"(?:[^"\\\n]|\\.)*"', '""', source)
     return "\n".join(l for l in source.splitlines() if not COMMENT.match(l))
 
 
 def owning_asmdef(path: Path):
     """Nearest .asmdef at or above a file - the assembly Unity will compile it into."""
     for parent in [path.parent, *path.parents]:
-        if parent < SCRIPTS.parent:
+        # Stop at the project root rather than walking out of Assets entirely.
+        if PROJECT not in parent.parents and parent != PROJECT:
             break
         found = list(parent.glob("*.asmdef"))
         if found:
@@ -93,13 +114,13 @@ def main() -> int:
     modules = set(manifest.get("dependencies", {}))
 
     asmdefs = {}
-    for path in SCRIPTS.rglob("*.asmdef"):
+    for path in PROJECT.rglob("*.asmdef"):
         asmdefs[path] = json.loads(path.read_text())
 
     failures = []
     checked = 0
 
-    for source_path in SCRIPTS.rglob("*.cs"):
+    for source_path in PROJECT.rglob("*.cs"):
         body = strip_comments(source_path.read_text(encoding="utf-8", errors="replace"))
         rel = source_path.relative_to(ROOT)
         checked += 1
@@ -108,7 +129,8 @@ def main() -> int:
         refs = set(asmdefs.get(owner, {}).get("references", [])) if owner else set()
         owner_name = asmdefs.get(owner, {}).get("name", "<none>") if owner else "<none>"
 
-        # Editor-only assemblies get UnityEditor for free; skip namespace rules there.
+        # Editor-ness grants UnityEditor and nothing else: an editor assembly still
+        # needs an explicit reference for URP, the Input System or the test runner.
         for namespace, required in NAMESPACE_REQUIRES.items():
             if not re.search(rf"\b{re.escape(namespace)}\b", body):
                 continue

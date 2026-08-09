@@ -96,9 +96,50 @@ namespace HighwayRenegade.Editor
             else Debug.LogWarning("[UiSceneBuilder] No runtime theme found; controls may " +
                                   "render unstyled.");
 
+            ApplyFont(settings);
+
             AssetDatabase.CreateAsset(settings, PanelSettingsPath);
             AssetDatabase.SaveAssets();
             return settings;
+        }
+
+        /// <summary>
+        /// Points the panel at the fetched display font.
+        ///
+        /// Every screen has rendered in Unity's built-in default font for the project's
+        /// whole life - GameUI.uss even carries a
+        /// `-unity-font-definition: initial; /* replace with custom gritty font later */`.
+        /// That default is most of why the UI reads as a debug overlay rather than as a
+        /// game: type does more for perceived production value than almost anything else
+        /// per unit of effort.
+        ///
+        /// Set on PanelSettings rather than per-stylesheet so it applies to every screen
+        /// at once, including built-in controls that no .uss of ours touches. Silent when
+        /// the font is absent, because it is fetched by CI and a developer who has not run
+        /// Tools/Assets/fetch-assets.py should still get a working - if plainer - build.
+        /// </summary>
+        private static void ApplyFont(PanelSettings settings)
+        {
+            const string fontPath = "Assets/_Project/Art/Fonts/Oswald-Variable.ttf";
+
+            var font = AssetDatabase.LoadAssetAtPath<Font>(fontPath);
+            if (font == null) return;
+
+            // Loaded by path, never by GUID: the fetched fonts are gitignored with no
+            // committed .meta, so Unity mints them a new GUID on every clean import and a
+            // stored reference would break on the next runner.
+            var asset = UnityEngine.TextCore.Text.FontAsset.CreateFontAsset(font);
+            if (asset == null) return;
+
+            asset.name = "HighwayRenegadeFont";
+            AssetDatabase.CreateAsset(asset, UiFolder + "/HighwayRenegadeFont.asset");
+
+            var textSettings = ScriptableObject.CreateInstance<PanelTextSettings>();
+            textSettings.name = "HighwayRenegadeTextSettings";
+            textSettings.defaultFontAsset = asset;
+            AssetDatabase.CreateAsset(textSettings, UiFolder + "/HighwayRenegadeTextSettings.asset");
+
+            settings.textSettings = textSettings;
         }
 
         /// <summary>

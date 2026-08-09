@@ -159,8 +159,18 @@ namespace HighwayRenegade.Gameplay.Bike
             float trauma = severity == CrashSeverity.Wipeout ? 0.9f : (severity == CrashSeverity.Major ? 0.6f : 0.35f);
             HighwayRenegade.Gameplay.CameraRig.ChaseCamera.Instance?.AddTrauma(trauma);
 
-            // Play massive sparks & debris on crash
-            HighwayRenegade.Gameplay.Environment.VFXManager.Instance?.PlaySparks(transform.position, Vector3.up);
+            // Sparks for a scrape, the full burst for a real fall.
+            //
+            // PlayCrashBurst - 75 sparks plus a smoke and dust cloud - was written for
+            // exactly this moment and had zero call sites, so every crash in the game
+            // produced the same modest 30-spark puff whether the rider clipped a barrier
+            // or went end over end at 200 km/h. The visual read on how badly that went was
+            // identical, while the audio and the camera trauma both already scaled.
+            var vfx = HighwayRenegade.Gameplay.Environment.VFXManager.Instance;
+            if (severity == CrashSeverity.Wipeout || severity == CrashSeverity.Major)
+                vfx?.PlayCrashBurst(transform.position);
+            else
+                vfx?.PlaySparks(transform.position, Vector3.up);
 
             // Impact audio. Scaled by severity so a tip-over and a wipeout do not land
             // with identical weight - the sound is the fastest read the player gets on how
@@ -185,6 +195,29 @@ namespace HighwayRenegade.Gameplay.Bike
                 yield return new WaitForSecondsRealtime(0.08f);
                 Time.timeScale = originalTimeScale;
             }
+        }
+
+        /// <summary>
+        /// Ends the crash immediately, without waiting out the recovery timer.
+        /// </summary>
+        /// <remarks>
+        /// Exists because <see cref="FootLocomotion"/> needs it when the rider reaches the
+        /// bike on foot, and was reaching for it by reflection:
+        ///
+        ///     GetType().GetMethod("EndCrash", NonPublic | Instance)?.Invoke(...)
+        ///
+        /// against a method called EndCrash that has never existed on this class - the
+        /// recovery method is Remount. GetMethod returned null, the null-conditional
+        /// swallowed it, and reaching the bike on foot silently did nothing at all. Even
+        /// with the right name it would have been deleted by IL2CPP managed stripping and
+        /// failed only on device, where it is hardest to see.
+        ///
+        /// A no-op when the rider is not down, so calling it twice is harmless.
+        /// </remarks>
+        public void EndCrashEarly()
+        {
+            if (!IsCrashed) return;
+            Remount();
         }
 
         /// <summary>

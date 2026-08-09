@@ -116,6 +116,18 @@ namespace HighwayRenegade.Gameplay.Combat
 
         private void ApplyHit(Damageable victim, Vector3 localOffset, WeaponType activeWeapon)
         {
+            // The disarm check comes before damage, and this is the call site that was
+            // missing: WeaponGrabber implemented the whole mechanic - grab window, weapon
+            // transfer, attacker downgraded to kicks - and nothing in the project ever
+            // asked a victim whether they had caught the swing. Both TryGrab and
+            // CheckDisarm had zero callers, so the signature Road Rash move could not fire.
+            //
+            // A caught swing costs the attacker their weapon and lands no hit at all. That
+            // asymmetry is the point: the reward for timing it has to be worth the risk of
+            // standing in range of a bat.
+            if (victim.TryGetComponent(out WeaponGrabber grabber) && grabber.CheckDisarm(this))
+                return;
+
             float victimSpeed = victim.TryGetComponent(out BikeController victimBike)
                 ? victimBike.ForwardSpeed
                 : 0f;

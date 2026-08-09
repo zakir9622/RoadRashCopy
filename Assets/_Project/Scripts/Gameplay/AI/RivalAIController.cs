@@ -50,6 +50,7 @@ namespace HighwayRenegade.Gameplay.AI
         private BikeController _bike;
         private Damageable _damageable;
         private MeleeCombat _combat;
+        private WeaponGrabber _grabber;
         private RivalState _state = RivalState.Race;
         private float _aggression;
         private float _nextDecisionTime;
@@ -75,6 +76,7 @@ namespace HighwayRenegade.Gameplay.AI
             _bike = GetComponent<BikeController>();
             _damageable = GetComponent<Damageable>();
             _combat = GetComponent<MeleeCombat>();
+            _grabber = GetComponent<WeaponGrabber>();
             _aggression = _baseAggression;
 
             if (_damageable != null)
@@ -168,7 +170,21 @@ namespace HighwayRenegade.Gameplay.AI
             Vector3 local = transform.InverseTransformDirection(_target.position - transform.position);
             if (Mathf.Abs(local.z) > CombatMath.Reach(_combat.Weapon)) return;
 
-            _combat.TrySwing(local.x >= 0f ? 1 : -1);
+            // A disarmed rider kicks, and a rider who is winning sometimes kicks anyway -
+            // it is faster to recover from than a bat swing, so it suits close quarters.
+            // Skill drives the mix so the field does not all fight identically.
+            bool kick = _combat.Weapon == WeaponType.Kick
+                        || Random.value > _skill;
+
+            _combat.TrySwing(local.x >= 0f ? 1 : -1, kick);
+
+            // Rivals defend too. Without this the disarm only ever runs in one direction:
+            // the player could steal every weapon on the grid and never lose one, which
+            // removes the risk that makes reaching into a bat swing interesting.
+            //
+            // Skill sets how often they read the exchange correctly, so the aggressive
+            // low-skill rider is the one you can farm and the fast clean one is not.
+            if (_grabber != null && Random.value < _skill * 0.25f) _grabber.TryGrab();
         }
 
         private RivalPerception BuildPerception()

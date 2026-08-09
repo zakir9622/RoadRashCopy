@@ -92,4 +92,10 @@ Tools/CompileCheck/.work/
 /Assets/_Project/Art/**/*.exr
 /Assets/_Project/Art/**/*.fbx
 /Assets/_Project/Art/**/*.zip
+/Assets/_Project/Art/**/*.ttf
+/Assets/_Project/Art/**/*.otf
+/Assets/_Project/Art/**/*.wav
+/Assets/_Project/Art/**/*.ogg
+/Assets/_Project/Art/**/*.mp3
+/Assets/_Project/Art/Generated/
 /Assets/_Project/Art/.fetched.json

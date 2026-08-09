@@ -1,0 +1,152 @@
+/*
+ * On-screen touch overlay: zone hints plus the buttons gestures cannot carry.
+ *
+ * Layout here deliberately mirrors the regions PlayerBikeInput reads, because the two
+ * have to agree and nothing enforces that at compile time. If _attackStripHeight changes
+ * there, .zone-attack's height must change here or the hint will lie about where the
+ * strip is.
+ *
+ * Colours come from Theme.uss. This sheet carries layout only.
+ */
+
+/* Full-screen and completely transparent. The hints are what is visible; the container
+   exists to position them. It must never paint a background - a scrim over gameplay is
+   exactly what an in-race overlay must not be. */
+.touch-root {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+}
+
+/* ---------- zone hints ---------- */
+
+/* Faded by TouchControlsScreen after a few seconds. Kept in the tree rather than removed
+   so the fade can be reversed when the player pauses and wants a reminder. */
+.zone-hints {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    opacity: 0.5;
+    transition-property: opacity;
+    transition-duration: 1.2s;
+}
+
+.zone-hints.faded {
+    opacity: 0;
+}
+
+.zone {
+    border-width: 1px;
+    border-color: rgba(0, 255, 204, 0.28);
+    align-items: center;
+    justify-content: center;
+}
+
+.zone-label {
+    font-size: 20px;
+    color: rgba(0, 255, 204, 0.55);
+    -unity-font-style: bold;
+    letter-spacing: 2px;
+}
+
+/* 22% matches PlayerBikeInput._attackStripHeight. */
+.zone-attack {
+    width: 100%;
+    height: 22%;
+}
+
+/* Everything below the attack strip. */
+.zone-row {
+    width: 100%;
+    height: 78%;
+    flex-direction: row;
+}
+
+.zone-steer {
+    width: 50%;
+    height: 100%;
+}
+
+.zone-column {
+    width: 50%;
+    height: 100%;
+}
+
+.zone-throttle {
+    width: 100%;
+    height: 50%;
+}
+
+.zone-brake {
+    width: 100%;
+    height: 50%;
+}
+
+/* ---------- buttons ---------- */
+
+.touch-button {
+    background-color: rgba(10, 15, 20, 0.72);
+    border-width: 2px;
+    border-color: var(--accent-dim);
+    border-radius: 12px;
+    color: var(--ink);
+    font-size: 22px;
+    -unity-font-style: bold;
+    letter-spacing: 1px;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin: 0;
+}
+
+.touch-button:active {
+    background-color: var(--accent-dim);
+    color: #06131a;
+}
+
+/* Centred in the dead notch PlayerBikeInput carves out of the attack strip. The notch is
+   8% of screen width either side of centre, so a 96px button at a 1920 reference width
+   (5%) sits comfortably inside it. */
+.pause-button {
+    position: absolute;
+    top: 24px;
+    left: 50%;
+    margin-left: -48px;
+    width: 96px;
+    height: 64px;
+    font-size: 26px;
+}
+
+/* Bottom-centre, clear of the speedometer (bottom-right) and the condition bar
+   (bottom-left) that GameUI.uxml already occupies. */
+.action-cluster {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    margin-left: -246px;
+    width: 492px;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+.action-button-kick,
+.action-button-grab,
+.action-button-nitro {
+    width: 156px;
+    height: 78px;
+}
+
+/* Nitrous is a resource, not a state - tint it apart from the combat pair so a glance
+   distinguishes them at speed. */
+.action-button-nitro {
+    border-color: #ffb300;
+    color: #ffd766;
+}
+
+.action-button-nitro:active {
+    background-color: #ffb300;
+    color: #1a1200;
+}
+
+.action-button-grab {
+    border-color: var(--accent);
+}

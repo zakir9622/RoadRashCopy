@@ -6,7 +6,6 @@ using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using HighwayRenegade.Gameplay.AI;
 using HighwayRenegade.Gameplay.Bike;
-using HighwayRenegade.Gameplay.UI;
 
 namespace HighwayRenegade.Tests.PlayMode
 {
@@ -24,6 +23,7 @@ namespace HighwayRenegade.Tests.PlayMode
     /// picked a rival, and reported it "drifting" 110 m under no input while its AI held
     /// full throttle.
     /// </summary>
+    [PrebuildSetup("HighwayRenegade.Tests.EditMode.PlayModeSceneSetup")]
     public sealed class BikePhysicsTests
     {
         private const string SceneName = "TestTrack";
@@ -236,12 +236,10 @@ namespace HighwayRenegade.Tests.PlayMode
             // same loop runs twice, once with the simulation disabled, and only the
             // difference is attributed to the bike.
             //
-            // The HUD stays disabled throughout: IMGUI allocates inside Unity's own layout
-            // code however careful the caller is, and replacing it is a known Phase 6 item
-            // (UI Toolkit), not something this test should police.
-            foreach (var hud in Object.FindObjectsByType<SpeedHud>(FindObjectsSortMode.None))
-                hud.enabled = false;
-
+            // The IMGUI HUD used to be disabled here, because OnGUI allocates inside
+            // Unity's own layout code however careful the caller is. That HUD is gone, so
+            // the measurement now runs against the shipping configuration with the real
+            // UI Toolkit HUD live - which makes this test strictly stricter than before.
             var input = BikeInput.Neutral;
             input.Throttle = 1f;
             input.Steer = 0.5f;

@@ -36,6 +36,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 ART = ROOT / "Assets" / "_Project" / "Art"
 MANIFEST = pathlib.Path(__file__).resolve().parent / "manifest.json"
 ATTRIBUTIONS = ART / "ATTRIBUTIONS.md"
+LEDGER = ART / ".fetched.json"
 
 POLYHAVEN_FILES = "https://api.polyhaven.com/files/{slug}"
 AMBIENTCG_QUERY = ("https://ambientcg.com/api/v2/full_json"
@@ -52,6 +53,10 @@ def get_json(url: str):
     req = urllib.request.Request(url, headers={"User-Agent": "HighwayRenegade-AssetFetcher"})
     with urllib.request.urlopen(req, timeout=TIMEOUT) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def sha256_of(path: pathlib.Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def download(url: str, target: pathlib.Path) -> str:
@@ -164,7 +169,65 @@ def fetch_ambientcg(entry, force: bool):
     }]
 
 
-FETCHERS = {"polyhaven": fetch_polyhaven, "ambientcg": fetch_ambientcg}
+def fetch_direct(entry, force: bool):
+    """
+    Any file at an explicit URL, with the hash pinned in the manifest.
+
+    Poly Haven and ambientCG have APIs that resolve a slug to a download; fonts, audio
+    and model packs mostly do not, so this is the generic escape hatch. It is stricter
+    than the API-driven fetchers precisely because the URL is hand-written: an entry MUST
+    declare sha256, and bytes that do not match are refused rather than written.
+
+    That strictness is the point. A raw URL on a branch is mutable - the file behind it
+    can be updated, replaced, or swapped for something else entirely - and shipping
+    whatever happens to be there today is exactly the supply-chain hole the licence
+    allow-list exists to close on the legal side.
+    """
+    slug = entry["slug"]
+    url = entry["url"]
+    filename = entry.get("filename") or url.rsplit("/", 1)[-1]
+    destination = ART / entry["destination"]
+    target = destination / filename
+
+    expected = entry.get("sha256")
+    if not expected:
+        print(f"  ! {slug}: 'direct' entries must declare sha256")
+        return []
+
+    if target.exists() and not force:
+        print(f"  = {target.relative_to(ROOT)}")
+        return [{
+            "file": str(target.relative_to(ROOT)),
+            "source": url,
+            "licence": entry.get("licence", "CC0"),
+            "origin": entry.get("origin", slug),
+            "sha256": sha256_of(target),
+        }]
+
+    digest = download(url, target)
+    if digest != expected:
+        # Remove it. A file on disk with the wrong bytes is worse than no file: the
+        # generators would happily use it and nothing downstream would question it.
+        target.unlink(missing_ok=True)
+        print(f"  ! {slug}: sha256 mismatch\n"
+              f"      expected {expected}\n"
+              f"      got      {digest}\n"
+              f"      The content behind this URL changed. Verify it is still the asset "
+              f"and licence you intended, then update the manifest.")
+        return []
+
+    print(f"  + {target.relative_to(ROOT)}")
+    return [{
+        "file": str(target.relative_to(ROOT)),
+        "source": url,
+        "licence": entry.get("licence", "CC0"),
+        "origin": entry.get("origin", slug),
+        "sha256": digest,
+    }]
+
+
+FETCHERS = {"polyhaven": fetch_polyhaven, "ambientcg": fetch_ambientcg,
+            "direct": fetch_direct}
 
 
 def write_attributions(records):
@@ -222,7 +285,38 @@ def main() -> int:
         return 1
 
     if args.verify:
+        # Licences were checked above. Now check the bytes.
+        #
+        # This used to report success after validating only the licence field, while CI
+        # ran it under the name "Verify art integrity" - a green tick from a check that
+        # never looked at a single file.
+        #
+        # Files that are absent are not an error: the fetch step is continue-on-error, so
+        # a CDN outage legitimately leaves assets missing and the game falls back to
+        # placeholder art. A file that is PRESENT with unexpected bytes is a hard failure,
+        # because something replaced content we pinned.
+        ledger = json.loads(LEDGER.read_text()) if LEDGER.exists() else []
+        expected = {r["file"]: r["sha256"] for r in ledger if "sha256" in r}
+
+        checked, missing, mismatched = 0, 0, []
+        for relative, digest in expected.items():
+            path = ROOT / relative
+            if not path.exists():
+                missing += 1
+                continue
+            checked += 1
+            actual = sha256_of(path)
+            if actual != digest:
+                mismatched.append(f"  {relative}\n    expected {digest}\n    got      {actual}")
+
+        if mismatched:
+            print("Content does not match what was pinned:", file=sys.stderr)
+            print("\n".join(mismatched), file=sys.stderr)
+            return 1
+
         print(f"ok  {len(entries)} manifest entries, all licences allowed")
+        print(f"ok  {checked} file(s) match their pinned SHA-256"
+              + (f", {missing} not fetched" if missing else ""))
         return 0
 
     records, failed = [], 0
@@ -245,15 +339,14 @@ def main() -> int:
     # Merge with anything fetched on a previous run so the credits stay complete.
     existing = []
     if ATTRIBUTIONS.exists():
-        cache = ART / ".fetched.json"
-        if cache.exists():
-            existing = json.loads(cache.read_text())
+        if LEDGER.exists():
+            existing = json.loads(LEDGER.read_text())
 
     by_file = {r["file"]: r for r in existing}
     by_file.update({r["file"]: r for r in records})
     merged = [r for r in by_file.values() if (ROOT / r["file"]).exists()]
 
-    (ART / ".fetched.json").write_text(json.dumps(merged, indent=2))
+    LEDGER.write_text(json.dumps(merged, indent=2))
     write_attributions(merged)
 
     if failed:

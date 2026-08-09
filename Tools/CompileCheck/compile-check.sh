@@ -218,8 +218,16 @@ for CONFIG in player editor; do
   fi
 
   if [[ $RUN_TESTS -eq 1 ]]; then
-    csc_build HighwayRenegade.Tests.EditMode "$TESTS/EditMode" HighwayRenegade.Core \
-      HighwayRenegade.Performance HighwayRenegade.Platform HighwayRenegade.Gameplay "$NUNIT_DLL"
+    # EditMode tests are editor-only, exactly as their asmdef declares
+    # ("includePlatforms": ["Editor"]), and they reference HighwayRenegade.Editor so
+    # they can run the scene generators. Compiling them in the player pass would fail
+    # on an assembly that legitimately does not exist there.
+    if [[ "$CONFIG" == "editor" ]]; then
+      csc_build HighwayRenegade.Tests.EditMode "$TESTS/EditMode" HighwayRenegade.Core \
+        HighwayRenegade.Performance HighwayRenegade.Platform HighwayRenegade.Gameplay \
+        HighwayRenegade.Editor "$NUNIT_DLL"
+    fi
+
     csc_build HighwayRenegade.Tests.PlayMode "$TESTS/PlayMode" HighwayRenegade.Core \
       HighwayRenegade.Performance HighwayRenegade.Platform HighwayRenegade.Gameplay "$NUNIT_DLL"
   fi
@@ -245,6 +253,11 @@ python3 "$HERE/check-reachability.py" || FAILED=1
 # GUID rather than a path. An asset with no committed .meta is re-identified on every
 # clean import, so any reference to it breaks and reports as "script missing".
 python3 "$HERE/check-meta-files.py" || FAILED=1
+
+# A Git LFS pointer that was never resolved is a text file wearing a .png extension.
+# Unity imports it as a broken texture and reports nothing, so the artwork is simply
+# absent with no error to explain it. Two of these shipped in this repository.
+python3 "$HERE/check-lfs-pointers.py" || FAILED=1
 
 echo
 if [[ $PASSES_DONE -ne 2 ]]; then

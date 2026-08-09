@@ -121,6 +121,14 @@ namespace HighwayRenegade.Editor
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
 
+            // Android 11. The floor was briefly API 35, which excluded every device that
+            // had not taken the Android 15 update - in practice most Android hardware in
+            // the field, including the project's own test tablet. Play Store only requires
+            // API 35 as a *target*, never as a minimum, so that floor cost reach and bought
+            // nothing from the store's point of view.
+            //
+            // 30 rather than lower because Vulkan-only rendering and the ARM64/IL2CPP
+            // requirement already rule out the older hardware a smaller floor would admit.
             PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel30;
 
             // Pinned, not Auto. Auto resolves to whatever SDK happens to be installed on
@@ -128,6 +136,13 @@ namespace HighwayRenegade.Editor
             // CI image updates - and Google Play rejects uploads below its current
             // minimum. A build's target API is a release decision, not an environment
             // detail, so it belongs in the diff.
+            //
+            // 35 rather than 36 because the target is bounded by the toolchain, not by
+            // preference: Unity 6000.0.38f1 predates the API 36 enum member, and the
+            // game-ci editor image only carries the SDK platforms that editor build
+            // shipped with. Raising this needs an image that has platform 36 installed
+            // and is worth one deliberate build to verify, not a guess folded into an
+            // unrelated fix. 35 is also exactly what the Play Store currently requires.
             PlayerSettings.Android.targetSdkVersion = AndroidSdkVersions.AndroidApiLevel35;
 
             // Play Store requires a 64-bit binary; IL2CPP is required for ARM64.
@@ -239,6 +254,15 @@ namespace HighwayRenegade.Editor
             //
             // The generator is the source of truth for these scenes, so the build must
             // run it rather than trust a file that cannot say how old it is.
+            // Before any scene is generated, not after.
+            //
+            // PlaceholderArt.MakeMaterial resolves its shader with
+            // Shader.Find("Universal Render Pipeline/Lit"), and every material the
+            // generators bake into a scene is created after this point. Assigning the
+            // pipeline afterwards would leave a scene full of materials built against
+            // whatever pipeline happened to be active when they were made.
+            RenderPipelineGenerator.Ensure();
+
             Debug.Log("[Build] Regenerating the race track from TestTrackGenerator.");
             TestTrackGenerator.Generate();
 

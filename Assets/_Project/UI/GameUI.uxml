@@ -5,6 +5,10 @@
     xmlns:editor="UnityEditor.UIElements"
     xsi:noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd">
     
+    <!-- Theme first: GameUI.uss now references the shared accent, panel and danger
+         custom properties rather than re-declaring the same hex values, so the sheet
+         that defines them has to be attached. -->
+    <ui:Style src="Theme.uss" />
     <ui:Style src="GameUI.uss" />
 
     <ui:VisualElement class="hud-container">

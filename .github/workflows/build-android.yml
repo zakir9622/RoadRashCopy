@@ -1,10 +1,23 @@
 name: Android Build & Release
 
 on:
+  # Every merge into main. A pull request merge is a push to main, so this covers the
+  # "build the app when a PR lands" case without a separate pull_request_target job.
+  #
+  # paths-ignore is what stops this from looping: the build regenerates the scenes and
+  # commits them back to main (see "Commit regenerated scenes" below), and without this
+  # that commit would trigger another build, which would commit again. The generated
+  # scenes are build *output*, so a change confined to them is never a reason to rebuild.
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'Assets/_Project/Scenes/**'
+      - 'ProjectSettings/EditorBuildSettings.asset'
+
   # Daily scheduled build at 00:00 UTC (No push/commit spam)
   schedule:
     - cron: '0 0 * * *'
-  
+
   # Manual 1-click trigger button in GitHub Actions tab
   workflow_dispatch:
     inputs:
@@ -70,10 +83,26 @@ jobs:
   # The project has ~150 EditMode tests covering crash rules, race ordering, rival AI,
   # pooling and progression, and nothing was ever running them. A release build that has
   # not run its own test suite is not a tested release.
-  test:
-    name: Unity Test Suite
+  # EditMode and PlayMode are two SEPARATE jobs, not one `testMode: all` run, for one
+  # concrete reason. game-ci runs both platforms in a single Unity invocation and writes
+  # the result XMLs only when that invocation finishes. PlayMode entry currently hangs on
+  # this Unity/GameCI combination in headless CI (upstream game-ci/unity-test-runner#188),
+  # so the process is killed by the timeout and NO editmode-results.xml is ever produced -
+  # the hung run's artifact contains only playmode.log. Combined, that meant an EditMode
+  # regression was completely invisible in CI: the build proceeded because the run was
+  # "cancelled", never because EditMode actually passed.
+  #
+  # Split, EditMode runs as its own short invocation that does not hang, produces a real
+  # pass/fail, and BLOCKS the build. PlayMode keeps its long timeout and stays advisory
+  # until upstream is fixed.
+
+  test-editmode:
+    name: EditMode Tests
     runs-on: ubuntu-latest
     needs: preflight
+    # EditMode does not enter play mode and does not hang; a clean run is ~3-5 minutes.
+    # 15 is generous headroom, not a tuned bound.
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -92,6 +121,32 @@ jobs:
           docker image prune -af || true
           df -h / | tail -1
 
+      # The 18 CC0 textures and both HDRIs have never been in a CI build. They are
+      # gitignored on purpose - the repository stores the recipe, not the output - and
+      # nothing ever ran the fetcher, so every APK shipped to date has contained zero
+      # textures and rendered entirely on runtime-generated flat colours.
+      #
+      # Cached on the manifest hash with no restore-keys. A partial restore keyed on an
+      # older manifest is worse than a clean fetch: it mixes files pinned to different
+      # SHA-256s, and --verify would then fail on assets that are individually fine.
+      - name: Cache fetched CC0 art
+        uses: actions/cache@v4
+        with:
+          path: Assets/_Project/Art
+          key: art-${{ hashFiles('Tools/Assets/manifest.json') }}
+
+      # continue-on-error: an upstream outage should degrade the build to the placeholder
+      # look, not turn the whole pipeline red. Integrity is enforced by the next step,
+      # which is not forgiving.
+      - name: Fetch CC0 art
+        continue-on-error: true
+        run: python3 Tools/Assets/fetch-assets.py
+
+      # Every asset carries a pinned SHA-256. A hash mismatch means the bytes changed
+      # under a URL we do not control, and that is a hard stop rather than a warning.
+      - name: Verify art integrity
+        run: python3 Tools/Assets/fetch-assets.py --verify
+
       - name: Cache Unity Library
         uses: actions/cache@v4
         with:
@@ -101,7 +156,7 @@ jobs:
             Library-test-
             Library-
 
-      - name: Run EditMode and PlayMode tests
+      - name: Run EditMode tests
         uses: game-ci/unity-test-runner@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE || secrets.UNITY_LICENCE || secrets.UNITY_LICENSE_FILE }}
@@ -110,25 +165,102 @@ jobs:
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL || secrets.UNITY_SERIAL_KEY || secrets.UNITY_KEY }}
         with:
           unityVersion: 6000.0.38f1
-          testMode: all
-          artifactsPath: test-results
+          testMode: EditMode
+          artifactsPath: test-results-editmode
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload test results
+      - name: Upload EditMode results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: unity-test-results-${{ github.run_number }}
-          path: test-results
+          name: unity-test-results-editmode-${{ github.run_number }}
+          path: test-results-editmode
+          retention-days: 14
+
+  test-playmode:
+    name: PlayMode Tests (advisory)
+    runs-on: ubuntu-latest
+    needs: preflight
+    # Advisory only: PlayMode entry hangs upstream (game-ci/unity-test-runner#188), so this
+    # job is expected to hit the timeout and report 'cancelled' until that is fixed. The
+    # build does not block on it. When upstream recovers, tighten this and promote it to a
+    # blocking gate alongside test-editmode.
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          lfs: true
+
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/share/boost /opt/hostedtoolcache \
+                      /usr/local/share/powershell /usr/share/swift \
+                      "$AGENT_TOOLSDIRECTORY" || true
+          docker image prune -af || true
+          df -h / | tail -1
+
+      - name: Cache fetched CC0 art
+        uses: actions/cache@v4
+        with:
+          path: Assets/_Project/Art
+          key: art-${{ hashFiles('Tools/Assets/manifest.json') }}
+
+      - name: Fetch CC0 art
+        continue-on-error: true
+        run: python3 Tools/Assets/fetch-assets.py
+
+      - name: Verify art integrity
+        run: python3 Tools/Assets/fetch-assets.py --verify
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-test-${{ hashFiles('Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-test-
+            Library-
+
+      - name: Run PlayMode tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE || secrets.UNITY_LICENCE || secrets.UNITY_LICENSE_FILE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL || secrets.UNITY_SERIAL_KEY || secrets.UNITY_KEY }}
+        with:
+          unityVersion: 6000.0.38f1
+          testMode: PlayMode
+          artifactsPath: test-results-playmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload PlayMode results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unity-test-results-playmode-${{ github.run_number }}
+          path: test-results-playmode
           retention-days: 14
 
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
-    needs: [preflight, test]
-    # Tests gate the build by default; the manual trigger can override deliberately.
-    # preflight is never overridable: without a licence there is nothing to build.
-    if: ${{ !cancelled() && needs.preflight.result == 'success' && (needs.test.result == 'success' || inputs.skip_tests) }}
+    needs: [preflight, test-editmode, test-playmode]
+    # Same reasoning as the test jobs' timeouts: bound a real Unity build against GitHub's
+    # 360-minute default so a hang costs 40 minutes of runner time, not six hours.
+    timeout-minutes: 40
+    # The gate, in plain terms:
+    #   - preflight must pass (no licence -> nothing to build); never overridable.
+    #   - test-editmode must genuinely SUCCEED. EditMode does not hang, so 'success' here
+    #     is real signal and an EditMode regression correctly blocks the build. This is the
+    #     gate that was missing while the two suites shared one hang-prone invocation.
+    #   - test-playmode is deliberately absent from the condition: it is advisory until the
+    #     upstream hang (game-ci/unity-test-runner#188) is fixed, so its outcome - success,
+    #     cancelled by timeout, or failure - does not gate the build.
+    #   - inputs.skip_tests still forces a build regardless, for the manual dispatch case.
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && (needs.test-editmode.result == 'success' || inputs.skip_tests) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -145,6 +277,32 @@ jobs:
                       "$AGENT_TOOLSDIRECTORY" || true
           docker image prune -af || true
           df -h / | tail -1
+
+      # The 18 CC0 textures and both HDRIs have never been in a CI build. They are
+      # gitignored on purpose - the repository stores the recipe, not the output - and
+      # nothing ever ran the fetcher, so every APK shipped to date has contained zero
+      # textures and rendered entirely on runtime-generated flat colours.
+      #
+      # Cached on the manifest hash with no restore-keys. A partial restore keyed on an
+      # older manifest is worse than a clean fetch: it mixes files pinned to different
+      # SHA-256s, and --verify would then fail on assets that are individually fine.
+      - name: Cache fetched CC0 art
+        uses: actions/cache@v4
+        with:
+          path: Assets/_Project/Art
+          key: art-${{ hashFiles('Tools/Assets/manifest.json') }}
+
+      # continue-on-error: an upstream outage should degrade the build to the placeholder
+      # look, not turn the whole pipeline red. Integrity is enforced by the next step,
+      # which is not forgiving.
+      - name: Fetch CC0 art
+        continue-on-error: true
+        run: python3 Tools/Assets/fetch-assets.py
+
+      # Every asset carries a pinned SHA-256. A hash mismatch means the bytes changed
+      # under a URL we do not control, and that is a hard stop rather than a warning.
+      - name: Verify art integrity
+        run: python3 Tools/Assets/fetch-assets.py --verify
 
       - name: Cache Unity Library
         uses: actions/cache@v4
@@ -220,6 +378,48 @@ jobs:
           echo "path=$file" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$file")" >> "$GITHUB_OUTPUT"
           echo "Verified $(ls -lh "$file" | awk '{print $5}') at $file"
+
+      # The generators are the source of truth for every scene, and BuildScript.EnsureScenes
+      # reruns them on every build. But only TestTrack.unity was ever committed, so
+      # MainMenu.unity and Garage.unity existed nowhere except inside a build container -
+      # you could not open the front end in the editor, diff a scene change, or see what
+      # the APK actually shipped.
+      #
+      # Committing the output keeps both properties: the generator still decides what a
+      # scene contains, and the repository still records what was built. Gated on main so
+      # branch builds never write, and on a verified package so a scene is only recorded
+      # once it has been proven to produce an installable APK.
+      - name: Commit regenerated scenes
+        if: ${{ success() && github.ref == 'refs/heads/main' }}
+        run: |
+          set -euo pipefail
+
+          # Unity ran as root inside the builder container, so the regenerated files are
+          # root-owned and git refuses to touch them as the runner user.
+          sudo chown -R "$(id -u):$(id -g)" Assets/_Project/Scenes ProjectSettings || true
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A Assets/_Project/Scenes ProjectSettings/EditorBuildSettings.asset
+
+          if git diff --cached --quiet; then
+            echo "Scenes unchanged - nothing to commit."
+            exit 0
+          fi
+
+          git diff --cached --stat
+
+          # [skip ci] belts-and-braces alongside paths-ignore: if a future edit widens the
+          # paths filter, this still stops the commit from triggering another build.
+          git commit -m "Regenerate scenes from the generators [skip ci]" \
+                     -m "Build ${{ github.run_number }} from ${{ github.sha }}."
+
+          # The build takes ~20 minutes, so main may have moved since checkout. Rebase
+          # rather than force: another commit landing mid-build is normal, not a conflict
+          # to overwrite.
+          git pull --rebase origin main
+          git push origin HEAD:main
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4

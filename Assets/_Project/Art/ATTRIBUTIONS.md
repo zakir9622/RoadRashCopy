@@ -10,6 +10,8 @@ under a licence that *does* require credit is impossible to overlook.
 
 | File | Origin | Licence | Source |
 |---|---|---|---|
+| `Assets/_Project/Art/Fonts/BebasNeue-Regular.ttf` | Google Fonts / Bebas Neue (SIL Open Font License 1.1) | CC-BY-4.0 | https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/BebasNeue-Regular.ttf |
+| `Assets/_Project/Art/Fonts/Oswald-Variable.ttf` | Google Fonts / Oswald (SIL Open Font License 1.1) | CC-BY-4.0 | https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/Oswald%5Bwght%5D.ttf |
 | `Assets/_Project/Art/Sky/dikhololo_night_hdri.hdr` | Poly Haven / dikhololo_night | CC0 | https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/dikhololo_night_1k.hdr |
 | `Assets/_Project/Art/Sky/kloppenheim_02_puresky_hdri.hdr` | Poly Haven / kloppenheim_02_puresky | CC0 | https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloppenheim_02_puresky_1k.hdr |
 | `Assets/_Project/Art/Surfaces/Road/asphalt_02_Diffuse.jpg` | Poly Haven / asphalt_02 | CC0 | https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/asphalt_02/asphalt_02_diff_1k.jpg |

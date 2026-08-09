@@ -14,17 +14,11 @@ namespace HighwayRenegade.Gameplay.Audio
         private const int PoolSize = 20;
         private List<AudioSource> _sfxPool;
         private AudioSource _musicSource;
-        private AudioSource _engineSource;
         
         [Header("Impact SFX")]
         [Tooltip("Leave empty to use synthesised audio from ProceduralSfx.")]
         [SerializeField] private AudioClip _crashClip;
         [SerializeField] private AudioClip _hitClip;
-
-        [Header("Engine Audio Settings")]
-        [SerializeField] private AudioClip _engineClip;
-        [SerializeField] private float _basePitch = 0.5f;
-        [SerializeField] private float _pitchMultiplier = 1.2f;
 
         private void Awake()
         {
@@ -59,14 +53,14 @@ namespace HighwayRenegade.Gameplay.Audio
             _musicSource.spatialBlend = 0f; // 2D sound
             _musicSource.loop = true;
 
-            var engineGo = new GameObject("Engine_Source");
-            engineGo.transform.SetParent(transform);
-            _engineSource = engineGo.AddComponent<AudioSource>();
-            _engineSource.playOnAwake = true;
-            _engineSource.loop = true;
-            _engineSource.clip = _engineClip;
-            _engineSource.spatialBlend = 0f;
-            if (_engineClip != null) _engineSource.Play();
+            // No engine source here any more.
+            //
+            // This was a 2D AudioSource fed by a serialized _engineClip that nothing ever
+            // assigned, so it never played, and UpdateEngineAudio - its only reason to
+            // exist - had zero call sites and early-returned forever. Meanwhile EngineAudio
+            // synthesises a real engine note per bike from that bike's own RPM, on the
+            // audio thread, positioned in 3D. A single global engine tone would have been
+            // strictly worse even if it had worked: rivals would be silent.
         }
 
         public void PlaySfx(AudioClip clip, Vector3 position, float volume = 1f, float pitch = 1f)
@@ -134,17 +128,21 @@ namespace HighwayRenegade.Gameplay.Audio
             _musicSource.Stop();
         }
 
-        public void UpdateEngineAudio(float rpmFraction, int gear)
+        /// <summary>
+        /// UI feedback blip. Synthesised, so it costs no asset and no licence.
+        ///
+        /// 2D and unpositioned: a menu button is not in the world, and a click that pans
+        /// with the camera is disorienting.
+        /// </summary>
+        public void PlayUiClick()
         {
-            if (_engineSource == null || !_engineSource.isPlaying) return;
+            AudioClip clip = ProceduralSfx.UiClick;
+            if (clip == null || _musicSource == null) return;
 
-            // Simulate transmission: pitch drops when shifting up, rises with RPM
-            float gearFactor = 1f + (gear * 0.1f);
-            float targetPitch = _basePitch + (rpmFraction * _pitchMultiplier * gearFactor);
-            
-            // Smoothly interpolate pitch to simulate engine inertia
-            _engineSource.pitch = Mathf.Lerp(_engineSource.pitch, targetPitch, Time.deltaTime * 10f);
-            _engineSource.volume = Core.App.SettingsManager.Current.SfxVolume * (0.5f + (rpmFraction * 0.5f));
+            // PlayOneShot on the music bus rather than the 3D pool: the pooled sources are
+            // positional, and borrowing one for a UI sound would place the click somewhere
+            // in the world. Volume rides the SFX setting, not the music one.
+            _musicSource.PlayOneShot(clip, Core.App.SettingsManager.Current.SfxVolume * 0.6f);
         }
     }
 }

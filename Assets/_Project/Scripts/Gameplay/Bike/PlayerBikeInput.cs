@@ -28,6 +28,16 @@ namespace HighwayRenegade.Gameplay.Bike
                  "of screen height. Left of centre swings left, right swings right.")]
         [Range(0.1f, 0.4f)][SerializeField] private float _attackStripHeight = 0.22f;
 
+        [Tooltip("Half-width of the dead notch at the centre of the attack strip, as a " +
+                 "fraction of screen width. The pause button lives here, and a tap on it " +
+                 "must not also read as a swing.")]
+        [Range(0f, 0.2f)][SerializeField] private float _attackStripNotch = 0.08f;
+
+        [Tooltip("Hold this long inside the attack strip and the release throws a kick " +
+                 "instead of the held weapon. Long enough not to fire on a normal tap, " +
+                 "short enough to use mid-corner.")]
+        [Range(0.1f, 0.6f)][SerializeField] private float _kickHoldSeconds = 0.25f;
+
         [Header("Keyboard")]
         [Tooltip("Seconds for a held key to reach full lock. Digital keys would otherwise " +
                  "deliver instant full steering, which feels nothing like the analogue " +
@@ -40,6 +50,7 @@ namespace HighwayRenegade.Gameplay.Bike
 
         private BikeController _bike;
         private HighwayRenegade.Gameplay.Combat.MeleeCombat _combat;
+        private HighwayRenegade.Gameplay.Combat.WeaponGrabber _grabber;
         private BikeInput _input;
         private float _keyboardSteer;
 
@@ -48,6 +59,30 @@ namespace HighwayRenegade.Gameplay.Bike
         private const int MaxTouches = 4;
         private readonly Vector2[] _touchOrigins = new Vector2[MaxTouches];
         private readonly bool[] _touchActive = new bool[MaxTouches];
+
+        // When each finger landed inside the attack strip, so a release can tell a tap
+        // (swing) from a hold (kick). Parallel arrays rather than a struct list: this is
+        // read every frame and must not allocate.
+        private readonly float[] _attackHoldStart = new float[MaxTouches];
+        private readonly bool[] _attackHeld = new bool[MaxTouches];
+
+        /// <summary>
+        /// Set by the on-screen overlay for one frame when its buttons are pressed.
+        ///
+        /// Buttons deliver events, the bike reads state once per frame, and those two do
+        /// not line up on their own - a UI callback firing between Updates would be lost.
+        /// Latching here and clearing after the read is what bridges them.
+        /// </summary>
+        private bool _uiKick, _uiGrab, _uiNitrous;
+
+        /// <summary>Called by TouchControlsScreen when the KICK button is pressed.</summary>
+        public void QueueKick() => _uiKick = true;
+
+        /// <summary>Called by TouchControlsScreen when the GRAB button is pressed.</summary>
+        public void QueueGrab() => _uiGrab = true;
+
+        /// <summary>Called by TouchControlsScreen when the NITRO button is pressed.</summary>
+        public void QueueNitrous() => _uiNitrous = true;
 
         public bool EnableGyro
         {
@@ -64,6 +99,7 @@ namespace HighwayRenegade.Gameplay.Bike
         {
             _bike = GetComponent<BikeController>();
             _combat = GetComponent<HighwayRenegade.Gameplay.Combat.MeleeCombat>();
+            _grabber = GetComponent<HighwayRenegade.Gameplay.Combat.WeaponGrabber>();
 
             if (_enableGyro && SystemInfo.supportsGyroscope)
                 Input.gyro.enabled = true;
@@ -88,12 +124,25 @@ namespace HighwayRenegade.Gameplay.Bike
                 _input.Steer = Mathf.Clamp(_input.Steer + tiltX * _gyroSensitivity, -1f, 1f);
             }
 
-            _bike.SetInput(_input);
+            // On-screen buttons are latched by their callbacks and merged here, so they
+            // arrive through exactly the same struct as every other device. Nothing
+            // downstream can tell a button press from a gamepad press, which is what keeps
+            // replays and tests able to drive the whole control scheme.
+            if (_uiKick) { _input.AttackSide = 1; _input.AttackIsKick = true; }
+            if (_uiGrab) _input.Grab = true;
+            if (_uiNitrous) _input.Nitrous = true;
+            _uiKick = _uiGrab = _uiNitrous = false;
 
+            _bike.SetInput(_input);
 
             // MeleeCombat owns the cooldown, so an unavailable swing is simply ignored.
             if (_input.AttackSide != 0 && _combat != null)
-                _combat.TrySwing(_input.AttackSide);
+                _combat.TrySwing(_input.AttackSide, _input.AttackIsKick);
+
+            // Opens the disarm window. WeaponGrabber decides whether anything was caught
+            // when an attacker actually connects.
+            if (_input.Grab && _grabber != null)
+                _grabber.TryGrab();
         }
 
         private bool ReadGamepad()
@@ -110,17 +159,26 @@ namespace HighwayRenegade.Gameplay.Bike
             // holding the button should not machine-gun attacks at the cooldown rate.
             bool attackLeft = pad.buttonWest.wasPressedThisFrame;
             bool attackRight = pad.buttonEast.wasPressedThisFrame;
+            bool kick = pad.buttonNorth.wasPressedThisFrame;
+            bool grab = pad.leftShoulder.wasPressedThisFrame;
+            bool nitrous = pad.rightShoulder.isPressed;
 
             // Treat a resting pad as "not in use" so it does not suppress touch input.
             if (throttle < 0.02f && brake < 0.02f && Mathf.Abs(steer) < 0.05f
-                && !handbrake && !attackLeft && !attackRight)
+                && !handbrake && !attackLeft && !attackRight && !kick && !grab && !nitrous)
                 return false;
 
             _input.Throttle = throttle;
             _input.Brake = brake;
             _input.Steer = steer;
             _input.Handbrake = handbrake;
-            _input.AttackSide = attackLeft ? -1 : (attackRight ? 1 : 0);
+            _input.Grab = grab;
+            _input.Nitrous = nitrous;
+
+            // A kick has no side of its own, so it borrows whichever swing is also held
+            // and defaults to the right. TrySwing treats side 0 as "whichever connects".
+            _input.AttackIsKick = kick;
+            _input.AttackSide = attackLeft ? -1 : (attackRight ? 1 : (kick ? 1 : 0));
             return true;
         }
 
@@ -140,15 +198,36 @@ namespace HighwayRenegade.Gameplay.Bike
             {
                 var t = touches[i];
                 bool pressed = t.press.isPressed;
+                Vector2 pos = t.position.ReadValue();
 
                 if (!pressed)
                 {
+                    // Releasing inside the attack strip is what actually throws the blow,
+                    // because only the release knows how long the finger was down - and
+                    // that duration is what separates a swing from a kick.
+                    if (_attackHeld[i])
+                    {
+                        _attackHeld[i] = false;
+                        bool longEnough = Time.time - _attackHoldStart[i] >= _kickHoldSeconds;
+                        _input.AttackIsKick = longEnough;
+                        _input.AttackSide = _touchOrigins[i].x < halfWidth ? -1 : 1;
+                        any = true;
+                    }
+
                     _touchActive[i] = false;
                     continue;
                 }
 
+                // Regions claimed by on-screen buttons are not driving input. Without this
+                // a tap on PAUSE would also open the throttle on the way past.
+                if (TouchInputMask.Contains(pos))
+                {
+                    _touchActive[i] = false;
+                    _attackHeld[i] = false;
+                    continue;
+                }
+
                 any = true;
-                Vector2 pos = t.position.ReadValue();
 
                 if (!_touchActive[i])
                 {
@@ -161,8 +240,16 @@ namespace HighwayRenegade.Gameplay.Bike
                 // press - on touch a misread input loses a race.
                 if (pos.y >= Screen.height * (1f - _attackStripHeight))
                 {
+                    // Dead notch at the centre. The pause button sits here, and the strip
+                    // would otherwise read every tap on it as a swing.
+                    if (Mathf.Abs(pos.x - halfWidth) < Screen.width * _attackStripNotch)
+                        continue;
+
                     if (t.press.wasPressedThisFrame)
-                        _input.AttackSide = pos.x < halfWidth ? -1 : 1;
+                    {
+                        _attackHeld[i] = true;
+                        _attackHoldStart[i] = Time.time;
+                    }
                     continue;
                 }
 
@@ -202,8 +289,13 @@ namespace HighwayRenegade.Gameplay.Bike
             _input.Throttle = kb.wKey.isPressed || kb.upArrowKey.isPressed ? 1f : 0f;
             _input.Brake = kb.sKey.isPressed || kb.downArrowKey.isPressed ? 1f : 0f;
             _input.Handbrake = kb.spaceKey.isPressed;
+            _input.Grab = kb.gKey.wasPressedThisFrame;
+            _input.Nitrous = kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;
+
+            bool kick = kb.fKey.wasPressedThisFrame;
+            _input.AttackIsKick = kick;
             _input.AttackSide = kb.qKey.wasPressedThisFrame ? -1
-                              : (kb.eKey.wasPressedThisFrame ? 1 : 0);
+                              : (kb.eKey.wasPressedThisFrame ? 1 : (kick ? 1 : 0));
 
             float raw = 0f;
             if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) raw -= 1f;

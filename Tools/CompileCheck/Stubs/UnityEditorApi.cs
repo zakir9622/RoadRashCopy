@@ -40,7 +40,37 @@ namespace UnityEditor
         public static bool isPaused { get; set; }
         public static bool isCompiling { get; }
 
+        /// <summary>Fires once on the next editor tick, clear of the domain reload.</summary>
+        public static event Action delayCall;
+
         public static void Exit(int returnValue) { }
+    }
+
+    /// <summary>
+    /// Runs a static constructor when the editor loads or reloads its domain. Used by
+    /// EditorSceneBootstrap to fill in scenes that were never committed.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class)]
+    public sealed class InitializeOnLoadAttribute : Attribute
+    {
+    }
+
+    [AttributeUsage(AttributeTargets.Method)]
+    public sealed class InitializeOnLoadMethodAttribute : Attribute
+    {
+    }
+
+    /// <summary>
+    /// Key/value store that outlives a domain reload but not the editor session.
+    ///
+    /// EditorSceneBootstrap uses it to make "regenerate the scenes" happen once per
+    /// session. A static field cannot express that: the reload it needs to survive is
+    /// exactly the thing that resets statics.
+    /// </summary>
+    public static class SessionState
+    {
+        public static bool GetBool(string key, bool defaultValue) => defaultValue;
+        public static void SetBool(string key, bool value) { }
     }
 
     public static class AssetDatabase
@@ -56,6 +86,50 @@ namespace UnityEditor
         public static void AddObjectToAsset(UnityEngine.Object objectToAdd, string path) { }
         public static bool DeleteAsset(string path) => false;
         public static string AssetPathToGUID(string path) => string.Empty;
+    }
+
+    /// <summary>
+    /// Import settings. Modelled because MaterialGenerator forces mobile compression and,
+    /// more importantly, correctness: a normal map imported as a colour texture lights
+    /// backwards, and an ARM map read as sRGB gives wrong roughness across the whole
+    /// scene. Both look like lighting bugs rather than import settings.
+    /// </summary>
+    public class AssetImporter
+    {
+        public static AssetImporter GetAtPath(string path) => null;
+        public string assetPath { get; set; }
+        public void SaveAndReimport() { }
+    }
+
+    public class TextureImporter : AssetImporter
+    {
+        public TextureImporterType textureType { get; set; }
+        public bool sRGBTexture { get; set; }
+        public int maxTextureSize { get; set; }
+        public bool isReadable { get; set; }
+        public bool mipmapEnabled { get; set; }
+        public bool crunchedCompression { get; set; }
+        public TextureImporterCompression textureCompression { get; set; }
+    }
+
+    public enum TextureImporterType
+    {
+        Default,
+        NormalMap,
+        GUI,
+        Sprite,
+        Cursor,
+        Cookie,
+        Lightmap,
+        SingleChannel,
+    }
+
+    public enum TextureImporterCompression
+    {
+        Uncompressed,
+        Compressed,
+        CompressedHQ,
+        CompressedLQ,
     }
 
     public sealed class EditorBuildSettingsScene

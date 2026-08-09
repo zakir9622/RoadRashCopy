@@ -4,6 +4,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using HighwayRenegade.Core.App;
+using HighwayRenegade.Gameplay.UI;
 using HighwayRenegade.Gameplay.UI.Screens;
 
 namespace HighwayRenegade.Editor
@@ -50,9 +51,7 @@ namespace HighwayRenegade.Editor
             var settings = UiSceneBuilder.AddScreen<SettingsScreen>("Settings", UiSceneBuilder.ModalLayer);
             SetVisibleOnStart(settings, false);
 
-            var so = new SerializedObject(menu);
-            so.FindProperty("_settings").objectReferenceValue = settings;
-            so.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetRef(menu, "_settings", settings);
 
             // The flow manager and scene loader survive scene changes, so the menu is the
             // natural place to create them: it is the first scene the game boots into.
@@ -88,7 +87,20 @@ namespace HighwayRenegade.Editor
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = Background;
             cam.orthographic = true;
+
+            // Same reason as the race camera: a URP camera serialised without its
+            // additional data renders a black screen and logs nothing. The menu going
+            // black would be the first thing a player saw.
+            camGo.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+
             camGo.AddComponent<AudioListener>();
+
+            // The SFX bus existed only in the race scene, so every button in the menus and
+            // the garage - which is where buttons are the entire interaction - would have
+            // clicked silently. AudioManager is a DontDestroyOnLoad singleton and no-ops
+            // on a duplicate, so adding it to the entry scene is safe.
+            var audioGo = new GameObject("Audio");
+            audioGo.AddComponent<HighwayRenegade.Gameplay.Audio.AudioManager>();
 
             UiSceneBuilder.AddEventSystem();
         }
@@ -97,11 +109,9 @@ namespace HighwayRenegade.Editor
         /// Sets a screen's start-up visibility through its serialized field, so the value
         /// is baked into the scene rather than depending on execution order at runtime.
         /// </summary>
-        private static void SetVisibleOnStart(MonoBehaviour screen, bool visible)
+        private static void SetVisibleOnStart(UIScreen screen, bool visible)
         {
-            var so = new SerializedObject(screen);
-            so.FindProperty("_visibleOnStart").boolValue = visible;
-            so.ApplyModifiedPropertiesWithoutUndo();
+            SerializedWiring.SetBool(screen, "_visibleOnStart", visible);
         }
 
         private static void Save(Scene scene, string path)

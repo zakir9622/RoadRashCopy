@@ -254,13 +254,41 @@ namespace UnityEngine.Rendering.Universal
         public int mainLightShadowmapResolution { get; set; }
         public float shadowDistance { get; set; }
         public bool supportsHDR { get; set; }
-        public MsaaQuality msaaSampleCount { get; set; }
+
+        // int, not MsaaQuality. Real URP exposes
+        //     public int msaaSampleCount { get => (int)m_MSAA; set => m_MSAA = (MsaaQuality)value; }
+        // and the stub previously typed it as the enum, which would have let code compile
+        // here that Unity rejects - the exact false assurance this harness exists to avoid.
+        public int msaaSampleCount { get; set; }
+
         public int maxAdditionalLightsCount { get; set; }
         public bool supportsCameraDepthTexture { get; set; }
         public bool supportsCameraOpaqueTexture { get; set; }
         public ShadowCascadesOption shadowCascadeOption { get; set; }
+        public int shadowCascadeCount { get; set; }
+        public bool useSRPBatcher { get; set; }
+
+        /// <summary>Editor-only factory in real URP; the Editor assembly is where it is used.</summary>
+        public static UniversalRenderPipelineAsset Create(ScriptableRendererData rendererData = null) => null;
 
         public override RenderPipeline CreatePipeline() => null;
+    }
+
+    public class ScriptableRendererData : ScriptableObject
+    {
+    }
+
+    public class UniversalRendererData : ScriptableRendererData
+    {
+        public RenderingMode renderingMode { get; set; }
+    }
+
+    public enum RenderingMode
+    {
+        Forward,
+        Deferred,
+        ForwardPlus,
+        DeferredPlus,
     }
 
     public enum MsaaQuality

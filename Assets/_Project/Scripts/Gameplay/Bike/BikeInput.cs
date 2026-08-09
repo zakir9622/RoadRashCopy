@@ -29,6 +29,24 @@ namespace HighwayRenegade.Gameplay.Bike
         /// </summary>
         public int AttackSide;
 
+        /// <summary>
+        /// Throw this frame's attack as a kick rather than the held weapon.
+        ///
+        /// CombatMath has carried complete Kick data - damage, reach, cooldown, impulse -
+        /// and MeleeCombat.TrySwing has taken a useKick flag since both were written, but
+        /// no caller ever passed true. The mechanic existed and was unreachable.
+        /// </summary>
+        public bool AttackIsKick;
+
+        /// <summary>
+        /// Open the disarm window this frame.
+        ///
+        /// Road Rash's signature move: time this against an opponent's swing and you take
+        /// their weapon instead of the hit. WeaponGrabber implemented it and nothing
+        /// called it from either side.
+        /// </summary>
+        public bool Grab;
+
         /// <summary>Nitrous Oxide boost requested this frame.</summary>
         public bool Nitrous;
 
