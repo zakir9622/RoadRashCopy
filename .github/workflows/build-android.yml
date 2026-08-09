@@ -1,10 +1,23 @@
 name: Android Build & Release
 
 on:
+  # Every merge into main. A pull request merge is a push to main, so this covers the
+  # "build the app when a PR lands" case without a separate pull_request_target job.
+  #
+  # paths-ignore is what stops this from looping: the build regenerates the scenes and
+  # commits them back to main (see "Commit regenerated scenes" below), and without this
+  # that commit would trigger another build, which would commit again. The generated
+  # scenes are build *output*, so a change confined to them is never a reason to rebuild.
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'Assets/_Project/Scenes/**'
+      - 'ProjectSettings/EditorBuildSettings.asset'
+
   # Daily scheduled build at 00:00 UTC (No push/commit spam)
   schedule:
     - cron: '0 0 * * *'
-  
+
   # Manual 1-click trigger button in GitHub Actions tab
   workflow_dispatch:
     inputs:
@@ -272,6 +285,48 @@ jobs:
           echo "path=$file" >> "$GITHUB_OUTPUT"
           echo "name=$(basename "$file")" >> "$GITHUB_OUTPUT"
           echo "Verified $(ls -lh "$file" | awk '{print $5}') at $file"
+
+      # The generators are the source of truth for every scene, and BuildScript.EnsureScenes
+      # reruns them on every build. But only TestTrack.unity was ever committed, so
+      # MainMenu.unity and Garage.unity existed nowhere except inside a build container -
+      # you could not open the front end in the editor, diff a scene change, or see what
+      # the APK actually shipped.
+      #
+      # Committing the output keeps both properties: the generator still decides what a
+      # scene contains, and the repository still records what was built. Gated on main so
+      # branch builds never write, and on a verified package so a scene is only recorded
+      # once it has been proven to produce an installable APK.
+      - name: Commit regenerated scenes
+        if: ${{ success() && github.ref == 'refs/heads/main' }}
+        run: |
+          set -euo pipefail
+
+          # Unity ran as root inside the builder container, so the regenerated files are
+          # root-owned and git refuses to touch them as the runner user.
+          sudo chown -R "$(id -u):$(id -g)" Assets/_Project/Scenes ProjectSettings || true
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A Assets/_Project/Scenes ProjectSettings/EditorBuildSettings.asset
+
+          if git diff --cached --quiet; then
+            echo "Scenes unchanged - nothing to commit."
+            exit 0
+          fi
+
+          git diff --cached --stat
+
+          # [skip ci] belts-and-braces alongside paths-ignore: if a future edit widens the
+          # paths filter, this still stops the commit from triggering another build.
+          git commit -m "Regenerate scenes from the generators [skip ci]" \
+                     -m "Build ${{ github.run_number }} from ${{ github.sha }}."
+
+          # The build takes ~20 minutes, so main may have moved since checkout. Rebase
+          # rather than force: another commit landing mid-build is normal, not a conflict
+          # to overwrite.
+          git pull --rebase origin main
+          git push origin HEAD:main
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4

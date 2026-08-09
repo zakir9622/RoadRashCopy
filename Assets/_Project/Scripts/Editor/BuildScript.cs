@@ -121,13 +121,15 @@ namespace HighwayRenegade.Editor
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan });
 
-            // Android 15. Chosen deliberately, and it is a narrow floor: it excludes every
-            // device that has not taken the Android 15 update, which in practice is most
-            // Android hardware in the field and possibly the project's own test tablet.
-            // Play Store only requires API 35 as a *target*, never as a minimum, so this
-            // costs reach and buys nothing from the store's point of view. Lower it to 30
-            // the moment testing on older hardware matters more than the floor does.
-            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel35;
+            // Android 11. The floor was briefly API 35, which excluded every device that
+            // had not taken the Android 15 update - in practice most Android hardware in
+            // the field, including the project's own test tablet. Play Store only requires
+            // API 35 as a *target*, never as a minimum, so that floor cost reach and bought
+            // nothing from the store's point of view.
+            //
+            // 30 rather than lower because Vulkan-only rendering and the ARM64/IL2CPP
+            // requirement already rule out the older hardware a smaller floor would admit.
+            PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel30;
 
             // Pinned, not Auto. Auto resolves to whatever SDK happens to be installed on
             // the machine doing the build, so the target level silently changes when the
