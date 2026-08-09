@@ -61,11 +61,19 @@ namespace HighwayRenegade.Tests.PlayMode
 
         private static IEnumerator LoadAndSettle(string sceneName)
         {
+            // TEMPORARY bisection instrumentation - see BikePhysicsTests.SetUp and
+            // TestTrackGenerator.Generate for why. Remove once the culprit is found.
+            Debug.Log($"[Bisect] LoadAndSettle: about to LoadScene('{sceneName}')");
             SceneManager.LoadScene(sceneName, LoadSceneMode.Single);
+            Debug.Log($"[Bisect] LoadAndSettle: LoadScene('{sceneName}') call returned");
 
             // One frame to activate, a few more for Start() across every screen and
             // manager. Asserting on the activation frame catches objects mid-construction.
-            for (int i = 0; i < 5; i++) yield return null;
+            for (int i = 0; i < 5; i++)
+            {
+                yield return null;
+                Debug.Log($"[Bisect] LoadAndSettle: yield {i} completed");
+            }
         }
 
         private static T Find<T>() where T : Object => Object.FindFirstObjectByType<T>();
