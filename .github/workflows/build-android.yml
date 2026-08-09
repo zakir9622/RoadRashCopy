@@ -14,6 +14,16 @@ on:
       - 'Assets/_Project/Scenes/**'
       - 'ProjectSettings/EditorBuildSettings.asset'
 
+  # Every push to an open pull request targeting main. This lets a long-lived feature
+  # branch - e.g. one under continuous autonomous development - self-verify on every push
+  # without a manual workflow_dispatch, and surfaces the EditMode/build result directly on
+  # the PR. Same-repo PRs (not forks) get full secrets access, so the Unity licence is
+  # available. Release publishing is gated to the main ref (see "Publish to GitHub
+  # Releases"), so a PR build runs the tests and produces an APK artifact but never cuts a
+  # release. The scene-commit-back step is likewise main-only, so there is no build loop.
+  pull_request:
+    branches: [main]
+
   # Daily scheduled build at 00:00 UTC (No push/commit spam)
   schedule:
     - cron: '0 0 * * *'
@@ -441,7 +451,11 @@ jobs:
         # success(), not !cancelled(): this previously ran even when the build failed,
         # publishing empty GitHub releases with no APK attached ("does not include a
         # valid file") for runs that never produced anything.
-        if: ${{ success() && github.event.inputs.create_release != 'false' }}
+        #
+        # Gated to the main ref as well, so pull_request builds (which have no inputs, hence
+        # an empty create_release that would otherwise read as "not false") test and build
+        # but never cut a release from a feature branch.
+        if: ${{ success() && github.ref == 'refs/heads/main' && github.event.inputs.create_release != 'false' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
