@@ -337,7 +337,15 @@ jobs:
           targetPlatform: Android
           unityVersion: 6000.0.38f1
           buildMethod: HighwayRenegade.Editor.BuildScript.BuildAndroid
-          customParameters: -customBuildPath build/Android -buildApk
+          # -buildApk is what BuildScript actually reads (androidExportType below is consumed
+          # by game-ci's own build script, which a custom buildMethod bypasses). It used to
+          # be passed unconditionally, so selecting 'aab' in the dropdown silently produced
+          # an APK anyway - and Play has required AAB for new apps since 2021, so every
+          # artifact this pipeline made was unpublishable. Now -buildApk is included only
+          # when NOT building an aab. Push and schedule runs carry no input, so build_format
+          # is empty, which is not 'aab', so they stay APK (sideloadable, no keystore needed);
+          # a release AAB is an explicit workflow_dispatch choice.
+          customParameters: -customBuildPath build/Android ${{ github.event.inputs.build_format == 'aab' && ' ' || '-buildApk' }}
           androidExportType: ${{ github.event.inputs.build_format == 'aab' && 'androidAppBundle' || 'androidPackage' }}
           androidKeystoreName: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && 'release.keystore' || '' }}
           androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

@@ -111,10 +111,35 @@ namespace HighwayRenegade.Editor
         /// <summary>
         /// Applies the non-negotiable platform contract from ARCHITECTURE.md / README.
         /// </summary>
+        // Reverse-domain application id. This is the ONE Play Store value that is permanent
+        // and unchangeable once published, so it is set explicitly rather than left for
+        // Unity to synthesise from the company name (which produced a non-deterministic,
+        // space-mangled package id, and com.DefaultCompany.RoadRashCopy on any build that
+        // bypassed this method). CONFIRM this before the first Play upload - after that it
+        // cannot change.
+        private const string ApplicationId = "com.highwayrenegade.game";
+
         private static void ApplyAndroidSettings(bool appBundle)
         {
             PlayerSettings.companyName = "Highway Renegade";
             PlayerSettings.productName = ProductName;
+
+            // Explicit, deterministic package name. See ApplicationId above.
+            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, ApplicationId);
+
+            // versionCode from the CI run number. Play rejects any upload whose versionCode
+            // was used before, so a value hard-pinned to 1 (as it was) allows exactly one
+            // upload ever - every hotfix and every internal-test push rejected. GITHUB_RUN_NUMBER
+            // is monotonic per workflow, which is exactly what Play wants. A local build with
+            // no run number keeps whatever is in ProjectSettings, which is fine for
+            // sideloading and never reaches the store.
+            string runNumber = Environment.GetEnvironmentVariable("GITHUB_RUN_NUMBER");
+            if (!string.IsNullOrEmpty(runNumber) && int.TryParse(runNumber, out int code) && code > 0)
+            {
+                PlayerSettings.Android.bundleVersionCode = code;
+                PlayerSettings.bundleVersion = $"1.0.{code}";
+                Debug.Log($"[Build] versionCode {code}, versionName 1.0.{code}.");
+            }
 
             // Vulkan ONLY. Auto-graphics-API would silently re-add GLES as a fallback,
             // which would quietly invalidate every performance assumption in the design.
@@ -155,6 +180,19 @@ namespace HighwayRenegade.Editor
             EditorUserBuildSettings.buildAppBundle = appBundle;
             EditorUserBuildSettings.androidBuildSubtarget = MobileTextureSubtarget.ASTC;
 
+            // Public native symbols so Play Console's Android Vitals can symbolicate native
+            // crashes. Without this every IL2CPP crash arrives as unsymbolicated hex, and
+            // Play nags on every upload. Public (not full Debugging) keeps the symbol file
+            // small enough to upload without bloating the artifact.
+            EditorUserBuildSettings.androidCreateSymbols = AndroidCreateSymbols.Public;
+
+            // Low, explicitly. IL2CPP strips managed code, and SaveData is (de)serialised
+            // through JsonUtility, which uses reflection - High stripping can remove the
+            // fields it needs and break loading a save on device only, invisible in the
+            // editor. Low is conservative and paired with Assets/link.xml, which preserves
+            // the Core assembly wholesale so the save types survive regardless.
+            PlayerSettings.SetManagedStrippingLevel(NamedBuildTarget.Android, ManagedStrippingLevel.Low);
+
             // Sustained-performance pacing rather than burst-then-throttle.
             // NOTE: androidIsGame is deprecated in favour of PlayerSettings.Android.appCategory,
             // but the AppCategory enum ships with the Android build module rather than the
@@ -165,9 +203,19 @@ namespace HighwayRenegade.Editor
             PlayerSettings.Android.androidIsGame = true;
 #pragma warning restore CS0618
             PlayerSettings.Android.optimizedFramePacing = true;
-            PlayerSettings.defaultInterfaceOrientation = UIOrientation.LandscapeLeft;
 
-            ApplyKeystoreFromEnvironment();
+            // Both landscape orientations, not one. LandscapeLeft-only put the USB-C port on
+            // the wrong side for half of players, so you could not comfortably play while
+            // charging - which is exactly what people do in a long racing session, and a
+            // top cause of one-star reviews for mobile racers. Portrait stays off: the whole
+            // touch scheme is defined in screen halves and would be unplayable rotated.
+            PlayerSettings.defaultInterfaceOrientation = UIOrientation.AutoRotation;
+            PlayerSettings.allowedAutorotateToLandscapeLeft = true;
+            PlayerSettings.allowedAutorotateToLandscapeRight = true;
+            PlayerSettings.allowedAutorotateToPortrait = false;
+            PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
+
+            ApplyKeystoreFromEnvironment(appBundle);
         }
 
         /// <summary>
@@ -185,7 +233,7 @@ namespace HighwayRenegade.Editor
         /// have produced an unsigned build, and an unsigned build cannot go to the Play
         /// Store - the failure would only have shown up at upload time.
         /// </summary>
-        private static void ApplyKeystoreFromEnvironment()
+        private static void ApplyKeystoreFromEnvironment(bool appBundle)
         {
             string keystore = GetArg("-androidKeystoreName")
                            ?? Environment.GetEnvironmentVariable("ANDROID_KEYSTORE_PATH");
@@ -205,10 +253,19 @@ namespace HighwayRenegade.Editor
 
             if (string.IsNullOrEmpty(keystore) || !File.Exists(keystore))
             {
-                // Warning, not Log. A debug-signed package installs fine by sideloading
-                // and is rejected by the Play Store, and that difference is invisible in
-                // the file itself - so it has to be loud at build time rather than
-                // discovered at upload time.
+                // An AAB is a release artifact - the only thing it is for is the Play Store,
+                // and the store rejects a debug-signed upload. Producing one unsigned is a
+                // guaranteed wasted build, so fail here rather than warn and discover it at
+                // upload time. An APK is different: it is the sideload/test format, and a
+                // debug-signed APK installs fine, so that stays a warning.
+                if (appBundle)
+                {
+                    Fail("Release AAB requested but no keystore is configured. Set " +
+                         "ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASS, ANDROID_KEYALIAS_NAME " +
+                         "and ANDROID_KEYALIAS_PASS, or build an APK (-buildApk) for sideloading.");
+                    return;
+                }
+
                 Debug.LogWarning("[Build] UNSIGNED: no release keystore supplied, so this " +
                                  "package is debug-signed. Fine for sideloading; the Play " +
                                  "Store will reject it. Set ANDROID_KEYSTORE_BASE64, " +
