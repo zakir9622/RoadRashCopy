@@ -57,7 +57,7 @@
 
 .rear-view-mirror {
     position: absolute;
-    top: 20px;
+    top: 74px; /* pushed down so the heat pips sit above it at top-centre */
     align-self: center;
     width: 400px;
     height: 80px;
@@ -66,6 +66,40 @@
     border-color: var(--accent);
     border-width: 2px;
     justify-content: center;
+}
+
+/* Police heat: a row of pips at top-centre that light police-blue as the wanted
+   level climbs. Distinct blue so heat never reads as the cyan accent or red damage. */
+.heat-panel {
+    position: absolute;
+    top: 20px;
+    align-self: center;
+    align-items: center;
+}
+
+.heat-label {
+    color: rgb(47, 128, 255);
+    letter-spacing: 3px;
+    margin-bottom: 4px;
+}
+
+.heat-stars {
+    flex-direction: row;
+}
+
+.heat-star {
+    width: 15px;
+    height: 15px;
+    margin-left: 4px;
+    margin-right: 4px;
+    border-radius: 4px;
+    background-color: rgba(255, 255, 255, 0.18);
+    transition-property: background-color;
+    transition-duration: 0.15s;
+}
+
+.heat-star.on {
+    background-color: rgb(47, 128, 255);
 }
 
 .label-small {
@@ -127,4 +161,30 @@
     border-radius: 5px;
     transition-property: width;
     transition-duration: 0.2s;
+}
+
+/* Cash: the money through-line, a warm gold distinct from the cyan accent. */
+.cash-color {
+    color: rgb(255, 197, 61);
+}
+
+/* Nitrous meter: same bar frame as health, but full-width for the wider speed panel
+   and a hot-orange fill so heat/boost reads differently from bike condition. */
+.nitro-bar-bg {
+    width: 100%;
+    height: 10px;
+    background-color: rgba(0, 0, 0, 0.8);
+    border-color: #333333;
+    border-width: 1px;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.nitro-bar-fill {
+    width: 100%;
+    height: 100%;
+    background-color: rgb(255, 122, 24); /* nitro orange */
+    border-radius: 4px;
+    transition-property: width;
+    transition-duration: 0.1s;
 }

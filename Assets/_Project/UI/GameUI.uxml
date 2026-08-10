@@ -23,17 +23,23 @@
             <ui:Label name="DistanceLabel" text="-" class="label-medium" />
         </ui:VisualElement>
 
-        <!-- Top Right: knockouts banked this race -->
+        <!-- Top Right: cash (the through-line) and knockouts banked this race -->
         <ui:VisualElement class="top-right-panel panel">
-            <ui:Label text="KNOCKOUTS" class="label-small" />
+            <ui:Label text="CASH" class="label-small" />
+            <ui:Label name="CashLabel" text="$0" class="label-medium text-right cash-color" />
+            <ui:Label text="KNOCKOUTS" class="label-small mt-2" />
             <ui:Label name="KnockoutLabel" text="0" class="label-medium text-right" />
         </ui:VisualElement>
 
-        <!-- Bottom Right: Speedometer -->
+        <!-- Bottom Right: Speedometer, with the nitrous meter under it (held, drains) -->
         <ui:VisualElement class="bottom-right-panel panel">
             <ui:Label name="SpeedLabel" text="0" class="label-xlarge" />
             <ui:Label text="KM/H" class="label-small text-right" />
             <ui:Label name="GearLabel" text="N" class="label-medium text-right mt-1 accent-color" />
+            <ui:Label text="NITRO" class="label-small text-right mt-2" />
+            <ui:VisualElement class="nitro-bar-bg mt-1">
+                <ui:VisualElement name="NitrousBarFill" class="nitro-bar-fill" />
+            </ui:VisualElement>
         </ui:VisualElement>
 
         <!-- Bottom Left: Health -->
@@ -41,6 +47,18 @@
             <ui:Label text="BIKE CONDITION" class="label-small" />
             <ui:VisualElement class="health-bar-bg mt-1">
                 <ui:VisualElement name="HealthBarFill" class="health-bar-fill" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Top Center: police heat. Pips light as the wanted level climbs. -->
+        <ui:VisualElement class="heat-panel">
+            <ui:Label text="HEAT" class="label-small heat-label" />
+            <ui:VisualElement name="HeatStars" class="heat-stars">
+                <ui:VisualElement class="heat-star" />
+                <ui:VisualElement class="heat-star" />
+                <ui:VisualElement class="heat-star" />
+                <ui:VisualElement class="heat-star" />
+                <ui:VisualElement class="heat-star" />
             </ui:VisualElement>
         </ui:VisualElement>
 
