@@ -185,7 +185,11 @@ namespace HighwayRenegade.Gameplay.AI
             _hasBusted = true;
             Debug.Log("[Police] BUSTED - target apprehended.", this);
 
-            if (_session != null) _session = FindFirstObjectByType<CampaignSession>() ?? _session;
+            // Re-resolve only when the cached reference is missing. The guard was inverted
+            // (`!= null`), so the one case the fallback exists for - Awake's search having
+            // failed - was the one case it refused to run, and the bust fell straight to
+            // the warning below and was never recorded.
+            if (_session == null) _session = FindFirstObjectByType<CampaignSession>();
 
             // SendMessageUpwards used to be used here, which walks the *police unit's* own
             // parents. CampaignSession lives elsewhere in the scene, so the bust was

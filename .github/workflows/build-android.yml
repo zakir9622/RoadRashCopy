@@ -14,6 +14,16 @@ on:
       - 'Assets/_Project/Scenes/**'
       - 'ProjectSettings/EditorBuildSettings.asset'
 
+  # Every push to an open pull request targeting main. This lets a long-lived feature
+  # branch - e.g. one under continuous autonomous development - self-verify on every push
+  # without a manual workflow_dispatch, and surfaces the EditMode/build result directly on
+  # the PR. Same-repo PRs (not forks) get full secrets access, so the Unity licence is
+  # available. Release publishing is gated to the main ref (see "Publish to GitHub
+  # Releases"), so a PR build runs the tests and produces an APK artifact but never cuts a
+  # release. The scene-commit-back step is likewise main-only, so there is no build loop.
+  pull_request:
+    branches: [main]
+
   # Daily scheduled build at 00:00 UTC (No push/commit spam)
   schedule:
     - cron: '0 0 * * *'
@@ -172,10 +182,15 @@ jobs:
       - name: Upload EditMode results
         uses: actions/upload-artifact@v4
         if: always()
+        # Never let a storage-quota hit on this diagnostic XML fail the blocking gate. The
+        # pass/fail is parsed and posted by the step above, before this runs - uploading the
+        # raw results is a convenience for humans, not the gate. A full artifact store once
+        # turned a genuine 228/228 pass into a red EditMode check.
+        continue-on-error: true
         with:
           name: unity-test-results-editmode-${{ github.run_number }}
           path: test-results-editmode
-          retention-days: 14
+          retention-days: 3
 
   test-playmode:
     name: PlayMode Tests (advisory)
@@ -183,9 +198,15 @@ jobs:
     needs: preflight
     # Advisory only: PlayMode entry hangs upstream (game-ci/unity-test-runner#188), so this
     # job is expected to hit the timeout and report 'cancelled' until that is fixed. The
-    # build does not block on it. When upstream recovers, tighten this and promote it to a
+    # build does not block on it. When upstream recovers, raise this and promote it to a
     # blocking gate alongside test-editmode.
-    timeout-minutes: 25
+    #
+    # 12, not 25: the job hangs at PlayMode *entry* and never progresses, so a shorter
+    # timeout confirms the hang just as well while cutting ~13 wasted minutes off every run -
+    # which matters now that each push to the PR triggers a full pipeline. Setup (disk, art,
+    # cache) takes ~1.5-5 min, so this still leaves the PlayMode step ample room to run if
+    # upstream ever recovers.
+    timeout-minutes: 12
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -225,6 +246,13 @@ jobs:
 
       - name: Run PlayMode tests
         uses: game-ci/unity-test-runner@v4
+        # Advisory: PlayMode entry crashes upstream on this Unity/GameCI combo
+        # (game-ci/unity-test-runner#188) - it segfaults (docker exit 139) before any test
+        # runs. continue-on-error keeps that from concluding the job as a red 'failure' that
+        # blocks nothing (the build gates on test-editmode only) yet spams PR check failures.
+        # REMOVE THIS when upstream recovers, so a genuine PlayMode regression fails the job
+        # again, and then promote it to a blocking gate.
+        continue-on-error: true
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE || secrets.UNITY_LICENCE || secrets.UNITY_LICENSE_FILE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}
@@ -239,10 +267,13 @@ jobs:
       - name: Upload PlayMode results
         uses: actions/upload-artifact@v4
         if: always()
+        # Diagnostic only, and this job is advisory anyway - a full artifact store must not
+        # turn it into a hard error.
+        continue-on-error: true
         with:
           name: unity-test-results-playmode-${{ github.run_number }}
           path: test-results-playmode
-          retention-days: 14
+          retention-days: 3
 
   build:
     name: Build Android APK
@@ -337,7 +368,15 @@ jobs:
           targetPlatform: Android
           unityVersion: 6000.0.38f1
           buildMethod: HighwayRenegade.Editor.BuildScript.BuildAndroid
-          customParameters: -customBuildPath build/Android -buildApk
+          # -buildApk is what BuildScript actually reads (androidExportType below is consumed
+          # by game-ci's own build script, which a custom buildMethod bypasses). It used to
+          # be passed unconditionally, so selecting 'aab' in the dropdown silently produced
+          # an APK anyway - and Play has required AAB for new apps since 2021, so every
+          # artifact this pipeline made was unpublishable. Now -buildApk is included only
+          # when NOT building an aab. Push and schedule runs carry no input, so build_format
+          # is empty, which is not 'aab', so they stay APK (sideloadable, no keystore needed);
+          # a release AAB is an explicit workflow_dispatch choice.
+          customParameters: -customBuildPath build/Android ${{ github.event.inputs.build_format == 'aab' && ' ' || '-buildApk' }}
           androidExportType: ${{ github.event.inputs.build_format == 'aab' && 'androidAppBundle' || 'androidPackage' }}
           androidKeystoreName: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && 'release.keystore' || '' }}
           androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -423,17 +462,31 @@ jobs:
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
+        # Skip on pull_request. The build still RUNS on every PR push (so we know it compiles
+        # and produces a package - the verify step above proves that), but storing a ~39 MB
+        # APK on every push is what fills the account's artifact quota, especially with an
+        # hourly automated push cadence. Store the APK only when it is actually wanted: a
+        # manual dispatch (to grab a build to sideload) or a merge to main. The quota then
+        # stops refilling and old builds age out under the shorter retention below.
+        if: ${{ github.event_name != 'pull_request' }}
         with:
           name: RoadRash-Android-${{ github.run_number }}
           path: ${{ steps.package.outputs.path }}
           if-no-files-found: error
-          retention-days: 14
+          # 7, not 14: the APK is ~39 MB and is by far the largest consumer of the artifact
+          # quota. A shorter retention lets old builds age out. Stays fatal on purpose - a
+          # deliverable that cannot be stored is worth surfacing, unlike the diagnostic XMLs.
+          retention-days: 7
 
       - name: Publish to GitHub Releases
         # success(), not !cancelled(): this previously ran even when the build failed,
         # publishing empty GitHub releases with no APK attached ("does not include a
         # valid file") for runs that never produced anything.
-        if: ${{ success() && github.event.inputs.create_release != 'false' }}
+        #
+        # Gated to the main ref as well, so pull_request builds (which have no inputs, hence
+        # an empty create_release that would otherwise read as "not false") test and build
+        # but never cut a release from a feature branch.
+        if: ${{ success() && github.ref == 'refs/heads/main' && github.event.inputs.create_release != 'false' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}

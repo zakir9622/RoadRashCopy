@@ -259,6 +259,14 @@ python3 "$HERE/check-meta-files.py" || FAILED=1
 # absent with no error to explain it. Two of these shipped in this repository.
 python3 "$HERE/check-lfs-pointers.py" || FAILED=1
 
+# Known Play Store release blockers - colour space, back button, package id, versionCode,
+# stripping - each of which shipped broken once and was invisible until read by hand.
+python3 "$HERE/check-release-readiness.py" || FAILED=1
+
+# Temporary debug instrumentation left in a runtime assembly. 41 [Bisect] logs once
+# reached the shipping APK; this makes that a failure rather than a review hope.
+python3 "$HERE/check-no-debug-instrumentation.py" || FAILED=1
+
 echo
 if [[ $PASSES_DONE -ne 2 ]]; then
   err "only $PASSES_DONE of 2 configurations completed - the harness itself failed"

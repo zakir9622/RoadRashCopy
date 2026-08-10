@@ -20,10 +20,12 @@ namespace HighwayRenegade.Gameplay.UI
     /// stops being load-bearing and the bug stops being reachable, in this screen and
     /// every future one.
     ///
-    /// Writes go straight through SettingsManager.Apply, which persists to PlayerPrefs
-    /// and re-applies audio and quality immediately. Per-change rather than on-close, so
-    /// the effect is audible while the slider is still moving and an interrupted session
-    /// cannot lose the adjustment.
+    /// Writes go straight through SettingsManager.Apply, which re-applies audio immediately
+    /// (and quality only when the level actually changes) and records the value to
+    /// PlayerPrefs in memory. Per-change rather than on-close, so the effect is audible while
+    /// the slider is still moving. The disk flush is deferred to the app-background/quit
+    /// lifecycle (SettingsManager.Flush), so dragging a slider does not thrash the disk once
+    /// per frame, while an interrupted session still cannot lose the adjustment.
     /// </summary>
     public static class SettingsBinding
     {

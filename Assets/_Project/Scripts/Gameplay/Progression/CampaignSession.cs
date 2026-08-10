@@ -186,6 +186,16 @@ namespace HighwayRenegade.Gameplay.Progression
 
             RecordResults(position);
             SaveService.Save(_save);
+
+            // Crossing the line has to move the app into PostRace, exactly as a bust does
+            // in OnPlayerBusted. Without this the race set Phase = Finished, computed the
+            // payout, saved - and then left the player on a dead track with the HUD still
+            // up and no results screen, because RaceResultsScreen only shows on the
+            // PostRace state change. GameOver takes precedence: a wrecked, unaffordable
+            // bike is the end of the run, not a results-then-continue.
+            HighwayRenegade.Core.App.GameStateManager.ChangeState(
+                IsGameOver ? HighwayRenegade.Core.App.GameState.GameOver
+                           : HighwayRenegade.Core.App.GameState.PostRace);
         }
 
         /// <summary>

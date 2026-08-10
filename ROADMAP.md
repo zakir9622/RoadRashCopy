@@ -1,129 +1,140 @@
-# Development Roadmap — Project Highway Renegade
+# Development Roadmap — Highway Renegade
 
-Derived from [GAME_DESIGN_DOCUMENT.md](GAME_DESIGN_DOCUMENT.md),
-[ARCHITECTURE.md](ARCHITECTURE.md) and [QA_AND_TESTING_STRATEGY.md](QA_AND_TESTING_STRATEGY.md).
+> Tracks *features and phases*. For risk/debt/quality see [IMPROVEMENTS.md](IMPROVEMENTS.md);
+> for the real design see [ARCHITECTURE.md](ARCHITECTURE.md).
+>
+> An earlier version of this file described a system nobody built — DOTS/ECS traffic,
+> Addressables streaming, a GPU Resident Drawer, "54 tests on Unity 6000.0.81f1". None of
+> that exists and the version numbers were wrong. This version records what the project
+> actually is and where it is actually going.
 
-**Sequencing principle:** the performance envelope (Vulkan, ADPF, zero-alloc pooling) is
-established *before* content volume grows. Retrofitting a zero-allocation policy onto an
-existing codebase costs far more than building to it from commit one.
+**Current state:** Unity **6000.0.38f1** + URP 17, Vulkan-only, ARM64/IL2CPP, Linear colour
+space. **~12k lines of C# across ~75 files, 240+ EditMode tests.** The CI pipeline builds a
+verified ~39 MB APK end to end. The domain layer (`HighwayRenegade.Core`) is pure C# and
+well tested; the MonoBehaviour glue layer is thinner on coverage and is where the remaining
+correctness work lives.
 
-**Current state:** compiles clean on Unity 6000.0.81f1, **54/54 EditMode tests passing**,
-playable test scene generated. Only the APK build is blocked — see [SETUP.md](SETUP.md).
+The sequencing principle is **correctness and shippability first, content second** — a
+racer that forgets your progress or closes on the back button is not improved by more tracks.
 
 ---
 
 ## Phase 0 — Foundation ✅
 
-| # | Deliverable | |
-|---|---|---|
-| 0.1 | Git repo, GitHub remote, Unity `.gitignore`, LFS | ✅ |
-| 0.2 | Unity 6 skeleton, 5 layered assembly definitions | ✅ |
-| 0.3 | CI: Android build + EditMode/PlayMode tests | ✅ |
-| 0.4 | Unity 6000.0.81f1 LTS installed, licence active | ✅ |
-| 0.5 | Headless compile/test/build driver ([Tools/unity.ps1](Tools/unity.ps1)) | ✅ |
+- Git + GitHub + LFS, Unity `.gitignore`
+- Five layered runtime assemblies + two test assemblies, acyclic dependency graph
+- Scenes generated from code (reviewable, rebuildable from a clean clone)
+- CI: Android build + EditMode/PlayMode test jobs on game-ci
+- Headless build/test driver
 
 ---
 
-## Phase 1 — Core Ride Feel ✅ *(tuning pending device testing)*
+## Phase 1 — Correctness ✅
 
-- **1.1** Sphere-cast suspension, spring/damper per wheel ✅
-- **1.2** Arcade-sim handling, speed-sensitive steering falloff ✅
-- **1.3** Rear-wheel drift via grip curve; slip angle derived from velocity ✅
-- **1.4** Custom gravity multiplier + speed-scaled downforce ✅
-- **1.5** Touch (4-finger), gamepad and keyboard input ✅
+The release-blocking correctness defects found in the senior review, all fixed on this
+branch:
 
-> Steering is **emergent** — the front wheel rotates and its grip force yaws the bike,
-> rather than the body's yaw being set directly. Oversteer and counter-steer fall out of
-> the physics rather than being scripted.
-
-**Remaining:** every tuning number is an educated guess until ridden on a device.
-
----
-
-## Phase 2 — Performance Envelope 🔶
-
-- **2.1** Zero-allocation object pool + 6 tests ✅
-- **2.2** ADPF thermal integration via JNI, with hysteresis ✅
-- **2.3** Quality ladder: shadows → resolution → frame rate last ✅
-- **2.4** Addressables + ASTC streaming ⬜
-- **2.5** GPU Resident Drawer ⬜
-
-> Frame rate is spent **last**. In a racer the frame rate *is* the handling feel, so
-> resolution and shadows go first; 30 FPS only at Critical, to avoid an OS kill.
+- **Persistence actually works.** The AES key was 30 bytes (AES accepts 16/24/32), so every
+  save silently threw and was swallowed — the game forgot everything. Key is now derived by
+  SHA-256 (32 bytes by construction) with a length assertion, per-write random IV, and a
+  round-trip test suite that would have caught the original bug instantly.
+- **One save system.** The second, plain-JSON `Core/Progression/SaveSystem.cs` is deleted;
+  `SaveService` is the single source of truth.
+- **App lifecycle.** `AppLifecycle` pauses the race, mutes audio and flushes the save on
+  background/quit, before Android can reap the process.
+- **Back button.** Predictive back is off and the hardware back button reaches the game
+  (pause), rather than closing the app mid-race on API 35.
+- **Race finish reaches the results screen**; `GameOver` is a handled end state, not a
+  soft-lock.
+- One-liner fixes: inverted `PoliceAI` session guard, `NotifyDisarmed` wiring, singleton
+  `Instance` nulling in `OnDestroy`.
 
 ---
 
-## Phase 3 — World & Traffic ⬜
+## Phase 2 — Shippability ✅
 
-- **3.1** Procedural highway splines, generated async ahead of the player
-- **3.2** DOTS/ECS civilian traffic, hundreds of vehicles, no MonoBehaviours
-- **3.3** Biomes: Coastal, Desert, City
-- **3.4** Streaming and culling
+- Renamed to **Highway Renegade** (off the "Road Rash" trademark); explicit
+  `applicationIdentifier`.
+- `versionCode` derived from `GITHUB_RUN_NUMBER` (monotonic — Play rejects a re-used code).
+- CI can build an **AAB** (`-buildApk` is conditional on the format input); release builds
+  fail fast without a keystore rather than shipping debug-signed.
+- **Linear** colour space (PBR/URP renders correctly).
+- Managed stripping set deliberately with a `link.xml` so `JsonUtility` save fields survive
+  on device.
+- Native debug symbols enabled for Play Console crash symbolication.
+- Orientation locked to landscape (both sides).
 
-> Requires re-adding `com.unity.entities` to the manifest — removed in Phase 0 to shrink
-> package-resolution risk before anything depended on it.
-
----
-
-## Phase 4 — Combat ✅ *(visuals pending)*
-
-- **4.1** Animation Rigging IK — hands to handlebars ⬜ *(needs a rigged model)*
-- **4.2** Melee: fists, chain, bat; arc + reach detection ✅
-- **4.3** Weapon stealing ✅
-- **4.4** Impulse knockback, i-frames, damage caps ✅
-
-> Damage scales with **relative** speed. Two riders locked side by side at 200 km/h are
-> stationary with respect to each other, so a punch feels like a punch.
+**Remaining before a first upload:** confirm the final `applicationIdentifier`
+(`com.highwayrenegade.game` is the placeholder — it is *permanent once published*), and app
+icons.
 
 ---
 
-## Phase 5 — Rival AI ✅
+## Phase 3 — Structural refactor 🔶
 
-- **5.1** FSM: Race / Draft / Attack / Evade ✅
-- **5.2** Aggression multiplier — escalates on hits, decays over time, capped ✅
-- **5.3** Police heat system ⬜
-- **5.4** "Busted" sequence ⬜ *(penalty maths done and tested)*
+Deleting duplication rather than patching around it, so the app-layer bug class cannot
+recur.
 
-> The FSM is pure and Unity-free, covered by 17 tests. Entry/exit thresholds are
-> deliberately asymmetric — symmetric ones make rivals flip state every frame at a
-> boundary, which reads as a twitching, broken AI.
-
----
-
-## Phase 6 — Meta & Progression 🔶
-
-- **6.1** Race structure: countdown, standings, finish, payout ✅
-- **6.2** Garage — bike upgrades, weapon purchases ⬜
-- **6.3** Currency persistence / save-load ⬜
-- **6.4** Event tiers and unlocks ⬜
-
----
-
-## Phase 7 — Polish & Ship ⬜
-
-- **7.1** Device fragmentation: phones, foldables, tablets
-- **7.2** Edge-to-edge UI, no letterboxing
-- **7.3** Controller latency validation (Xbox / DualSense)
-- **7.4** Play Console, signed AAB, privacy policy, content rating
-
-> Personal Play accounts need a **12-tester closed test for 14 days** before production.
-> That is calendar time, not engineering time — start it early.
+- ✅ Reset `GameStateManager` statics via `[RuntimeInitializeOnLoadMethod]` (they survive
+  the editor's domain-reload-off, which broke PlayMode test isolation).
+- ✅ Delete `Core/App/SceneLoader.cs`; repoint `MainMenuScreen` at the hardened
+  `GameFlowManager` flow (it refuses to change state when the target scene is missing from
+  the build settings, the desync bug `SceneLoader` had).
+- ⬜ `noEngineReferences: true` on `HighwayRenegade.Core`. The domain layer (Vehicle,
+  Combat, AI, RaceRules, Story, SaveData) is *already* engine-free; only seven files still
+  touch `UnityEngine`. Six of them (`Pooling/*`, `App/GameFlowManager`, `App/GameStateManager`,
+  `App/SettingsManager`, `App/CrashReporter`) are relocatable to Gameplay. The blocker is
+  `Race/TrackSpline`: it is built on `Vector3`/`Mathf` and is referenced by `Race/TrackDefinition`
+  (which must stay in Core as domain data), so the flip needs a pure-vector rewrite of the
+  spline first. Moving the six without that rewrite is churn with no enforcement payoff, so
+  it is deferred as one deliberate change.
+- ⬜ Extract `ISaveStore` behind `SaveService` (test corruption/partial-write/backup
+  recovery without touching disk).
+- ⬜ Extract a pure `CampaignLedger` from `CampaignSession`.
 
 ---
 
-## Known gaps
+## Phase 4 — Performance & feel (device-led) ⬜
+
+- Baseline render scale ~0.75; one AA technique, not MSAA *and* FXAA.
+- Wire `ThermalManager.TierChanged` to the post stack (today it has no subscribers, so the
+  most expensive passes never scale down); restore quality state when a race ends.
+- Route runtime spawners through the existing, tested `ObjectPool<T>`.
+- Debounce settings commits; cache the `PowerManager` JNI ref.
+- **On-device tuning pass.** Every physics number is an educated guess until ridden — the
+  single largest risk to "high end".
+
+---
+
+## Phase 5 — Content & high-end ⬜
+
+- Racing line from `TrackSpline` into `RivalAIController` (**prerequisite** for curved
+  tracks — the AI currently cannot steer through a curve).
+- Route `TrackCatalog` into generation + a track-select screen (4 of 5 tracks are currently
+  unreachable).
+- Campaign event wiring (`_eventId`), so `Campaign.cs` is actually triggered.
+- CC0 art (Kenney / Quaternius / Poly Haven) with per-asset licence vetting; strong
+  lighting/VFX to carry the look.
+- Music + AudioMixer (there is currently no music playback).
+- HUD combat feedback: countdown, weapon, damage direction, police warning, nitrous.
+- Safe-area handling (the NITRO button currently risks the gesture bar).
+
+---
+
+## Known gaps requiring the user / a device
 
 | Gap | Why |
 |---|---|
-| **Art & audio** | All placeholder primitives. Needs an artist or asset packs. |
-| **Device testing** | Frame rate, thermals and touch latency cannot be measured off-device. |
-| **Is it fun?** | Unanswerable without a human riding it. The most important open question. |
-| **PlayMode tests** | Only EditMode so far; physics behaviour is untested in motion. |
+| Physics/handling tuning | Cannot be measured off-device; needs riding. |
+| CC0 model licence vetting | Each asset's licence must be confirmed before shipping. |
+| Final package ID + icons | Package ID is permanent once published; needs a decision. |
+| "Is it fun?" | Unanswerable without a human riding it. |
 
 ---
 
-## Cross-cutting
+## Cross-cutting invariants
 
-- Frametime variance under **2 ms** (QA §1)
-- No `new` in `Update()` / `FixedUpdate()` (Architecture §4)
-- Every merged PR passes CI build + tests
+- No `new` in `Update()` / `FixedUpdate()` on the hot paths.
+- Every push keeps the static checkers and EditMode tests green.
+- PlayMode stays advisory in CI pending the upstream game-ci hang
+  (game-ci/unity-test-runner#188).

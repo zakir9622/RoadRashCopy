@@ -53,11 +53,11 @@ namespace HighwayRenegade.Editor
 
             SerializedWiring.SetRef(menu, "_settings", settings);
 
-            // The flow manager and scene loader survive scene changes, so the menu is the
-            // natural place to create them: it is the first scene the game boots into.
+            // The flow manager survives scene changes, so the menu is the natural place to
+            // create it: it is the first scene the game boots into. It owns scene loading
+            // directly now - the separate SceneLoader that used to live alongside it is gone.
             var flow = new GameObject("GameFlow");
             flow.AddComponent<GameFlowManager>();
-            flow.AddComponent<SceneLoader>();
 
             Save(scene, MainMenuPath);
             return MainMenuPath;

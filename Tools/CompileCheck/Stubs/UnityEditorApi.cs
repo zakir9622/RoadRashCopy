@@ -212,12 +212,17 @@ namespace UnityEditor
         public static UnityEditor.Build.Reporting.BuildReport BuildPlayer(BuildPlayerOptions options) => null;
     }
 
+    public enum AndroidCreateSymbols { Disabled = 0, Public = 1, Debugging = 2 }
+
+    public enum ManagedStrippingLevel { Disabled = 0, Low = 1, Medium = 2, High = 3 }
+
     public static class EditorUserBuildSettings
     {
         public static bool buildAppBundle { get; set; }
         public static MobileTextureSubtarget androidBuildSubtarget { get; set; }
         public static BuildTarget activeBuildTarget { get; }
         public static bool development { get; set; }
+        public static AndroidCreateSymbols androidCreateSymbols { get; set; }
     }
 
     public static class PlayerSettings
@@ -227,6 +232,13 @@ namespace UnityEditor
         public static string bundleVersion { get; set; }
         public static UIOrientation defaultInterfaceOrientation { get; set; }
 
+        public static bool allowedAutorotateToPortrait { get; set; }
+        public static bool allowedAutorotateToPortraitUpsideDown { get; set; }
+        public static bool allowedAutorotateToLandscapeRight { get; set; }
+        public static bool allowedAutorotateToLandscapeLeft { get; set; }
+
+        public static UnityEngine.ColorSpace colorSpace { get; set; }
+
         public static void SetUseDefaultGraphicsAPIs(BuildTarget platform, bool automatic) { }
         public static void SetGraphicsAPIs(BuildTarget platform, GraphicsDeviceType[] apis) { }
         public static GraphicsDeviceType[] GetGraphicsAPIs(BuildTarget platform) => Array.Empty<GraphicsDeviceType>();
@@ -234,6 +246,7 @@ namespace UnityEditor
         public static void SetScriptingBackend(UnityEditor.Build.NamedBuildTarget target, ScriptingImplementation backend) { }
         public static void SetIl2CppCompilerConfiguration(UnityEditor.Build.NamedBuildTarget target, Il2CppCompilerConfiguration config) { }
         public static void SetApplicationIdentifier(UnityEditor.Build.NamedBuildTarget target, string identifier) { }
+        public static void SetManagedStrippingLevel(UnityEditor.Build.NamedBuildTarget target, ManagedStrippingLevel level) { }
 
         public static class Android
         {
@@ -246,6 +259,7 @@ namespace UnityEditor
             public static string keystorePass { get; set; }
             public static string keyaliasName { get; set; }
             public static string keyaliasPass { get; set; }
+            public static int bundleVersionCode { get; set; }
 
             [Obsolete("androidIsGame is deprecated. Use PlayerSettings.Android.appCategory instead.")]
             public static bool androidIsGame { get; set; }

@@ -39,6 +39,21 @@ namespace HighwayRenegade.Platform
             InitializeHaptics();
         }
 
+        // Release the cached JNI references and clear the static. As a DontDestroyOnLoad
+        // singleton this rarely tears down, but "code that happens not to leak" and
+        // "correct JNI code" are different things: the global refs held for the object's
+        // lifetime should be disposed, and Instance should not outlive the object it points
+        // at. Guarded by `== this` so a rejected duplicate cannot clear the live instance.
+        private void OnDestroy()
+        {
+            if (_instance != this) return;
+            _instance = null;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            _vibrator?.Dispose();
+            _vibrationEffectClass?.Dispose();
+#endif
+        }
+
         private void InitializeHaptics()
         {
 #if UNITY_ANDROID && !UNITY_EDITOR

@@ -1,94 +1,79 @@
-# Setup Status
+# Setup & Build
 
-## Done
+> An earlier version of this file described a local Windows install (`D:\Unity\...`,
+> Unity 6000.0.81f1, "23/23 tests", an Android-module UAC blocker). That was one
+> contributor's machine and is not how the project builds. The project builds in CI on
+> game-ci, and that is the source of truth.
 
-| Step | State |
-|---|---|
-| Git repo + GitHub remote + LFS | ✅ |
-| Unity Hub | ✅ `D:\UnityHub\app` (extracted, no admin needed) |
-| Unity **6000.0.81f1** LTS editor | ✅ `D:\Unity\Editors\6000.0.81f1` |
-| Unity licence | ✅ Personal, activated |
-| Package resolution | ✅ all pinned versions resolved |
-| **C# compilation** | ✅ 5 assemblies, 0 errors |
-| **EditMode tests** | ✅ **23 / 23 passing** |
-| Test track scene | ✅ generated, 115 objects, in Build Settings |
-| Android Build Support module | ⛔ **blocked — see below** |
-| APK build | ⏳ blocked on the module |
+## How it actually builds
 
----
+The APK/AAB is produced by GitHub Actions (`.github/workflows/build-android.yml`) using the
+game-ci Docker images — no local Unity install is required to ship. The pipeline:
 
-## 🔴 The one remaining step
+1. **Check Unity credentials** — fails fast if the licence secrets are missing.
+2. **EditMode Tests** (blocking) — a dedicated `testMode: EditMode` invocation. Compiles
+   every assembly (including the Editor assembly, so `BuildScript`'s real Unity API usage is
+   validated) and runs the 240+ tests. **The build gates on this.**
+3. **PlayMode Tests** (advisory) — a separate `testMode: PlayMode` invocation. Kept
+   non-blocking because play-mode entry hangs upstream (game-ci/unity-test-runner#188); it
+   does not block the build.
+4. **Build** — regenerates the scenes from code, applies Android settings via `BuildScript`,
+   and produces the APK (or AAB).
 
-Building an APK needs Unity's **Android Build Support** module, which is not installed.
+Unity version: **6000.0.38f1**. URP 17, Vulkan-only, ARM64, IL2CPP, ASTC, Linear colour
+space, Android minSdk 30 / targetSdk 35.
 
-Every automated attempt failed with the same error:
+## Required CI secrets
 
-```
-[Android Build Support] failed to install.
-Error given: The Windows elevation prompt was cancelled or timed out.
-```
+Set these as GitHub Actions secrets:
 
-Unity's installers declare `requestedExecutionLevel = highestAvailable`, so on an
-administrator account Windows always raises a UAC prompt. UAC runs on the **secure
-desktop**, which no automation can interact with — a deliberate Windows security
-guarantee, not a tooling gap.
+- `UNITY_EMAIL`, `UNITY_PASSWORD`, `UNITY_LICENSE` — Unity Personal licence for CI.
+- For a **signed release** (AAB): `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASS`,
+  `ANDROID_KEYALIAS_NAME`, `ANDROID_KEYALIAS_PASS`. A release build **fails** rather than
+  silently debug-signing when these are absent.
 
-Extraction (which worked for Unity Hub) does not work here: the module installer is a
-newer NSIS variant that 7-Zip cannot unpack.
-
-### Fix it in Unity Hub
-
-1. Open `D:\UnityHub\app\Unity Hub.exe`
-2. **Installs** tab → find **6000.0.81f1** → gear icon → **Add modules**
-3. Tick:
-   - ✅ **Android Build Support**
-     - ✅ OpenJDK
-     - ✅ Android SDK & NDK Tools
-4. **Click Yes on the UAC prompt**
-
-Most components are already downloaded and cached in `D:\Unity\HubDownloads`, so this
-is mostly extraction.
-
-### Then build
+Generate the keystore once and **never lose it** — losing it means you can never update the
+published app:
 
 ```bash
-powershell -ExecutionPolicy Bypass -File D:\RoadRashCopy\Tools\unity.ps1 -Mode build -Apk
+keytool -genkeypair -v -keystore release.keystore -alias highwayrenegade \
+  -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-Output: `D:\RoadRashCopy\build\Android\HighwayRenegade.apk`
+**Never commit the keystore.**
 
----
+## Producing a build
 
-## Everyday commands
+- **APK** (sideload / testing): the default `push`-to-`main` build, or dispatch the workflow
+  with `build_format: apk`.
+- **AAB** (Play Store): dispatch the workflow with `build_format: aab`. Requires the keystore
+  secrets above.
+
+`versionCode` is derived from the workflow run number, so every CI build is monotonically
+newer — Play rejects a re-used `versionCode`.
+
+## Static checks (run locally, no Unity needed)
+
+The `Tools/CompileCheck` harness runs seven licence-free Python checkers plus a Roslyn
+compile against hand-written Unity stubs. The checkers catch the defect classes that shipped
+before (release-readiness regressions, debug instrumentation left in runtime code, broken
+asset/meta references, unreachable components):
 
 ```bash
-powershell -ExecutionPolicy Bypass -File D:\RoadRashCopy\Tools\unity.ps1 -Mode compile
+bash Tools/CompileCheck/compile-check.sh .
 ```
+
+(The Roslyn step needs the .NET SDK; the seven Python checkers run standalone with
+`python3 Tools/CompileCheck/check-*.py .`.)
+
+## Installing on a device
+
+Enable *Developer Options → USB Debugging*, connect by cable, download the APK artifact from
+the workflow run, then:
 
 ```bash
-powershell -ExecutionPolicy Bypass -File D:\RoadRashCopy\Tools\unity.ps1 -Mode test
+adb install -r HighwayRenegade.apk
 ```
-
-Regenerate the test track:
-
-```bash
-& "D:\Unity\Editors\6000.0.81f1\Editor\Unity.exe" -quit -batchmode -nographics -projectPath D:\RoadRashCopy -executeMethod HighwayRenegade.Editor.TestTrackGenerator.Generate -logFile -
-```
-
----
-
-## Installing on your phone
-
-Enable *Developer Options → USB Debugging*, connect by cable, then:
-
-```bash
-adb install -r D:\RoadRashCopy\build\Android\HighwayRenegade.apk
-```
-
-`adb` lives at `D:\Unity\Editors\6000.0.81f1\Editor\Data\PlaybackEngines\AndroidPlayer\SDK\platform-tools\adb.exe`
-once the Android module is installed.
-
----
 
 ## Controls
 
@@ -99,23 +84,10 @@ once the Android module is installed.
 | Touch — right lower | brake |
 | Touch — both pedals | handbrake / power slide |
 | Gamepad | RT throttle, LT brake, left stick steer, A handbrake |
-| Keyboard | W/S throttle+brake, A/D steer, Space handbrake |
+| Keyboard | W/S throttle+brake, A/D steer, Space handbrake, Esc pause/back |
 
----
+## Play Store note
 
-## Play Store (later)
-
-A debug-signed build cannot be published. Generate a release keystore and **never lose it** —
-losing it means you can never update the app:
-
-```bash
-keytool -genkeypair -v -keystore release.keystore -alias highwayrenegade -keyalg RSA -keysize 2048 -validity 10000
-```
-
-Then add `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASS`, `ANDROID_KEYALIAS_NAME`,
-`ANDROID_KEYALIAS_PASS` as GitHub Actions secrets (plus `UNITY_EMAIL`, `UNITY_PASSWORD`,
-`UNITY_LICENSE` for CI). **Never commit the keystore.**
-
-> Note: personal Play developer accounts created after Nov 2023 must run a **closed test
-> with 12 testers for 14 days** before production release. That is calendar time, not
-> engineering time — start it early.
+A personal Play developer account created after Nov 2023 must run a **closed test with 12
+testers for 14 days** before production release. That is calendar time, not engineering
+time — start it early.

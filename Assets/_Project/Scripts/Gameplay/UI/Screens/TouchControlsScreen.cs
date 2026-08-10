@@ -64,8 +64,39 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
             // Screen rects are only knowable after layout, and layout has not run at bind
             // time. GeometryChanged also fires on rotation and on a foldable unfolding,
-            // which is exactly when the mask would otherwise go stale.
-            Root?.RegisterCallback<GeometryChangedEvent>(_ => RefreshMask());
+            // which is exactly when the mask - and the safe-area inset - would otherwise go
+            // stale. Insetting runs first: it re-lays-out the buttons, and RefreshMask must
+            // read their final positions.
+            Root?.RegisterCallback<GeometryChangedEvent>(_ =>
+            {
+                ApplySafeArea();
+                RefreshMask();
+            });
+        }
+
+        /// <summary>
+        /// Pads the overlay in from the notch and the system gesture bar.
+        ///
+        /// The project renders edge to edge, so without this the NITRO button in the
+        /// bottom-right corner lands on the Android gesture region: a thumb swiping up off it
+        /// to hold boost is read as a home gesture and backgrounds the app mid-race. Only this
+        /// interactive overlay is inset - the driving zones and full-bleed art behind it are
+        /// deliberately left alone.
+        /// </summary>
+        private void ApplySafeArea()
+        {
+            if (Root == null) return;
+
+            Rect panel = Root.worldBound;
+            if (panel.width <= 0f || panel.height <= 0f) return;
+
+            PanelInsets insets = SafeAreaUtil.Insets(
+                Screen.safeArea, Screen.width, Screen.height, panel.width, panel.height);
+
+            Root.style.paddingLeft = insets.Left;
+            Root.style.paddingTop = insets.Top;
+            Root.style.paddingRight = insets.Right;
+            Root.style.paddingBottom = insets.Bottom;
         }
 
         protected override void OnDisable()

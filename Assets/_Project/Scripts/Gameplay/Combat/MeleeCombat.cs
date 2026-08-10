@@ -187,6 +187,19 @@ namespace HighwayRenegade.Gameplay.Combat
             // Only trade up. Being "rewarded" with a worse weapon than the one already
             // held would punish the player for winning an exchange.
             SetWeapon(CombatMath.Better(_weapon, taken));
+
+            // Tell the campaign the player disarmed this rival, so the grudge remembers it.
+            // The steal already happens; without this the RaceOutcome's disarmedByPlayer
+            // input stayed permanently false and a stolen bat left no lasting resentment -
+            // half a feature, the mechanic firing but never persisting. Guarded to the
+            // player-attacker / rival-victim case so rivals disarming each other offscreen
+            // do not write to the player's save.
+            if (GetComponent<Bike.PlayerBikeInput>() != null
+                && victim.TryGetComponent(out AI.RivalAIController disarmedRival))
+            {
+                var session = FindFirstObjectByType<Progression.CampaignSession>();
+                if (session != null) session.NotifyDisarmed(disarmedRival);
+            }
         }
 
 #if UNITY_EDITOR

@@ -33,10 +33,12 @@ namespace HighwayRenegade.Core.App
 
         private void Start()
         {
-            // Initial Boot Flow
-            Progression.SaveSystem.Load();
+            // No save load here any more. This used to call the legacy SaveSystem, which
+            // read save.json into a static that nothing else consumed - a second, parallel
+            // save system that never met the real one. The live save is loaded by
+            // CampaignSession through SaveService when a race begins; boot does not need it.
             GameStateManager.ChangeState(GameState.Booting);
-            
+
             // Go to main menu automatically on boot if we are in an initialization scene
             if (SceneManager.GetActiveScene().name != _mainMenuScene && 
                 SceneManager.GetActiveScene().name != _raceScene &&
@@ -68,11 +70,13 @@ namespace HighwayRenegade.Core.App
             StartCoroutine(LoadSceneRoutine(targetScene, GameState.Racing));
         }
         
-        public void FinishRace()
-        {
-            GameStateManager.ChangeState(GameState.PostRace);
-            Progression.SaveSystem.Save();
-        }
+        // FinishRace() removed. It had no callers and was a loaded gun: it wrote the legacy
+        // SaveSystem's default-constructed save to a second file with a non-atomic
+        // File.WriteAllText, so the moment anyone had wired "race finished" to it, it would
+        // have silently written an empty save alongside the real one. The race-finish
+        // transition to PostRace now lives where the result is actually known -
+        // CampaignSession.OnPlayerFinished - which also records the payout and writes the
+        // real save through SaveService.
 
         private IEnumerator LoadSceneRoutine(string sceneName, GameState targetState)
         {
