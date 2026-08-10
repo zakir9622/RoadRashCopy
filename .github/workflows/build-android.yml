@@ -455,15 +455,20 @@ jobs:
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
+        # Skip on pull_request. The build still RUNS on every PR push (so we know it compiles
+        # and produces a package - the verify step above proves that), but storing a ~39 MB
+        # APK on every push is what fills the account's artifact quota, especially with an
+        # hourly automated push cadence. Store the APK only when it is actually wanted: a
+        # manual dispatch (to grab a build to sideload) or a merge to main. The quota then
+        # stops refilling and old builds age out under the shorter retention below.
+        if: ${{ github.event_name != 'pull_request' }}
         with:
           name: RoadRash-Android-${{ github.run_number }}
           path: ${{ steps.package.outputs.path }}
           if-no-files-found: error
-          # 7, not 14: the APK is ~39 MB and, with a build on every PR push, is by far the
-          # largest consumer of the account's artifact storage quota. A shorter retention lets
-          # old builds age out before the store fills. This upload stays fatal on purpose - if
-          # the deliverable genuinely cannot be stored, that is worth surfacing, unlike the
-          # diagnostic test-result XMLs above.
+          # 7, not 14: the APK is ~39 MB and is by far the largest consumer of the artifact
+          # quota. A shorter retention lets old builds age out. Stays fatal on purpose - a
+          # deliverable that cannot be stored is worth surfacing, unlike the diagnostic XMLs.
           retention-days: 7
 
       - name: Publish to GitHub Releases
