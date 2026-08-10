@@ -182,10 +182,15 @@ jobs:
       - name: Upload EditMode results
         uses: actions/upload-artifact@v4
         if: always()
+        # Never let a storage-quota hit on this diagnostic XML fail the blocking gate. The
+        # pass/fail is parsed and posted by the step above, before this runs - uploading the
+        # raw results is a convenience for humans, not the gate. A full artifact store once
+        # turned a genuine 228/228 pass into a red EditMode check.
+        continue-on-error: true
         with:
           name: unity-test-results-editmode-${{ github.run_number }}
           path: test-results-editmode
-          retention-days: 14
+          retention-days: 3
 
   test-playmode:
     name: PlayMode Tests (advisory)
@@ -255,10 +260,13 @@ jobs:
       - name: Upload PlayMode results
         uses: actions/upload-artifact@v4
         if: always()
+        # Diagnostic only, and this job is advisory anyway - a full artifact store must not
+        # turn it into a hard error.
+        continue-on-error: true
         with:
           name: unity-test-results-playmode-${{ github.run_number }}
           path: test-results-playmode
-          retention-days: 14
+          retention-days: 3
 
   build:
     name: Build Android APK
@@ -451,7 +459,12 @@ jobs:
           name: RoadRash-Android-${{ github.run_number }}
           path: ${{ steps.package.outputs.path }}
           if-no-files-found: error
-          retention-days: 14
+          # 7, not 14: the APK is ~39 MB and, with a build on every PR push, is by far the
+          # largest consumer of the account's artifact storage quota. A shorter retention lets
+          # old builds age out before the store fills. This upload stays fatal on purpose - if
+          # the deliverable genuinely cannot be stored, that is worth surfacing, unlike the
+          # diagnostic test-result XMLs above.
+          retention-days: 7
 
       - name: Publish to GitHub Releases
         # success(), not !cancelled(): this previously ran even when the build failed,
