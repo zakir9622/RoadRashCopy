@@ -50,6 +50,18 @@
             </ui:VisualElement>
         </ui:VisualElement>
 
+        <!-- Top Center: police heat. Pips light as the wanted level climbs. -->
+        <ui:VisualElement class="heat-panel">
+            <ui:Label text="HEAT" class="label-small heat-label" />
+            <ui:VisualElement name="HeatStars" class="heat-stars">
+                <ui:VisualElement class="heat-star" />
+                <ui:VisualElement class="heat-star" />
+                <ui:VisualElement class="heat-star" />
+                <ui:VisualElement class="heat-star" />
+                <ui:VisualElement class="heat-star" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
         <!-- Center: Rear View Mirror (Placeholder for render texture) -->
         <ui:VisualElement class="rear-view-mirror panel">
             <ui:Label text="REAR VIEW" class="label-small center-text" />
