@@ -17,6 +17,23 @@ correctness work lives.
 The sequencing principle is **correctness and shippability first, content second** — a
 racer that forgets your progress or closes on the back button is not improved by more tracks.
 
+## Post-merge status (2026-08-10)
+
+The hardening pass (Phases 0–2, guardrails, docs, and the partial Phase 3/4/5 items below)
+is **merged to `main`**. The pipeline is green and self-verifying on every PR. Next-phase
+work continues on a fresh branch off `main`.
+
+**Next up, in order:**
+1. **Content reachability** — the biggest gap between "shippable" and "a game": wire
+   `CampaignSession._eventId` and a track/event selection so `Campaign.cs` and 4-of-5
+   `TrackCatalog` tracks are actually reachable, and give ranking a real distance-along-spline
+   via `TrackProgress.SetSpline`. All unit-testable.
+2. **The `noEngineReferences: true` refactor** — a pure-vector rewrite of `TrackSpline`, then
+   relocate the six remaining engine-coupled `Core` files to Gameplay, then flip the flag so
+   the pure boundary is compiler-enforced forever. Done as one deliberate, CI-verified change.
+3. **Device-led items** (need the user): on-device physics/handling tuning, render-budget
+   baseline, CC0 art + icons, permanent package-ID confirmation, music.
+
 ---
 
 ## Phase 0 — Foundation ✅
