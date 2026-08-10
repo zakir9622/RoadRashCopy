@@ -188,3 +188,57 @@
     transition-property: width;
     transition-duration: 0.1s;
 }
+
+/* Live standings, stacked under the cash/knockouts panel on the right. */
+.standings-panel {
+    position: absolute;
+    top: 176px;
+    right: 30px;
+    width: 180px;
+}
+
+.standing-row {
+    font-size: 14px;
+    color: #dddddd;
+    letter-spacing: 1px;
+    -unity-font-style: bold;
+    margin-top: 2px;
+}
+
+.standing-row.you {
+    color: var(--accent);
+}
+
+/* Damage direction flash: a red glow down the screen edge a hit came from. Opacity is
+   0 at rest and pulsed by the HUD, then faded back down. USS has no gradients, so this is
+   a solid translucent edge band rather than a soft falloff. */
+.damage-flash {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 160px;
+    opacity: 0;
+    background-color: rgba(255, 59, 78, 0.5);
+}
+
+.damage-flash--left {
+    left: 0;
+}
+
+.damage-flash--right {
+    right: 0;
+}
+
+/* Start countdown, big and centred. Display is toggled by the HUD; only shown during
+   the countdown phase and the brief GO! flash. */
+.countdown-label {
+    position: absolute;
+    align-self: center;
+    top: 28%;
+    font-size: 120px;
+    color: #ffffff;
+    -unity-font-style: bold;
+    -unity-text-align: middle-center;
+    -unity-text-outline-width: 3px;
+    -unity-text-outline-color: rgba(0, 0, 0, 0.6);
+}
