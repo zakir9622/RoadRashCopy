@@ -5,7 +5,7 @@ it operates under. Each firing appends one dated line. The loop reads this file 
 records that the mission is complete, future firings no-op until the hard-stop date.
 
 ## Guardrails the loop runs under
-- **Branch/PR:** works only on `main-vzvo95`, the single open PR #5. Never merges.
+- **Branch/PR:** works only on `main-vzvo95`, the single open PR #6. Never merges.
 - **Hard stop:** does nothing on or after **2026-08-24**.
 - **Cadence:** every 4 hours.
 - **Scope:** low-risk, statically-verifiable work only — EditMode unit tests, guardrail
@@ -17,6 +17,11 @@ records that the mission is complete, future firings no-op until the hard-stop d
   push; CI (EditMode gate + Android build) runs automatically on every push to the PR.
 
 ## Entries
+- 2026-08-10 — PR #5 (the hardening pass) MERGED to main. Next-phase work restarted on a
+  fresh `main-vzvo95` off main, tracked by PR #6. Loop repointed to PR #6. Next-phase order
+  (see ROADMAP): content reachability, then the `noEngineReferences` refactor, then
+  device-led items — the first two are human-session work (multi-file / CI-verified), so the
+  loop stays on safe increments (tests, checkers, docs, dead-code, tiny wiring).
 - 2026-08-10 — Loop bounded and scoped (this session). Baseline: PR #5 green on `e403945`
   (EditMode + Android build success). Remaining autonomous candidates: wire `_eventId`,
   `TrackProgress.SetSpline`, `TrackCatalog` into production, and a unit-tested racing-line
