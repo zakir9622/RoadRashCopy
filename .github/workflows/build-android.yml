@@ -246,6 +246,13 @@ jobs:
 
       - name: Run PlayMode tests
         uses: game-ci/unity-test-runner@v4
+        # Advisory: PlayMode entry crashes upstream on this Unity/GameCI combo
+        # (game-ci/unity-test-runner#188) - it segfaults (docker exit 139) before any test
+        # runs. continue-on-error keeps that from concluding the job as a red 'failure' that
+        # blocks nothing (the build gates on test-editmode only) yet spams PR check failures.
+        # REMOVE THIS when upstream recovers, so a genuine PlayMode regression fails the job
+        # again, and then promote it to a blocking gate.
+        continue-on-error: true
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE || secrets.UNITY_LICENCE || secrets.UNITY_LICENSE_FILE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}
