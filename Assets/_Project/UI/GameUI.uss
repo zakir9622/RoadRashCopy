@@ -128,3 +128,29 @@
     transition-property: width;
     transition-duration: 0.2s;
 }
+
+/* Cash: the money through-line, a warm gold distinct from the cyan accent. */
+.cash-color {
+    color: rgb(255, 197, 61);
+}
+
+/* Nitrous meter: same bar frame as health, but full-width for the wider speed panel
+   and a hot-orange fill so heat/boost reads differently from bike condition. */
+.nitro-bar-bg {
+    width: 100%;
+    height: 10px;
+    background-color: rgba(0, 0, 0, 0.8);
+    border-color: #333333;
+    border-width: 1px;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.nitro-bar-fill {
+    width: 100%;
+    height: 100%;
+    background-color: rgb(255, 122, 24); /* nitro orange */
+    border-radius: 4px;
+    transition-property: width;
+    transition-duration: 0.1s;
+}

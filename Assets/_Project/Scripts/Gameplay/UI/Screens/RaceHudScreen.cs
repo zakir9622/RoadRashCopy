@@ -7,7 +7,8 @@ using HighwayRenegade.Gameplay.Race;
 namespace HighwayRenegade.Gameplay.UI.Screens
 {
     /// <summary>
-    /// In-race HUD over GameUI.uxml: speed, gear, health, position and lap.
+    /// In-race HUD over GameUI.uxml: speed, gear, bike condition, nitrous, position, distance
+    /// to the finish, knockouts and cash.
     ///
     /// Finds the player itself rather than waiting to be wired in the scene. The HUD is
     /// created by the track generator alongside the bike, and a serialized reference into
@@ -28,7 +29,9 @@ namespace HighwayRenegade.Gameplay.UI.Screens
         private Label _position;
         private Label _distance;
         private Label _knockouts;
+        private Label _cash;
         private VisualElement _healthFill;
+        private VisualElement _nitrousFill;
 
         private BikeController _bike;
         private Damageable _health;
@@ -42,7 +45,9 @@ namespace HighwayRenegade.Gameplay.UI.Screens
         private int _lastPosition = int.MinValue;
         private int _lastDistance = int.MinValue;
         private int _lastKnockouts = int.MinValue;
+        private int _lastCash = int.MinValue;
         private float _lastHealth = -1f;
+        private int _lastNitrous = int.MinValue;
 
         protected override void OnBind()
         {
@@ -52,6 +57,8 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             _position = Optional<Label>("PositionLabel");
             _distance = Optional<Label>("DistanceLabel");
             _knockouts = Optional<Label>("KnockoutLabel");
+            _cash = Optional<Label>("CashLabel");
+            _nitrousFill = Optional<VisualElement>("NitrousBarFill");
 
             AcquirePlayer();
         }
@@ -78,7 +85,21 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
             UpdateSpeedAndGear();
             UpdateHealth();
+            UpdateNitrous();
             UpdateRacePosition();
+        }
+
+        private void UpdateNitrous()
+        {
+            if (_nitrousFill == null) return;
+
+            // Quantised to whole percent so the width is only rewritten when the meter has
+            // visibly moved, not on every frame it drains a fraction.
+            int pct = Mathf.RoundToInt(_bike.Nitrous01 * 100f);
+            if (pct == _lastNitrous) return;
+
+            _lastNitrous = pct;
+            _nitrousFill.style.width = new Length(pct, LengthUnit.Percent);
         }
 
         private void UpdateSpeedAndGear()
@@ -146,6 +167,16 @@ namespace HighwayRenegade.Gameplay.UI.Screens
                 {
                     _lastKnockouts = downed;
                     _knockouts.text = NumberText.Of(downed);
+                }
+            }
+
+            if (_session != null && _session.Save != null && _cash != null)
+            {
+                int currency = _session.Save.Currency;
+                if (currency != _lastCash)
+                {
+                    _lastCash = currency;
+                    _cash.text = "$" + NumberText.Of(currency);
                 }
             }
         }

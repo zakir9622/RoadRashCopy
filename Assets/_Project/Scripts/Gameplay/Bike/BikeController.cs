@@ -162,6 +162,12 @@ namespace HighwayRenegade.Gameplay.Bike
         /// <summary>Current gear, zero-based.</summary>
         public int Gear => _gear;
 
+        /// <summary>Nitrous remaining as 0..1, for the HUD meter. Full when a fresh charge is
+        /// ready, draining to empty as it is held.</summary>
+        public float Nitrous01 => _maxNitrousTime > 0f
+            ? Mathf.Clamp01(_remainingNitrous / _maxNitrousTime)
+            : 0f;
+
         /// <summary>Engine speed, rpm. Drives the tacho and engine audio pitch.</summary>
         public float EngineRpm => _engineRpm;
 
