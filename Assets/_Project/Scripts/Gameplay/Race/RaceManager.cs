@@ -193,6 +193,26 @@ namespace HighwayRenegade.Gameplay.Race
             return 0;
         }
 
+        /// <summary>
+        /// The bike currently in the given 1-based standings slot (1 = leader), or null if
+        /// the slot is out of range or standings have not been computed yet.
+        ///
+        /// Reads the already-ranked snapshot buffer, so the HUD can list the field in order
+        /// without re-sorting or allocating.
+        /// </summary>
+        public BikeController RacerInSlot(int slotOneBased)
+        {
+            int rank = slotOneBased - 1;
+            if (rank < 0 || rank >= _snapshots.Length) return null;
+
+            int id = _snapshots[rank].Id;
+            return (id >= 0 && id < _racers.Length) ? _racers[id] : null;
+        }
+
+        /// <summary>True if the given bike is the player's, for highlighting their row.</summary>
+        public bool IsPlayerBike(BikeController bike) =>
+            _playerIndex >= 0 && _playerIndex < _racers.Length && bike == _racers[_playerIndex];
+
         /// <summary>Distance from the player to the finish line, metres. Never negative.</summary>
         public float PlayerDistanceRemaining()
         {

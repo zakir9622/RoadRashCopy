@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UIElements;
 using HighwayRenegade.Core.AI;
+using HighwayRenegade.Core.Race;
 using HighwayRenegade.Gameplay.AI;
 using HighwayRenegade.Gameplay.Bike;
 using HighwayRenegade.Gameplay.Combat;
@@ -10,7 +11,8 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 {
     /// <summary>
     /// In-race HUD over GameUI.uxml: speed, gear, bike condition, nitrous, position, distance
-    /// to the finish, knockouts and cash.
+    /// to the finish, knockouts, cash, police heat, live standings, a start countdown, and a
+    /// damage-direction edge flash.
     ///
     /// Finds the player itself rather than waiting to be wired in the scene. The HUD is
     /// created by the track generator alongside the bike, and a serialized reference into
@@ -35,6 +37,25 @@ namespace HighwayRenegade.Gameplay.UI.Screens
         private VisualElement _healthFill;
         private VisualElement _nitrousFill;
         private VisualElement _heatStars;
+        private Label _countdown;
+        private VisualElement _standingsList;
+        private VisualElement _flashLeft;
+        private VisualElement _flashRight;
+
+        // Countdown display state.
+        private RacePhase _lastPhase = RacePhase.Staging;
+        private float _goUntil;
+        private string _lastCountdownText;
+
+        // Damage-flash: current glow level per side (1 on a hit, decaying to 0).
+        private const float FlashFadeSeconds = 0.4f;
+        private float _flashLeftLevel, _flashRightLevel;
+        private float _flashLeftApplied = -1f, _flashRightApplied = -1f;
+        private Damageable _subscribedHealth;
+
+        // Standings refresh throttle - positions do not change fast enough for every frame.
+        private const float StandingsInterval = 0.4f;
+        private float _nextStandingsRefresh;
 
         // Heat tuning. Range roughly matches the police escape distance, so the stars track
         // the same "a cop is on me" pressure the pursuit itself uses.
@@ -72,6 +93,10 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             _cash = Optional<Label>("CashLabel");
             _nitrousFill = Optional<VisualElement>("NitrousBarFill");
             _heatStars = Optional<VisualElement>("HeatStars");
+            _countdown = Optional<Label>("CountdownLabel");
+            _standingsList = Optional<VisualElement>("StandingsList");
+            _flashLeft = Optional<VisualElement>("DamageFlashLeft");
+            _flashRight = Optional<VisualElement>("DamageFlashRight");
 
             AcquirePlayer();
         }
@@ -89,6 +114,22 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             // The generator builds the cops alongside the bike, so this catches them in the
             // same acquisition. An empty result just means no police on this track.
             _police = FindObjectsByType<PoliceAI>(FindObjectsSortMode.None);
+
+            // Subscribe once for the damage-direction flash. Re-resolving the player (the
+            // retry loop below) must not stack handlers, so drop any prior subscription first.
+            if (_health != _subscribedHealth)
+            {
+                if (_subscribedHealth != null) _subscribedHealth.DamagedBySource -= OnPlayerDamaged;
+                if (_health != null) _health.DamagedBySource += OnPlayerDamaged;
+                _subscribedHealth = _health;
+            }
+        }
+
+        protected override void OnDisable()
+        {
+            if (_subscribedHealth != null) _subscribedHealth.DamagedBySource -= OnPlayerDamaged;
+            _subscribedHealth = null;
+            base.OnDisable();
         }
 
         private void Update()
@@ -104,7 +145,111 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             UpdateHealth();
             UpdateNitrous();
             UpdateHeat();
+            UpdateCountdown();
+            UpdateDamageFlash();
+            UpdateStandings();
             UpdateRacePosition();
+        }
+
+        private void UpdateCountdown()
+        {
+            if (_countdown == null || _race == null) return;
+
+            RacePhase phase = _race.Phase;
+
+            // Catch the countdown->racing transition so GO! flashes exactly once at the off.
+            if (_lastPhase == RacePhase.Countdown && phase == RacePhase.Racing)
+                _goUntil = Time.time + 0.8f;
+            _lastPhase = phase;
+
+            string text;
+            if (phase == RacePhase.Countdown)
+            {
+                int n = _race.CountdownRemaining;
+                text = n > 0 ? NumberText.Of(n) : "GO!";
+            }
+            else if (Time.time < _goUntil)
+            {
+                text = "GO!";
+            }
+            else
+            {
+                text = null; // hidden outside the start sequence
+            }
+
+            if (text == _lastCountdownText) return;
+            _lastCountdownText = text;
+
+            if (text == null)
+            {
+                _countdown.style.display = DisplayStyle.None;
+            }
+            else
+            {
+                _countdown.style.display = DisplayStyle.Flex;
+                _countdown.text = text;
+            }
+        }
+
+        private void OnPlayerDamaged(float amount, GameObject source)
+        {
+            // A hit with no known source lights both edges; otherwise the side the attacker
+            // is on in the bike's own frame.
+            if (source == null || _bike == null)
+            {
+                _flashLeftLevel = _flashRightLevel = 1f;
+                return;
+            }
+
+            Vector3 local = _bike.transform.InverseTransformPoint(source.transform.position);
+            if (local.x < 0f) _flashLeftLevel = 1f;
+            else _flashRightLevel = 1f;
+        }
+
+        private void UpdateDamageFlash()
+        {
+            _flashLeftLevel = Mathf.Max(0f, _flashLeftLevel - Time.deltaTime / FlashFadeSeconds);
+            _flashRightLevel = Mathf.Max(0f, _flashRightLevel - Time.deltaTime / FlashFadeSeconds);
+
+            // Only touch the style when the level actually changed, so a settled (0) flash
+            // stops dirtying the visual tree every frame.
+            if (_flashLeft != null && !Mathf.Approximately(_flashLeftLevel, _flashLeftApplied))
+            {
+                _flashLeftApplied = _flashLeftLevel;
+                _flashLeft.style.opacity = _flashLeftLevel;
+            }
+            if (_flashRight != null && !Mathf.Approximately(_flashRightLevel, _flashRightApplied))
+            {
+                _flashRightApplied = _flashRightLevel;
+                _flashRight.style.opacity = _flashRightLevel;
+            }
+        }
+
+        private void UpdateStandings()
+        {
+            if (_standingsList == null || _race == null) return;
+            if (Time.time < _nextStandingsRefresh) return;
+            _nextStandingsRefresh = Time.time + StandingsInterval;
+
+            int slot = 1;
+            foreach (VisualElement child in _standingsList.Children())
+            {
+                if (!(child is Label row)) { slot++; continue; }
+
+                BikeController bike = _race.RacerInSlot(slot);
+                if (bike == null)
+                {
+                    row.style.display = DisplayStyle.None;
+                }
+                else
+                {
+                    bool isPlayer = _race.IsPlayerBike(bike);
+                    row.style.display = DisplayStyle.Flex;
+                    row.text = slot + "  " + (isPlayer ? "YOU" : bike.gameObject.name);
+                    row.EnableInClassList("you", isPlayer);
+                }
+                slot++;
+            }
         }
 
         private void UpdateHeat()

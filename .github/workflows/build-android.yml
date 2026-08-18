@@ -202,11 +202,13 @@ jobs:
     # blocking gate alongside test-editmode.
     #
     # 12, not 25: the job hangs at PlayMode *entry* and never progresses, so a shorter
-    # timeout confirms the hang just as well while cutting ~13 wasted minutes off every run -
-    # which matters now that each push to the PR triggers a full pipeline. Setup (disk, art,
-    # cache) takes ~1.5-5 min, so this still leaves the PlayMode step ample room to run if
-    # upstream ever recovers.
-    timeout-minutes: 12
+    # This job-level timeout is only a safety net. The real bound is the step-level timeout on
+    # "Run PlayMode tests" below, because a *step* that times out is a tolerable failure under
+    # continue-on-error (job stays green/advisory), whereas a *job* that hits this limit is
+    # CANCELLED - and a cancelled job is not caught by continue-on-error, so the whole run
+    # reported "cancelled" whenever PlayMode hung to the limit instead of crashing early. Keep
+    # this comfortably above the step timeout so the step always fires first.
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
@@ -246,13 +248,17 @@ jobs:
 
       - name: Run PlayMode tests
         uses: game-ci/unity-test-runner@v4
-        # Advisory: PlayMode entry crashes upstream on this Unity/GameCI combo
-        # (game-ci/unity-test-runner#188) - it segfaults (docker exit 139) before any test
-        # runs. continue-on-error keeps that from concluding the job as a red 'failure' that
-        # blocks nothing (the build gates on test-editmode only) yet spams PR check failures.
-        # REMOVE THIS when upstream recovers, so a genuine PlayMode regression fails the job
-        # again, and then promote it to a blocking gate.
+        # Advisory: PlayMode entry breaks upstream on this Unity/GameCI combo
+        # (game-ci/unity-test-runner#188) - it either segfaults (docker exit 139) or hangs
+        # before any test runs. continue-on-error tolerates both so the advisory job never
+        # blocks the build (which gates on test-editmode only) nor spams red PR checks.
+        #
+        # The step-level timeout is what makes the HANG case behave: a step that exceeds its
+        # own timeout is a step FAILURE, which continue-on-error swallows -> job stays green.
+        # (Relying on the job timeout instead cancels the whole run, which continue-on-error
+        # cannot catch.) REMOVE both when upstream recovers and promote this to a real gate.
         continue-on-error: true
+        timeout-minutes: 8
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE || secrets.UNITY_LICENCE || secrets.UNITY_LICENSE_FILE }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL || secrets.UNITY_USERNAME }}

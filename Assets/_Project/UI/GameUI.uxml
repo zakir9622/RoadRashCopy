@@ -66,5 +66,27 @@
         <ui:VisualElement class="rear-view-mirror panel">
             <ui:Label text="REAR VIEW" class="label-small center-text" />
         </ui:VisualElement>
+
+        <!-- Right: live standings, filled top-down from the leader. Rows past the grid
+             size are hidden by the HUD. -->
+        <ui:VisualElement class="standings-panel panel">
+            <ui:Label text="STANDINGS" class="label-small" />
+            <ui:VisualElement name="StandingsList" class="standings-list mt-1">
+                <ui:Label class="standing-row" />
+                <ui:Label class="standing-row" />
+                <ui:Label class="standing-row" />
+                <ui:Label class="standing-row" />
+                <ui:Label class="standing-row" />
+                <ui:Label class="standing-row" />
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- Damage direction flashes: a screen-edge glow on the side a hit came from.
+             Driven to transparent by default; the HUD pulses opacity on a hit. -->
+        <ui:VisualElement name="DamageFlashLeft" class="damage-flash damage-flash--left" />
+        <ui:VisualElement name="DamageFlashRight" class="damage-flash damage-flash--right" />
+
+        <!-- Center: start countdown (3 / 2 / 1 / GO!). Hidden outside the countdown. -->
+        <ui:Label name="CountdownLabel" text="" class="countdown-label" />
     </ui:VisualElement>
 </ui:UXML>
