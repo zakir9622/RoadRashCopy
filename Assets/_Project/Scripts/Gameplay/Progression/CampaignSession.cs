@@ -58,6 +58,18 @@ namespace HighwayRenegade.Gameplay.Progression
 
         private int[] _playerWreckedByRival = System.Array.Empty<int>();
 
+        /// <summary>
+        /// Event id the next race should run as, set by the menu when the player picks
+        /// CAMPAIGN. The race scene is generated and cannot be wired in the inspector, so the
+        /// id rides in through this static and is consumed once in <see cref="Awake"/>.
+        /// </summary>
+        public static string PendingEventId;
+
+        // Static state survives the editor's domain-reload-off, so a stale pending id could
+        // otherwise turn the next free run into whatever campaign event was last queued.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => PendingEventId = null;
+
         /// <summary>The loaded save. Never null after Awake.</summary>
         public SaveData Save => _save;
 
@@ -94,6 +106,14 @@ namespace HighwayRenegade.Gameplay.Progression
         private void Awake()
         {
             _save = _startFresh ? new SaveData() : SaveService.Load();
+
+            // Adopt the event the menu queued, unless this session was authored with a fixed
+            // event id already. Cleared after reading so a subsequent race started without
+            // picking an event is a free run, not a repeat of the last campaign event.
+            if (string.IsNullOrEmpty(_eventId) && !string.IsNullOrEmpty(PendingEventId))
+                _eventId = PendingEventId;
+            PendingEventId = null;
+
             Campaign.EnsureRivalsRegistered(_save);
         }
 
@@ -149,11 +169,18 @@ namespace HighwayRenegade.Gameplay.Progression
             _disarmed = new bool[n];
             _playerWreckedByRival = new int[n];
 
+            // A campaign event names the riders on its grid; a free run has no event, so the
+            // roster order is the fallback pairing for the placeholder track's generic
+            // "Rival 1/2/3" objects.
+            string[] gridIds = Campaign.FindEvent(_eventId)?.RivalIds;
+
             for (int i = 0; i < n; i++)
             {
-                // Roster order is the fallback pairing for the placeholder track, which has
-                // generic "Rival 1/2/3" objects rather than named campaign riders.
-                RivalDefinition def = i < Campaign.Roster.Length ? Campaign.Roster[i] : null;
+                RivalDefinition def;
+                if (gridIds != null)
+                    def = i < gridIds.Length ? Campaign.FindRival(gridIds[i]) : null;
+                else
+                    def = i < Campaign.Roster.Length ? Campaign.Roster[i] : null;
                 if (def == null) continue;
 
                 RivalRecord record = _save.GetOrCreateRival(def.Id, def.Name);

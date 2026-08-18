@@ -152,6 +152,32 @@ namespace HighwayRenegade.Core.Story
             => index >= 0 && index < Chapters.Length ? Chapters[index] : null;
 
         /// <summary>
+        /// The event the campaign should load next: the first unlocked event the player has
+        /// not yet won. When every unlocked event is already won (the player has caught up and
+        /// is between chapters, or has finished the campaign), returns the first unlocked event
+        /// so CAMPAIGN always has something to play - a replay for money. Null only when there
+        /// is no save.
+        ///
+        /// This is what makes the authored campaign reachable: the menu picks the next event
+        /// with it and hands the id to the race, so progress is recorded instead of every race
+        /// being an anonymous free run.
+        /// </summary>
+        public static RaceEvent NextEvent(SaveData save)
+        {
+            if (save == null) return null;
+
+            RaceEvent firstAvailable = null;
+            for (int i = 0; i < Events.Length; i++)
+            {
+                if (Events[i].ChapterIndex > save.ChapterIndex) continue;   // chapter still locked
+                if (firstAvailable == null) firstAvailable = Events[i];
+                if (!save.HasCompleted(Events[i].Id)) return Events[i];      // first one not yet won
+            }
+
+            return firstAvailable;   // all unlocked events won -> replay the first
+        }
+
+        /// <summary>
         /// Events available to the player right now: everything in unlocked chapters,
         /// including ones already won so they can be replayed for money.
         /// </summary>

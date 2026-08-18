@@ -1,5 +1,7 @@
 using UnityEngine;
 using HighwayRenegade.Core.App;
+using HighwayRenegade.Core.Story;
+using HighwayRenegade.Gameplay.Progression;
 
 namespace HighwayRenegade.Gameplay.UI.Screens
 {
@@ -38,6 +40,13 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
         private void StartCampaign()
         {
+            // Pick the next campaign event so the race records progress (purse, chapter
+            // advance, gatekeeper) instead of being an anonymous free run. The generated race
+            // scene reads this through CampaignSession.PendingEventId. A null next event (no
+            // save) just falls through to a free run, which is the previous behaviour.
+            RaceEvent next = Campaign.NextEvent(SaveService.Load());
+            CampaignSession.PendingEventId = next?.Id;
+
             // GameFlowManager owns scene loading. It is the hardened path: it refuses to
             // change state when the target scene is missing from the build settings, rather
             // than desyncing game state from the loaded scene (the failure the deleted

@@ -202,6 +202,59 @@ namespace HighwayRenegade.Tests.EditMode
             Assert.AreEqual(Campaign.Chapters.Length - 1, save.ChapterIndex);
         }
 
+        // --- Next event selection (what makes CAMPAIGN reachable) ---
+
+        [Test]
+        public void NextEventIsNullWithoutASave()
+        {
+            Assert.IsNull(Campaign.NextEvent(null));
+        }
+
+        [Test]
+        public void NextEventStartsAtTheFirstEvent()
+        {
+            var save = new SaveData();
+            RaceEvent next = Campaign.NextEvent(save);
+
+            Assert.IsNotNull(next);
+            Assert.AreEqual("c0_r1", next.Id, "A fresh campaign should open on the first event.");
+        }
+
+        [Test]
+        public void NextEventAdvancesAsEventsAreWon()
+        {
+            var save = new SaveData { ChapterIndex = 0 };
+            save.MarkCompleted("c0_r1");
+
+            Assert.AreEqual("c0_r2", Campaign.NextEvent(save).Id,
+                "With the first event won, the next unwon unlocked event should be offered.");
+        }
+
+        [Test]
+        public void NextEventNeverOffersALockedChapter()
+        {
+            // Chapter 0 fully won but not advanced: chapter 1 is still locked, so NextEvent
+            // must fall back to a replay within chapter 0 rather than leak a locked event.
+            var save = new SaveData { ChapterIndex = 0 };
+            save.MarkCompleted("c0_r1");
+            save.MarkCompleted("c0_r2");
+
+            RaceEvent next = Campaign.NextEvent(save);
+            Assert.AreEqual(0, next.ChapterIndex, "A locked chapter's event must not be offered.");
+            Assert.AreEqual("c0_r1", next.Id, "All unlocked events won -> replay the first.");
+        }
+
+        [Test]
+        public void NextEventFollowsChapterUnlocks()
+        {
+            var save = new SaveData { ChapterIndex = 1 };
+            save.MarkCompleted("c0_r1");
+            save.MarkCompleted("c0_r2");
+
+            Assert.AreEqual("c1_r1", Campaign.NextEvent(save).Id,
+                "Once chapter 1 is unlocked, its first unwon event is next.");
+        }
+
         // --- Roster seeding ---
 
         [Test]

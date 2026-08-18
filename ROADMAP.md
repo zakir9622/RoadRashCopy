@@ -24,10 +24,13 @@ is **merged to `main`**. The pipeline is green and self-verifying on every PR. N
 work continues on a fresh branch off `main`.
 
 **Next up, in order:**
-1. **Content reachability** — the biggest gap between "shippable" and "a game": wire
-   `CampaignSession._eventId` and a track/event selection so `Campaign.cs` and 4-of-5
-   `TrackCatalog` tracks are actually reachable, and give ranking a real distance-along-spline
-   via `TrackProgress.SetSpline`. All unit-testable.
+1. **Content reachability** — the biggest gap between "shippable" and "a game".
+   - ✅ **Campaign is reachable.** The menu picks the next event via `Campaign.NextEvent(save)`
+     and hands its id to the race through `CampaignSession.PendingEventId`, so races now record
+     campaign progress (purse, chapter advance, gatekeeper) instead of being anonymous free
+     runs, and the grid uses the event's authored rivals. Unit-tested.
+   - ⬜ Track selection / `TrackCatalog` into generation so the 4-of-5 unreachable tracks run,
+     plus `TrackProgress.SetSpline` for real distance-along-spline ranking on curved tracks.
 2. **The `noEngineReferences: true` refactor** — a pure-vector rewrite of `TrackSpline`, then
    relocate the six remaining engine-coupled `Core` files to Gameplay, then flip the flag so
    the pure boundary is compiler-enforced forever. Done as one deliberate, CI-verified change.
