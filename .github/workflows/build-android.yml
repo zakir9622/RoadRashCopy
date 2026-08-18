@@ -1,34 +1,18 @@
 name: Android Build & Release
 
+# CI runs ONLY on pull requests targeting main, plus a manual dispatch button. The old
+# push-to-main and daily-schedule triggers, and running the heavy Android build on every
+# PR push, burned far too many Actions minutes on a private repo. Now:
+#   - On a PR: the cheap EditMode gate runs (see the per-job `if` below). The ~31-min
+#     Android build and the (upstream-broken) PlayMode job do NOT run automatically.
+#   - The Android build + PlayMode run only via workflow_dispatch, when you actually want
+#     an APK/AAB or to re-check PlayMode.
+# Same-repo PRs (not forks) get full secrets access, so the Unity licence is available.
 on:
-  # Every merge into main. A pull request merge is a push to main, so this covers the
-  # "build the app when a PR lands" case without a separate pull_request_target job.
-  #
-  # paths-ignore is what stops this from looping: the build regenerates the scenes and
-  # commits them back to main (see "Commit regenerated scenes" below), and without this
-  # that commit would trigger another build, which would commit again. The generated
-  # scenes are build *output*, so a change confined to them is never a reason to rebuild.
-  push:
-    branches: [main]
-    paths-ignore:
-      - 'Assets/_Project/Scenes/**'
-      - 'ProjectSettings/EditorBuildSettings.asset'
-
-  # Every push to an open pull request targeting main. This lets a long-lived feature
-  # branch - e.g. one under continuous autonomous development - self-verify on every push
-  # without a manual workflow_dispatch, and surfaces the EditMode/build result directly on
-  # the PR. Same-repo PRs (not forks) get full secrets access, so the Unity licence is
-  # available. Release publishing is gated to the main ref (see "Publish to GitHub
-  # Releases"), so a PR build runs the tests and produces an APK artifact but never cuts a
-  # release. The scene-commit-back step is likewise main-only, so there is no build loop.
   pull_request:
     branches: [main]
 
-  # Daily scheduled build at 00:00 UTC (No push/commit spam)
-  schedule:
-    - cron: '0 0 * * *'
-
-  # Manual 1-click trigger button in GitHub Actions tab
+  # Manual 1-click trigger button in GitHub Actions tab. Use this to produce an APK/AAB.
   workflow_dispatch:
     inputs:
       create_release:
@@ -196,6 +180,11 @@ jobs:
     name: PlayMode Tests (advisory)
     runs-on: ubuntu-latest
     needs: preflight
+    # Dispatch-only: PlayMode is upstream-broken (crashes/hangs before any test runs) and
+    # advisory, so running it on every PR just burned ~8 minutes for no signal. It now runs
+    # only on a manual workflow_dispatch, for when you want to re-check whether upstream has
+    # recovered.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     # Advisory only: PlayMode entry hangs upstream (game-ci/unity-test-runner#188), so this
     # job is expected to hit the timeout and report 'cancelled' until that is fixed. The
     # build does not block on it. When upstream recovers, raise this and promote it to a
@@ -284,20 +273,21 @@ jobs:
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
-    needs: [preflight, test-editmode, test-playmode]
+    needs: [preflight, test-editmode]
     # Same reasoning as the test jobs' timeouts: bound a real Unity build against GitHub's
     # 360-minute default so a hang costs 40 minutes of runner time, not six hours.
     timeout-minutes: 40
     # The gate, in plain terms:
+    #   - workflow_dispatch only: the ~31-min build no longer runs on every PR. A PR runs the
+    #     cheap EditMode gate (+ compile-check in the other workflow); you dispatch this when
+    #     you actually want an APK/AAB.
     #   - preflight must pass (no licence -> nothing to build); never overridable.
-    #   - test-editmode must genuinely SUCCEED. EditMode does not hang, so 'success' here
-    #     is real signal and an EditMode regression correctly blocks the build. This is the
-    #     gate that was missing while the two suites shared one hang-prone invocation.
-    #   - test-playmode is deliberately absent from the condition: it is advisory until the
-    #     upstream hang (game-ci/unity-test-runner#188) is fixed, so its outcome - success,
-    #     cancelled by timeout, or failure - does not gate the build.
+    #   - test-editmode must genuinely SUCCEED. EditMode does not hang, so 'success' here is
+    #     real signal and an EditMode regression correctly blocks the build.
+    #   - test-playmode is advisory and dispatch-only, so it is absent from both `needs` and
+    #     this condition - its outcome never gates the build.
     #   - inputs.skip_tests still forces a build regardless, for the manual dispatch case.
-    if: ${{ !cancelled() && needs.preflight.result == 'success' && (needs.test-editmode.result == 'success' || inputs.skip_tests) }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() && needs.preflight.result == 'success' && (needs.test-editmode.result == 'success' || inputs.skip_tests) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5

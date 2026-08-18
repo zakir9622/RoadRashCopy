@@ -9,9 +9,11 @@ name: Compile Check
 #
 # See Tools/CompileCheck/README.md for what this proves and what it does not.
 
+# Runs only on pull requests (plus manual dispatch). It used to also trigger on every push
+# to every branch, which meant a push to a branch that had an open PR ran this twice - once
+# for the push and once for the PR sync - on the same commit. PR-only halves the runs and
+# matches "CI only when there is a PR".
 on:
-  push:
-    branches: ['**']
   pull_request:
   workflow_dispatch:
 
