@@ -55,15 +55,42 @@
     width: 250px;
 }
 
-.rear-view-mirror {
+.stamina-bar-bg {
+    width: 100%;
+    height: 12px;
+    background-color: rgba(0, 0, 0, 0.85);
+    border-color: var(--accent-dim);
+    border-width: 1px;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.stamina-bar-fill {
+    width: 100%;
+    height: 100%;
+    background-color: var(--accent);
+    border-radius: 5px;
+}
+
+.mirror-row {
     position: absolute;
-    top: 74px; /* pushed down so the heat pips sit above it at top-centre */
+    top: 74px;
     align-self: center;
-    width: 400px;
-    height: 80px;
-    border-radius: 40px;
-    background-color: rgba(0, 0, 0, 0.8);
-    border-color: var(--accent);
+    flex-direction: row;
+    justify-content: center;
+}
+
+.mirror-side {
+    width: 180px;
+    height: 64px;
+    margin-left: 8px;
+    margin-right: 8px;
+    border-radius: 32px;
+}
+
+.rear-view-mirror {
+    background-color: rgba(0, 0, 0, 0.85);
+    border-color: var(--roadrash-blue);
     border-width: 2px;
     justify-content: center;
 }

@@ -39,7 +39,7 @@ namespace HighwayRenegade.Core.Story
         public int Purse = 1000;
 
         /// <summary>Position the player must reach to count this as won.</summary>
-        public int RequiredPosition = 1;
+        public int RequiredPosition = 4;
     }
 
     /// <summary>A chapter: a set of races plus the text beat that opens it.</summary>
@@ -69,6 +69,9 @@ namespace HighwayRenegade.Core.Story
     /// </summary>
     public static class Campaign
     {
+        /// <summary>Classic Road Rash rule — finish fourth or better to advance.</summary>
+        public const int RequiredFinishPosition = 4;
+
         public static readonly RivalDefinition[] Roster =
         {
             new RivalDefinition { Id = "dex",   Name = "Dex",    Skill = 0.80f, Weapon = 0, BaseAggression = 1.00f },

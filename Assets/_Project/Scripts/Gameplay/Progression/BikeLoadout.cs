@@ -40,7 +40,12 @@ namespace HighwayRenegade.Gameplay.Progression
 
             InstalledSpec = BuildSpec(save, _applyConditionPenalty);
             _bike.SetEngineSpec(InstalledSpec);
+            TyreSpec tyres = BuildTyreSpec(save);
+            _bike.SetTyreSpec(tyres, tyres);
         }
+
+        public static TyreSpec BuildTyreSpec(SaveData save) =>
+            TyreModel.ApplyStage(TyreSpec.SportRoad, save?.TireStage ?? 0);
 
         /// <summary>
         /// Composes the ridden spec from the save: base bike, then purchased upgrades,
@@ -49,10 +54,7 @@ namespace HighwayRenegade.Gameplay.Progression
         public static EngineSpec BuildSpec(SaveData save, bool applyCondition = true)
         {
             EngineSpec spec = BaseSpecFor(save.BikeId);
-
-            // Exhaust is not tracked separately in the save, so the tuning stage doubles
-            // as both engine tuning. Tire stage maps to grip upgrades separately.
-            spec = Powertrain.ApplyUpgrades(spec, save.EngineStage, save.TireStage);
+            spec = Powertrain.ApplyUpgrades(spec, save.EngineStage, 0);
 
             if (applyCondition)
             {

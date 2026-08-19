@@ -55,6 +55,7 @@ namespace HighwayRenegade.Gameplay.AI
         private float _reassessTimer;
         private float _stoppedTimer;
         private float _escapeTimer;
+        private float _sirenTimer;
         private bool _hasBusted;
         private bool _pursuing = true;
 
@@ -93,6 +94,7 @@ namespace HighwayRenegade.Gameplay.AI
             float distance = Vector3.Distance(transform.position, _target.position);
             UpdateEscape(distance);
             Pursue();
+            UpdateSiren(distance);
             CheckBust(distance);
         }
 
@@ -134,6 +136,18 @@ namespace HighwayRenegade.Gameplay.AI
         }
 
         private void Cruise() => _bike.SetInput(new BikeInput { Throttle = 0.5f });
+
+        /// <summary>Periodic siren blip while actively pursuing — Road Rash pressure cue.</summary>
+        private void UpdateSiren(float distance)
+        {
+            if (!_pursuing || distance > _bustRadius * 2.5f) return;
+
+            _sirenTimer -= Time.deltaTime;
+            if (_sirenTimer > 0f) return;
+
+            _sirenTimer = distance < _bustRadius ? 1.8f : 3.2f;
+            HighwayRenegade.Gameplay.Audio.AudioManager.Instance?.PlayPoliceSiren(transform.position);
+        }
 
         /// <summary>
         /// Breaks off pursuit once the player has held a gap for long enough. Time-based

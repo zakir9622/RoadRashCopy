@@ -199,6 +199,13 @@ namespace HighwayRenegade.Gameplay.Bike
             _topSpeed = Mathf.Max(10f, Powertrain.TopSpeedInGear(_engine, _engine.GearRatios.Length - 1));
         }
 
+        /// <summary>Applies upgraded tyre specs from the garage.</summary>
+        public void SetTyreSpec(in TyreSpec front, in TyreSpec rear)
+        {
+            _frontTyre = front;
+            _rearTyre = rear;
+        }
+
         private void Awake()
         {
             _rb = GetComponent<Rigidbody>();

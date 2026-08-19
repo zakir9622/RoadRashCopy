@@ -27,7 +27,7 @@ namespace HighwayRenegade.Core.Race
                 Curviness = 0f,
                 TrafficDensity = 12,
                 PoliceCount = 1,
-                RivalCount = 3,
+                RivalCount = 5,
                 ObstacleCourse = true,
             },
 
@@ -42,7 +42,7 @@ namespace HighwayRenegade.Core.Race
                 CurvePeriods = 2f,
                 TrafficDensity = 8,
                 PoliceCount = 1,
-                RivalCount = 3,
+                RivalCount = 6,
                 ObstacleCourse = false,
             },
 
@@ -58,7 +58,7 @@ namespace HighwayRenegade.Core.Race
                 CurvePeriods = 5f,
                 TrafficDensity = 22,
                 PoliceCount = 2,
-                RivalCount = 3,
+                RivalCount = 7,
                 ObstacleCourse = false,
             },
 
@@ -73,7 +73,7 @@ namespace HighwayRenegade.Core.Race
                 CurvePeriods = 6f,
                 TrafficDensity = 6,
                 PoliceCount = 1,
-                RivalCount = 3,
+                RivalCount = 9,
                 ObstacleCourse = true,
             },
 
@@ -88,7 +88,7 @@ namespace HighwayRenegade.Core.Race
                 CurvePeriods = 5f,
                 TrafficDensity = 18,
                 PoliceCount = 3,
-                RivalCount = 3,
+                RivalCount = 12,
                 Night = true,
                 ObstacleCourse = false,
             },

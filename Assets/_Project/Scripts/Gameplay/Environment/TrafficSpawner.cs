@@ -59,13 +59,16 @@ namespace HighwayRenegade.Gameplay.Environment
                 return;
             }
 
-            // The placeholder track is a straight road with no generator, so synthesise a
-            // matching straight spline rather than leaving the road empty.
             Initialize(new TrackSpline(new[]
             {
                 new SplineNode(Vector3.zero, Vector3.forward),
                 new SplineNode(Vector3.forward * _fallbackTrackLength, Vector3.forward),
             }));
+        }
+
+        private void OnDestroy()
+        {
+            Core.Pooling.PoolRegistry.Clear();
         }
 
         private void SpawnInitialTraffic()
@@ -107,7 +110,7 @@ namespace HighwayRenegade.Gameplay.Environment
             }
         }
 
-        private static void EnsurePool(TrafficVehicle prefab)
+        private void EnsurePool(TrafficVehicle prefab)
         {
             if (Core.Pooling.PoolRegistry.GetPool<TrafficVehicle>() != null) return;
             var pool = new Core.Pooling.ObjectPool<TrafficVehicle>(prefab, 32, transform);

@@ -86,7 +86,10 @@ while IFS= read -r dll; do BCL_REFS+=("-r:$dll"); done < <(
     ! -name 'System.EnterpriseServices.Thunk.dll' \
     ! -name 'System.EnterpriseServices.Wrapper.dll')
 
-CSC="$(find /usr/lib/dotnet /usr/share/dotnet -name 'csc.dll' -path '*Roslyn*' 2>/dev/null | head -1)"
+DOTNET_SEARCH=(/usr/lib/dotnet /usr/share/dotnet)
+[[ -n "${DOTNET_ROOT:-}" ]] && DOTNET_SEARCH+=("$DOTNET_ROOT")
+[[ -n "${HOME:-}" ]] && DOTNET_SEARCH+=("$HOME/.dotnet")
+CSC="$(find "${DOTNET_SEARCH[@]}" -name 'csc.dll' -path '*Roslyn*' 2>/dev/null | head -1)"
 if [[ -z "$CSC" ]]; then
   err "Roslyn csc.dll not found - install the .NET SDK (dotnet-sdk-8.0)"; exit 1
 fi

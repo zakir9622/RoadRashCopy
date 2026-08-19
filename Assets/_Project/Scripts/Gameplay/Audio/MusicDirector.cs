@@ -1,6 +1,6 @@
 using UnityEngine;
 using HighwayRenegade.Core.App;
-using HighwayRenegade.Gameplay.Audio;
+using HighwayRenegade.Core.Race;
 
 namespace HighwayRenegade.Gameplay.Audio
 {
@@ -9,6 +9,7 @@ namespace HighwayRenegade.Gameplay.Audio
     {
         private static MusicDirector _instance;
         private AudioClip _currentClip;
+        private string _currentKey = string.Empty;
 
         private void Awake()
         {
@@ -32,7 +33,11 @@ namespace HighwayRenegade.Gameplay.Audio
             }
         }
 
-        public static void RequestTrack(string key) => _instance?.PlayKey(key);
+        public static void RequestTrack(string key)
+        {
+            if (_instance == null || string.IsNullOrEmpty(key)) return;
+            _instance.PlayKey(key);
+        }
 
         private void HandleStateChanged(GameState previous, GameState current)
         {
@@ -43,7 +48,10 @@ namespace HighwayRenegade.Gameplay.Audio
                     PlayKey("menu");
                     break;
                 case GameState.Racing:
-                    PlayKey(RaceLaunchContext.Track?.Night == true ? "night" : "race");
+                    // BiomeDirector sets biome-specific beds on race start. Only fall back
+                    // when nothing has been requested yet.
+                    if (_currentKey == "menu" || string.IsNullOrEmpty(_currentKey))
+                        PlayKey(RaceLaunchContext.Track?.Night == true ? "night" : "race");
                     break;
                 case GameState.PostRace:
                 case GameState.GameOver:
@@ -57,6 +65,7 @@ namespace HighwayRenegade.Gameplay.Audio
             AudioClip clip = ProceduralMusic.ForKey(key);
             if (clip == null || clip == _currentClip) return;
 
+            _currentKey = key;
             _currentClip = clip;
             AudioManager.Instance?.PlayMusic(clip);
         }

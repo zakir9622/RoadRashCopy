@@ -35,6 +35,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
         private Label _knockouts;
         private Label _cash;
         private VisualElement _healthFill;
+        private VisualElement _staminaFill;
         private VisualElement _nitrousFill;
         private VisualElement _heatStars;
         private Label _countdown;
@@ -66,6 +67,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
         private BikeController _bike;
         private Damageable _health;
+        private StaminaTracker _stamina;
         private RaceManager _race;
         private PoliceAI[] _police = System.Array.Empty<PoliceAI>();
         private Progression.CampaignSession _session;
@@ -79,6 +81,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
         private int _lastKnockouts = int.MinValue;
         private int _lastCash = int.MinValue;
         private float _lastHealth = -1f;
+        private float _lastStamina = -1f;
         private int _lastNitrous = int.MinValue;
         private int _lastStars = int.MinValue;
 
@@ -87,6 +90,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             _speed = Require<Label>("SpeedLabel");
             _gear = Require<Label>("GearLabel");
             _healthFill = Require<VisualElement>("HealthBarFill");
+            _staminaFill = Optional<VisualElement>("StaminaBarFill");
             _position = Optional<Label>("PositionLabel");
             _distance = Optional<Label>("DistanceLabel");
             _knockouts = Optional<Label>("KnockoutLabel");
@@ -108,6 +112,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
             _bike = input.GetComponent<BikeController>();
             _health = input.GetComponent<Damageable>();
+            _stamina = input.GetComponent<StaminaTracker>();
             _race = FindFirstObjectByType<RaceManager>();
             _session = FindFirstObjectByType<Progression.CampaignSession>();
 
@@ -143,6 +148,7 @@ namespace HighwayRenegade.Gameplay.UI.Screens
 
             UpdateSpeedAndGear();
             UpdateHealth();
+            UpdateStamina();
             UpdateNitrous();
             UpdateHeat();
             UpdateCountdown();
@@ -333,6 +339,17 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             _healthFill.style.width = new Length(health * 100f, LengthUnit.Percent);
             _healthFill.style.backgroundColor = new StyleColor(
                 health < 0.3f ? new Color(1f, 0.2f, 0.2f) : new Color(1f, 0.2f, 0.4f));
+        }
+
+        private void UpdateStamina()
+        {
+            if (_staminaFill == null || _stamina == null) return;
+
+            float stamina = _stamina.Stamina01;
+            if (Mathf.Approximately(stamina, _lastStamina)) return;
+
+            _lastStamina = stamina;
+            _staminaFill.style.width = new Length(stamina * 100f, LengthUnit.Percent);
         }
 
         private void UpdateRacePosition()

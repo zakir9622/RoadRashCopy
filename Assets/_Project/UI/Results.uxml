@@ -6,31 +6,39 @@
     xsi:noNamespaceSchemaLocation="../../../../UIElementsSchema/UIElements.xsd">
 
     <ui:Style src="Theme.uss" />
+    <ui:Style src="Results.uss" />
 
     <ui:VisualElement class="screen scrim">
         <ui:VisualElement class="panel-centred">
 
-            <ui:Label name="Placement" text="FINISHED" class="title" />
-            <ui:Label name="Medal" text="" class="subtitle" />
-
-            <ui:VisualElement class="setting-row">
-                <ui:Label text="RACE PRIZE" />
-                <ui:Label name="BasePayout" text="$0" class="value" />
+            <ui:VisualElement class="rank-banner">
+                <ui:Label name="RankNumber" text="4" class="rank-number" />
+                <ui:Label name="Placement" text="FINISHED" class="title" />
+                <ui:Label name="Medal" text="" class="subtitle" />
             </ui:VisualElement>
 
-            <ui:VisualElement class="setting-row">
-                <ui:Label name="KnockoutLabel" text="KNOCKOUTS" />
-                <ui:Label name="CombatBonus" text="$0" class="value" />
-            </ui:VisualElement>
+            <ui:Label name="RuleHint" text="TOP 4 TO ADVANCE" class="rule-hint" />
 
-            <ui:VisualElement class="setting-row">
-                <ui:Label name="RepairLabel" text="REPAIRS" />
-                <ui:Label name="RepairCost" text="$0" class="value danger" />
-            </ui:VisualElement>
+            <ui:VisualElement class="payout-panel">
+                <ui:VisualElement class="setting-row">
+                    <ui:Label text="RACE PRIZE" />
+                    <ui:Label name="BasePayout" text="$0" class="value" />
+                </ui:VisualElement>
 
-            <ui:VisualElement class="setting-row">
-                <ui:Label text="TOTAL" />
-                <ui:Label name="TotalPayout" text="$0" class="value-strong" />
+                <ui:VisualElement class="setting-row">
+                    <ui:Label name="KnockoutLabel" text="KNOCKOUTS" />
+                    <ui:Label name="CombatBonus" text="$0" class="value" />
+                </ui:VisualElement>
+
+                <ui:VisualElement class="setting-row">
+                    <ui:Label name="RepairLabel" text="REPAIRS" />
+                    <ui:Label name="RepairCost" text="$0" class="value danger" />
+                </ui:VisualElement>
+
+                <ui:VisualElement class="setting-row">
+                    <ui:Label text="BALANCE" />
+                    <ui:Label name="TotalPayout" text="$0" class="value-strong" />
+                </ui:VisualElement>
             </ui:VisualElement>
 
             <ui:VisualElement class="button-row">

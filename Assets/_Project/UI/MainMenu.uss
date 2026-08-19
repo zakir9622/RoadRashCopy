@@ -43,3 +43,9 @@
     border-left-width: 4px;
     border-left-color: var(--accent);
 }
+
+.menu-tagline {
+    margin-top: -18px;
+    margin-bottom: 24px;
+    letter-spacing: 4px;
+}

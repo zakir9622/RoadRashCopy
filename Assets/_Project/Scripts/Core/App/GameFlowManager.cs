@@ -68,6 +68,14 @@ namespace HighwayRenegade.Core.App
             string targetScene = string.IsNullOrEmpty(raceSceneName)
                 ? RaceLaunchContext.SceneName
                 : raceSceneName;
+
+            if (!Application.CanStreamedLevelBeLoaded(targetScene))
+            {
+                Debug.LogWarning($"[GameFlow] Track scene '{targetScene}' is not in the build. " +
+                                 $"Falling back to '{SceneNames.Race}'.", this);
+                targetScene = SceneNames.Race;
+            }
+
             GameStateManager.ChangeState(GameState.LoadingRace);
             StartCoroutine(LoadSceneRoutine(targetScene, GameState.Racing));
         }

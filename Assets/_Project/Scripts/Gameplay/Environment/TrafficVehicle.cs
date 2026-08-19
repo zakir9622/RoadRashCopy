@@ -24,6 +24,7 @@ namespace HighwayRenegade.Gameplay.Environment
         private TrackSpline _spline;
         private float _currentDistance;
         private Rigidbody _rb;
+        private float _hornCooldown;
 
         public void Initialize(TrackSpline spline, float startDistance, bool oncoming, float laneOffset, float speed)
         {
@@ -43,6 +44,22 @@ namespace HighwayRenegade.Gameplay.Environment
         {
             if (_spline == null) return;
             UpdatePosition(Time.fixedDeltaTime);
+            TryHonkAtPlayer();
+        }
+
+        private void TryHonkAtPlayer()
+        {
+            _hornCooldown -= Time.fixedDeltaTime;
+            if (_hornCooldown > 0f) return;
+
+            var player = FindFirstObjectByType<Bike.PlayerBikeInput>();
+            if (player == null) return;
+
+            float distance = Vector3.Distance(transform.position, player.transform.position);
+            if (distance > 18f || distance < 4f) return;
+
+            _hornCooldown = Random.Range(2.5f, 5f);
+            Audio.AudioManager.Instance?.PlayHorn(transform.position);
         }
 
         private void UpdatePosition(float dt)

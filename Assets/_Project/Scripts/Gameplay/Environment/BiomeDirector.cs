@@ -1,6 +1,7 @@
 using UnityEngine;
 using HighwayRenegade.Core.App;
 using HighwayRenegade.Core.Race;
+using HighwayRenegade.Gameplay.Audio;
 
 namespace HighwayRenegade.Gameplay.Environment
 {
@@ -20,31 +21,31 @@ namespace HighwayRenegade.Gameplay.Environment
     {
         private static readonly BiomeProfile[] Defaults =
         {
-            CreateDefault(LevelBiome.PacificCoast, new Color(0.55f, 0.68f, 0.82f), "coast"),
-            CreateDefault(LevelBiome.PalmDesert, new Color(0.82f, 0.70f, 0.52f), "desert"),
-            CreateDefault(LevelBiome.TheCity, new Color(0.35f, 0.38f, 0.42f), "city"),
-            CreateDefault(LevelBiome.SierraNevada, new Color(0.48f, 0.54f, 0.58f), "mountain"),
-            CreateDefault(LevelBiome.NightCity, new Color(0.08f, 0.10f, 0.18f), "night"),
+            CreateDefault(LevelBiome.PacificCoast, new Color(0.55f, 0.68f, 0.82f), 0.002f, "coast"),
+            CreateDefault(LevelBiome.PalmDesert, new Color(0.82f, 0.70f, 0.52f), 0.0015f, "desert"),
+            CreateDefault(LevelBiome.TheCity, new Color(0.35f, 0.38f, 0.42f), 0.003f, "city"),
+            CreateDefault(LevelBiome.SierraNevada, new Color(0.48f, 0.54f, 0.58f), 0.0025f, "mountain"),
+            CreateDefault(LevelBiome.NightCity, new Color(0.08f, 0.10f, 0.18f), 0.004f, "night"),
         };
 
         private void Start()
         {
             TrackDefinition track = RaceLaunchContext.Track ?? TrackDefinition.Default;
-            Apply(FindProfile(track.Biome, track.Night));
+            Apply(CreateProfile(track));
         }
 
-        private static BiomeProfile FindProfile(LevelBiome biome, bool night)
+        private static BiomeProfile CreateProfile(TrackDefinition track)
         {
             for (int i = 0; i < Defaults.Length; i++)
             {
-                if (Defaults[i].Biome == biome)
-                {
-                    if (night) Defaults[i].FogDensity *= 1.6f;
-                    return Defaults[i];
-                }
+                if (Defaults[i].Biome != track.Biome) continue;
+
+                var clone = Instantiate(Defaults[i]);
+                if (track.Night) clone.FogDensity *= 1.6f;
+                return clone;
             }
 
-            return Defaults[0];
+            return Instantiate(Defaults[0]);
         }
 
         private static void Apply(BiomeProfile profile)
@@ -57,11 +58,12 @@ namespace HighwayRenegade.Gameplay.Environment
             MusicDirector.RequestTrack(profile.MusicKey);
         }
 
-        private static BiomeProfile CreateDefault(LevelBiome biome, Color fog, string musicKey)
+        private static BiomeProfile CreateDefault(LevelBiome biome, Color fog, float density, string musicKey)
         {
-            var profile = CreateInstance<BiomeProfile>();
+            var profile = ScriptableObject.CreateInstance<BiomeProfile>();
             profile.Biome = biome;
             profile.FogColor = fog;
+            profile.FogDensity = density;
             profile.MusicKey = musicKey;
             return profile;
         }

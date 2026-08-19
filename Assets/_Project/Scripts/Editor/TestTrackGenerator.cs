@@ -117,8 +117,9 @@ namespace HighwayRenegade.Editor
         /// <summary>Creates the scene, saves it, and registers it in Build Settings.</summary>
         public static string Generate(TrackDefinition track = null)
         {
-            track = track ?? TrackDefinition.Default;
-            return Generate(track, ScenePathFor(track));
+            // Legacy entry point: always refresh committed TestTrack.unity with Coast Run.
+            track = track ?? TrackCatalog.Tracks[0];
+            return Generate(track, ScenePath);
         }
 
         /// <summary>Generates every catalog track into its own scene file.</summary>
@@ -155,9 +156,7 @@ namespace HighwayRenegade.Editor
             BikeController player = BuildBike("Bike (Player)", new Vector3(0f, 1f, 0f),
                                               new Color(0.75f, 0.18f, 0.12f));
             player.gameObject.AddComponent<PlayerBikeInput>();
-
-            // Applies the saved bike, purchased upgrades and accumulated wear to the
-            // machine. Without it the garage's upgrades are money burnt for no effect.
+            player.gameObject.AddComponent<StaminaTracker>();
             player.gameObject.AddComponent<BikeLoadout>();
 
             BuildRivals(player);
@@ -580,8 +579,13 @@ namespace HighwayRenegade.Editor
             var chase = go.AddComponent<ChaseCamera>();
             SerializedWiring.SetRef(chase, "_target", bike);
 
-            var mirror = go.AddComponent<RearViewMirror>();
-            SerializedWiring.SetRef(mirror, "_target", bike.transform);
+            var mirrorLeft = go.AddComponent<RearViewMirror>();
+            SerializedWiring.SetRef(mirrorLeft, "_target", bike.transform);
+            SerializedWiring.SetEnum(mirrorLeft, "_side", (int)RearViewMirror.MirrorSide.Left);
+
+            var mirrorRight = go.AddComponent<RearViewMirror>();
+            SerializedWiring.SetRef(mirrorRight, "_target", bike.transform);
+            SerializedWiring.SetEnum(mirrorRight, "_side", (int)RearViewMirror.MirrorSide.Right);
         }
 
         private static void BuildManagers(BikeController player)

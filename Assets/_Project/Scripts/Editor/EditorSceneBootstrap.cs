@@ -86,7 +86,7 @@ namespace HighwayRenegade.Editor
 
             Debug.Log("[SceneBootstrap] Regenerating every scene from its generator.");
 
-            TestTrackGenerator.Generate();
+            TestTrackGenerator.GenerateAllTracks();
             MenuSceneGenerator.GenerateAll();
 
             AssetDatabase.SaveAssets();

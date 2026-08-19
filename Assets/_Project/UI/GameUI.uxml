@@ -42,9 +42,13 @@
             </ui:VisualElement>
         </ui:VisualElement>
 
-        <!-- Bottom Left: Health -->
+        <!-- Bottom Left: Bike condition + Road Rash stamina -->
         <ui:VisualElement class="bottom-left-panel panel">
-            <ui:Label text="BIKE CONDITION" class="label-small" />
+            <ui:Label text="STAMINA" class="label-small" />
+            <ui:VisualElement class="stamina-bar-bg mt-1">
+                <ui:VisualElement name="StaminaBarFill" class="stamina-bar-fill" />
+            </ui:VisualElement>
+            <ui:Label text="BIKE CONDITION" class="label-small mt-2" />
             <ui:VisualElement class="health-bar-bg mt-1">
                 <ui:VisualElement name="HealthBarFill" class="health-bar-fill" />
             </ui:VisualElement>
@@ -70,9 +74,14 @@
 
         <ui:Label name="RivalTaunt" text="" class="rival-taunt label-row" />
 
-        <!-- Center: Rear View Mirror -->
-        <ui:VisualElement name="RearViewMirror" class="rear-view-mirror panel">
-            <ui:Label text="REAR VIEW" class="label-small center-text" />
+        <!-- Center: dual rear-view mirrors (Road Rash style) -->
+        <ui:VisualElement class="mirror-row">
+            <ui:VisualElement name="MirrorLeft" class="rear-view-mirror mirror-side panel">
+                <ui:Label text="L" class="label-small center-text" />
+            </ui:VisualElement>
+            <ui:VisualElement name="MirrorRight" class="rear-view-mirror mirror-side panel">
+                <ui:Label text="R" class="label-small center-text" />
+            </ui:VisualElement>
         </ui:VisualElement>
 
         <!-- Right: live standings, filled top-down from the leader. Rows past the grid
