@@ -23,7 +23,11 @@ Highway Renegade is an offline Android motorcycle combat racer (Road Rash–styl
 1. Clone and open in Unity 6000.0.38f1 with Android Build Support.
 2. Run `python3 Tools/Assets/fetch-assets.py` for CC0 textures/HDRIs (optional).
 3. Generate scenes: **Highway Renegade → Generate Menu Scenes** and **Generate Test Track**.
-4. CI runs Roslyn compile-check and Android build via GitHub Actions.
+4. **Compile locally** (no Unity licence needed):
+   ```bash
+   Tools/CompileCheck/compile-check.sh --tests
+   ```
+5. **CI:** GitHub Actions no longer runs on every push/PR. The Android build runs on **merge to `main`** (APK release) or **manual dispatch** from the Actions tab. Compile Check is **manual dispatch** only.
 
 ## Ship Checklist
 * Confirm final `applicationIdentifier` before Play Store upload (currently `com.highwayrenegade.game`).
