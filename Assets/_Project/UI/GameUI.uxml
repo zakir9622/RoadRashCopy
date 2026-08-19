@@ -60,10 +60,18 @@
                 <ui:VisualElement class="heat-star" />
                 <ui:VisualElement class="heat-star" />
             </ui:VisualElement>
+            <ui:Label name="PoliceWarning" text="" class="label-small danger-color" />
         </ui:VisualElement>
 
-        <!-- Center: Rear View Mirror (Placeholder for render texture) -->
-        <ui:VisualElement class="rear-view-mirror panel">
+        <ui:VisualElement class="weapon-panel panel">
+            <ui:Label text="WEAPON" class="label-small" />
+            <ui:Label name="WeaponLabel" text="FISTS" class="label-medium accent-color" />
+        </ui:VisualElement>
+
+        <ui:Label name="RivalTaunt" text="" class="rival-taunt label-row" />
+
+        <!-- Center: Rear View Mirror -->
+        <ui:VisualElement name="RearViewMirror" class="rear-view-mirror panel">
             <ui:Label text="REAR VIEW" class="label-small center-text" />
         </ui:VisualElement>
 

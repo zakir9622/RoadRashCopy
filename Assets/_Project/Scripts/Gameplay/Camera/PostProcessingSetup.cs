@@ -1,23 +1,18 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using HighwayRenegade.Performance;
 
 namespace HighwayRenegade.Gameplay.CameraRig
 {
-    /// <summary>
-    /// Programmatically sets up the post-processing stack on the main camera to achieve
-    /// the gritty, high-speed 90s aesthetic of Road Rash.
-    ///
-    /// Every value here is being applied for the first time. URP was a package dependency
-    /// with no pipeline asset assigned, so the project rendered through the Built-in
-    /// pipeline and this entire stack was inert - written, attached to the camera, and
-    /// producing nothing. The numbers below were therefore never seen by anyone, and are
-    /// tuned for a phone rather than kept as written.
-    /// </summary>
     [RequireComponent(typeof(Camera))]
-    public class PostProcessingSetup : MonoBehaviour
+    public sealed class PostProcessingSetup : MonoBehaviour
     {
         private Volume _volume;
+        private MotionBlur _motionBlur;
+        private Bloom _bloom;
+        private FilmGrain _filmGrain;
+        private ThermalManager _thermal;
 
         private void Start()
         {
@@ -26,11 +21,6 @@ namespace HighwayRenegade.Gameplay.CameraRig
             if (camData != null)
             {
                 camData.renderPostProcessing = true;
-
-                // FXAA, not SMAA. SMAA runs several full-screen passes and is a desktop
-                // technique; on a tile-based mobile GPU it spends bandwidth that the
-                // frame budget needs elsewhere, for edge quality nobody resolves on a
-                // six-inch screen at 200 km/h.
                 camData.antialiasing = AntialiasingMode.FastApproximateAntialiasing;
             }
 
@@ -42,32 +32,44 @@ namespace HighwayRenegade.Gameplay.CameraRig
             SetupBloom();
             SetupVignette();
             SetupColorGrading();
+
+            _thermal = FindFirstObjectByType<ThermalManager>();
+            if (_thermal != null)
+            {
+                _thermal.TierChanged += OnThermalTierChanged;
+                OnThermalTierChanged(_thermal.CurrentTier);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_thermal != null)
+                _thermal.TierChanged -= OnThermalTierChanged;
+        }
+
+        private void OnThermalTierChanged(ThermalTier tier)
+        {
+            bool heavy = tier >= ThermalTier.Moderate;
+            if (_motionBlur != null) _motionBlur.active = !heavy;
+            if (_bloom != null) _bloom.active = tier < ThermalTier.Severe;
+            if (_filmGrain != null) _filmGrain.active = tier < ThermalTier.Critical;
         }
 
         private void SetupMotionBlur()
         {
-            var mb = _volume.profile.Add<MotionBlur>(true);
-            mb.active = true;
-
-            // 0.8 was punishing. Camera-motion blur on a bike that leans and shakes turns
-            // the whole frame to mush under exactly the conditions a rider most needs to
-            // read the road. Enough to sell speed, not enough to hide a rival.
-            mb.intensity.Override(0.35f);
-            mb.quality.Override(MotionBlurQuality.Low);
+            _motionBlur = _volume.profile.Add<MotionBlur>(true);
+            _motionBlur.active = true;
+            _motionBlur.intensity.Override(0.35f);
+            _motionBlur.quality.Override(MotionBlurQuality.Low);
         }
 
         private void SetupBloom()
         {
-            var bloom = _volume.profile.Add<Bloom>(true);
-            bloom.active = true;
-            bloom.intensity.Override(0.9f);
-
-            // Threshold below 1.0 is required, not a preference. The pipeline runs with
-            // HDR off for bandwidth, so nothing in the frame can exceed 1.0 - a threshold
-            // of exactly 1.0 means no pixel ever qualifies and bloom costs a full-screen
-            // pass to produce nothing at all.
-            bloom.threshold.Override(0.82f);
-            bloom.tint.Override(new Color(1f, 0.92f, 0.78f));
+            _bloom = _volume.profile.Add<Bloom>(true);
+            _bloom.active = true;
+            _bloom.intensity.Override(0.9f);
+            _bloom.threshold.Override(0.82f);
+            _bloom.tint.Override(new Color(1f, 0.92f, 0.78f));
         }
 
         private void SetupVignette()
@@ -83,17 +85,13 @@ namespace HighwayRenegade.Gameplay.CameraRig
         {
             var ca = _volume.profile.Add<ColorAdjustments>(true);
             ca.active = true;
-            ca.contrast.Override(20f); // Gritty, high contrast
-            ca.saturation.Override(-10f); // Slightly desaturated
+            ca.contrast.Override(20f);
+            ca.saturation.Override(-10f);
 
-            // Film grain is a full-screen pass that fights every video codec and every
-            // texture-detail decision made elsewhere, and at 0.4 it read as noise rather
-            // than as grain. Kept, because it does carry the 90s look the design asks
-            // for, but at a level that survives being seen on a phone.
-            var grain = _volume.profile.Add<FilmGrain>(true);
-            grain.active = true;
-            grain.type.Override(FilmGrainLookup.Thin1);
-            grain.intensity.Override(0.15f);
+            _filmGrain = _volume.profile.Add<FilmGrain>(true);
+            _filmGrain.active = true;
+            _filmGrain.type.Override(FilmGrainLookup.Thin1);
+            _filmGrain.intensity.Override(0.15f);
         }
     }
 }

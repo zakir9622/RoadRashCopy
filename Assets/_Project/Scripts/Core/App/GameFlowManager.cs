@@ -40,8 +40,8 @@ namespace HighwayRenegade.Core.App
             GameStateManager.ChangeState(GameState.Booting);
 
             // Go to main menu automatically on boot if we are in an initialization scene
-            if (SceneManager.GetActiveScene().name != _mainMenuScene && 
-                SceneManager.GetActiveScene().name != _raceScene &&
+            if (SceneManager.GetActiveScene().name != _mainMenuScene &&
+                !IsRaceScene(SceneManager.GetActiveScene().name) &&
                 SceneManager.GetActiveScene().name != _garageScene)
             {
                 GoToMainMenu();
@@ -65,7 +65,9 @@ namespace HighwayRenegade.Core.App
 
         public void StartRace(string raceSceneName = null)
         {
-            string targetScene = string.IsNullOrEmpty(raceSceneName) ? _raceScene : raceSceneName;
+            string targetScene = string.IsNullOrEmpty(raceSceneName)
+                ? RaceLaunchContext.SceneName
+                : raceSceneName;
             GameStateManager.ChangeState(GameState.LoadingRace);
             StartCoroutine(LoadSceneRoutine(targetScene, GameState.Racing));
         }
@@ -113,7 +115,10 @@ namespace HighwayRenegade.Core.App
         {
             if (sceneName == _mainMenuScene) GameStateManager.ChangeState(GameState.MainMenu);
             else if (sceneName == _garageScene) GameStateManager.ChangeState(GameState.Garage);
-            else if (sceneName == _raceScene) GameStateManager.ChangeState(GameState.Racing);
+            else if (IsRaceScene(sceneName)) GameStateManager.ChangeState(GameState.Racing);
         }
+
+        private static bool IsRaceScene(string sceneName) =>
+            sceneName == SceneNames.Race || sceneName.StartsWith("Track_");
     }
 }

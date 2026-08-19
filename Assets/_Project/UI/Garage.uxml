@@ -36,6 +36,21 @@
                 <ui:Label name="ConditionStat" text="" class="value" />
             </ui:VisualElement>
 
+            <ui:VisualElement class="setting-row">
+                <ui:Label text="ENGINE" />
+                <ui:Label name="EngineStat" text="" class="value" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="setting-row">
+                <ui:Label text="TIRES" />
+                <ui:Label name="TireStat" text="" class="value" />
+            </ui:VisualElement>
+
+            <ui:VisualElement class="button-row">
+                <ui:Button name="BtnUpgradeEngine" text="UP ENGINE" class="action-button" />
+                <ui:Button name="BtnUpgradeTires" text="UP TIRES" class="action-button" />
+            </ui:VisualElement>
+
             <ui:VisualElement class="button-row">
                 <ui:Button name="BtnPrevBike" text="&lt;" class="action-button" />
                 <ui:Button name="BtnBuyBike" text="BUY" class="action-button" />

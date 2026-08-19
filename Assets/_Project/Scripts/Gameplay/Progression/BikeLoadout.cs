@@ -51,8 +51,8 @@ namespace HighwayRenegade.Gameplay.Progression
             EngineSpec spec = BaseSpecFor(save.BikeId);
 
             // Exhaust is not tracked separately in the save, so the tuning stage doubles
-            // as both. Passing EngineStage twice would overstate the gain.
-            spec = Powertrain.ApplyUpgrades(spec, save.EngineStage, 0);
+            // as both engine tuning. Tire stage maps to grip upgrades separately.
+            spec = Powertrain.ApplyUpgrades(spec, save.EngineStage, save.TireStage);
 
             if (applyCondition)
             {

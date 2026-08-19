@@ -29,6 +29,8 @@ namespace HighwayRenegade.Gameplay.UI.Screens
         private Label _accelStat;
         private Label _handlingStat;
         private Label _conditionStat;
+        private Label _engineStat;
+        private Label _tireStat;
         private Button _buy;
 
         private int _index;
@@ -42,11 +44,15 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             _accelStat = Require<Label>("AccelStat");
             _handlingStat = Require<Label>("HandlingStat");
             _conditionStat = Require<Label>("ConditionStat");
+            _engineStat = Require<Label>("EngineStat");
+            _tireStat = Require<Label>("TireStat");
 
             OnClick("BtnPrevBike", () => Cycle(-1));
             OnClick("BtnNextBike", () => Cycle(1));
             _buy = OnClick("BtnBuyBike", BuyOrEquip);
             OnClick("BtnRepair", Repair);
+            OnClick("BtnUpgradeEngine", UpgradeEngine);
+            OnClick("BtnUpgradeTires", UpgradeTires);
             OnClick("BtnBack", Back);
 
             // Open on the bike actually being ridden, not catalogue entry zero.
@@ -107,6 +113,8 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             // Condition belongs to the bike being ridden, so it is only meaningful while
             // that is the one on screen.
             SetText(_conditionStat, equipped ? $"{save.BikeCondition:P0}" : "-");
+            SetText(_engineStat, $"STAGE {save.EngineStage}/5  (${SaveData.UpgradeCost(save.EngineStage)})");
+            SetText(_tireStat, $"STAGE {save.TireStage}/5  (${SaveData.UpgradeCost(save.TireStage)})");
 
             if (_buy != null)
             {
@@ -181,6 +189,32 @@ namespace HighwayRenegade.Gameplay.UI.Screens
             Refresh();
 
             Debug.Log($"[Garage] Repaired to {target:P0} for ${spent}.");
+        }
+
+        private void UpgradeEngine()
+        {
+            SaveData save = SaveService.Load();
+            if (!save.TryPurchaseUpgrade(ref save.EngineStage))
+            {
+                Debug.LogWarning("[Garage] Cannot upgrade engine — max stage or insufficient funds.");
+                return;
+            }
+
+            SaveService.Save(save);
+            Refresh();
+        }
+
+        private void UpgradeTires()
+        {
+            SaveData save = SaveService.Load();
+            if (!save.TryPurchaseUpgrade(ref save.TireStage))
+            {
+                Debug.LogWarning("[Garage] Cannot upgrade tires — max stage or insufficient funds.");
+                return;
+            }
+
+            SaveService.Save(save);
+            Refresh();
         }
 
         private static void Back()

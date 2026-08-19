@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using HighwayRenegade.Core.Progression;
+using HighwayRenegade.Core.Race;
 
 namespace HighwayRenegade.Core.Story
 {
@@ -25,6 +26,11 @@ namespace HighwayRenegade.Core.Story
         public string Id;
         public string Name;
         public int ChapterIndex;
+
+        /// <summary>
+        /// <see cref="TrackCatalog"/> display name for the track this event runs on.
+        /// </summary>
+        public string TrackName;
 
         /// <summary>Ids of the rivals on the grid.</summary>
         public string[] RivalIds;
@@ -109,20 +115,20 @@ namespace HighwayRenegade.Core.Story
 
         public static readonly RaceEvent[] Events =
         {
-            new RaceEvent { Id = "c0_r1", Name = "Coast Run",      ChapterIndex = 0, Purse = 800,  RivalIds = new[] { "dex", "mara" } },
-            new RaceEvent { Id = "c0_r2", Name = "Harbour Sprint", ChapterIndex = 0, Purse = 1000, RivalIds = new[] { "dex", "mara", "kess" } },
+            new RaceEvent { Id = "c0_r1", Name = "Coast Run",      ChapterIndex = 0, TrackName = "Coast Run",   Purse = 800,  RivalIds = new[] { "dex", "mara" } },
+            new RaceEvent { Id = "c0_r2", Name = "Harbour Sprint", ChapterIndex = 0, TrackName = "Coast Run",   Purse = 1000, RivalIds = new[] { "dex", "mara", "kess" } },
 
-            new RaceEvent { Id = "c1_r1", Name = "Night Freight",  ChapterIndex = 1, Purse = 1400, RivalIds = new[] { "mara", "kess" } },
-            new RaceEvent { Id = "c1_r2", Name = "The Cutting",    ChapterIndex = 1, Purse = 1700, RivalIds = new[] { "kess", "brick", "dex" } },
+            new RaceEvent { Id = "c1_r1", Name = "Night Freight",  ChapterIndex = 1, TrackName = "Palm Desert", Purse = 1400, RivalIds = new[] { "mara", "kess" } },
+            new RaceEvent { Id = "c1_r2", Name = "The Cutting",    ChapterIndex = 1, TrackName = "Palm Desert", Purse = 1700, RivalIds = new[] { "kess", "brick", "dex" } },
 
-            new RaceEvent { Id = "c2_r1", Name = "Quarry Road",    ChapterIndex = 2, Purse = 2200, RivalIds = new[] { "brick", "kess" } },
-            new RaceEvent { Id = "c2_r2", Name = "Scrap Line",     ChapterIndex = 2, Purse = 2600, RivalIds = new[] { "brick", "mara", "sol" } },
+            new RaceEvent { Id = "c2_r1", Name = "Quarry Road",    ChapterIndex = 2, TrackName = "Downtown",    Purse = 2200, RivalIds = new[] { "brick", "kess" } },
+            new RaceEvent { Id = "c2_r2", Name = "Scrap Line",     ChapterIndex = 2, TrackName = "Downtown",    Purse = 2600, RivalIds = new[] { "brick", "mara", "sol" } },
 
-            new RaceEvent { Id = "c3_r1", Name = "Ridgeback",      ChapterIndex = 3, Purse = 3200, RivalIds = new[] { "sol", "kess" } },
-            new RaceEvent { Id = "c3_r2", Name = "Long Descent",   ChapterIndex = 3, Purse = 3800, RivalIds = new[] { "sol", "brick", "vex" } },
+            new RaceEvent { Id = "c3_r1", Name = "Ridgeback",      ChapterIndex = 3, TrackName = "Sierra Pass", Purse = 3200, RivalIds = new[] { "sol", "kess" } },
+            new RaceEvent { Id = "c3_r2", Name = "Long Descent",   ChapterIndex = 3, TrackName = "Sierra Pass", Purse = 3800, RivalIds = new[] { "sol", "brick", "vex" } },
 
-            new RaceEvent { Id = "c4_r1", Name = "City Limits",    ChapterIndex = 4, Purse = 4500, RivalIds = new[] { "vex", "sol" } },
-            new RaceEvent { Id = "c4_r2", Name = "Renegade",       ChapterIndex = 4, Purse = 6000, RivalIds = new[] { "vex", "sol", "brick", "kess" } }
+            new RaceEvent { Id = "c4_r1", Name = "City Limits",    ChapterIndex = 4, TrackName = "Night City",  Purse = 4500, RivalIds = new[] { "vex", "sol" } },
+            new RaceEvent { Id = "c4_r2", Name = "Renegade",       ChapterIndex = 4, TrackName = "Night City",  Purse = 6000, RivalIds = new[] { "vex", "sol", "brick", "kess" } }
         };
 
         /// <summary>Looks up a rival definition, or null.</summary>
@@ -134,6 +140,30 @@ namespace HighwayRenegade.Core.Story
                 if (Roster[i].Id == id) return Roster[i];
 
             return null;
+        }
+
+        /// <summary>Resolves the track an event runs on, or the default track when unknown.</summary>
+        public static TrackDefinition ResolveTrack(RaceEvent evt)
+        {
+            if (evt == null || string.IsNullOrEmpty(evt.TrackName))
+                return TrackCatalog.At(0);
+
+            TrackDefinition track = TrackCatalog.Find(evt.TrackName);
+            return track ?? TrackCatalog.At(evt.ChapterIndex);
+        }
+
+        /// <summary>Tracks unlocked for quick race: one per cleared chapter plus the first.</summary>
+        public static void GetUnlockedTracks(SaveData save, List<TrackDefinition> into)
+        {
+            if (into == null) return;
+            into.Clear();
+            if (save == null) return;
+
+            int maxIndex = save.ChapterIndex;
+            if (maxIndex < 0) maxIndex = 0;
+            if (maxIndex >= TrackCatalog.Tracks.Count) maxIndex = TrackCatalog.Tracks.Count - 1;
+            for (int i = 0; i <= maxIndex && i < TrackCatalog.Tracks.Count; i++)
+                into.Add(TrackCatalog.Tracks[i]);
         }
 
         /// <summary>Looks up an event, or null.</summary>

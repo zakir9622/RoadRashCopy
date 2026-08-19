@@ -4,6 +4,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using HighwayRenegade.Core.App;
 using HighwayRenegade.Core.Combat;
 using HighwayRenegade.Core.Race;
 using HighwayRenegade.Gameplay.AI;
@@ -114,12 +115,26 @@ namespace HighwayRenegade.Editor
         }
 
         /// <summary>Creates the scene, saves it, and registers it in Build Settings.</summary>
-        /// <param name="track">
-        /// Which track to build. Defaults to the original hard-coded one, so every existing
-        /// caller - the build, the tests, the menu item - keeps producing exactly what it
-        /// did before.
-        /// </param>
         public static string Generate(TrackDefinition track = null)
+        {
+            track = track ?? TrackDefinition.Default;
+            return Generate(track, ScenePathFor(track));
+        }
+
+        /// <summary>Generates every catalog track into its own scene file.</summary>
+        public static void GenerateAllTracks()
+        {
+            foreach (TrackDefinition track in TrackCatalog.Tracks)
+                Generate(track, ScenePathFor(track));
+
+            // Legacy path for tests and direct editor opens.
+            Generate(TrackCatalog.Tracks[0], ScenePath);
+        }
+
+        public static string ScenePathFor(TrackDefinition track) =>
+            TrackSceneNames.ScenePath(track);
+
+        public static string Generate(TrackDefinition track, string scenePath)
         {
             _track = track ?? TrackDefinition.Default;
 
@@ -131,10 +146,9 @@ namespace HighwayRenegade.Editor
             MaterialGenerator.Clear();
 
             BuildLighting();
-            BuildRoad();
+            TrackSpline spline = TrackSplineFactory.Build(_track);
+            BuildRoad(spline);
             if (_track.ObstacleCourse) BuildObstacleCourse();
-
-            TrackSpline spline = BuildSpline();
 
             BuildEnvironment(spline);
 
@@ -154,53 +168,15 @@ namespace HighwayRenegade.Editor
             var managers = GameObject.Find("Managers");
             if (managers != null) managers.AddComponent<VFXManager>();
 
-            Directory.CreateDirectory(Path.GetDirectoryName(ScenePath));
-            EditorSceneManager.SaveScene(scene, ScenePath);
-            RegisterInBuildSettings(ScenePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(scenePath));
+            EditorSceneManager.SaveScene(scene, scenePath);
+            RegisterInBuildSettings(scenePath);
             AssetDatabase.SaveAssets();
 
-            return ScenePath;
+            return scenePath;
         }
 
-        /// <summary>
-        /// The track centreline. A sine sweep rather than a straight line when the
-        /// definition asks for one, sampled densely enough that TrackProgress and the
-        /// rival AI follow a smooth path rather than a polygon.
-        /// </summary>
-        private static TrackSpline BuildSpline()
-        {
-            if (_track.Curviness <= 0.01f)
-            {
-                return new TrackSpline(new[]
-                {
-                    new SplineNode(new Vector3(0f, 0f, 0f), new Vector3(0f, 0f, 1f)),
-                    new SplineNode(new Vector3(0f, 0f, RoadLength), new Vector3(0f, 0f, 1f)),
-                });
-            }
-
-            const int Segments = 24;
-            var nodes = new SplineNode[Segments + 1];
-
-            for (int i = 0; i <= Segments; i++)
-            {
-                float u = (float)i / Segments;
-                float z = u * RoadLength;
-                float phase = u * Mathf.PI * 2f * _track.CurvePeriods;
-
-                float x = Mathf.Sin(phase) * _track.Curviness;
-
-                // Tangent is the analytic derivative, not a difference between samples:
-                // a tangent estimated from neighbours lags the curve and makes the AI
-                // steer late into every bend.
-                float dx = Mathf.Cos(phase) * _track.Curviness
-                         * (Mathf.PI * 2f * _track.CurvePeriods / RoadLength);
-
-                nodes[i] = new SplineNode(new Vector3(x, 0f, z),
-                                          new Vector3(dx, 0f, 1f).normalized);
-            }
-
-            return new TrackSpline(nodes);
-        }
+        // BuildSpline removed — use TrackSplineFactory.Build instead.
 
         private static void BuildLighting()
         {
@@ -228,7 +204,18 @@ namespace HighwayRenegade.Editor
             }
         }
 
-        private static void BuildRoad()
+        private static void BuildRoad(TrackSpline spline)
+        {
+            if (_track.Curviness > 0.01f && spline != null)
+            {
+                BuildRoadAlongSpline(spline);
+                return;
+            }
+
+            BuildStraightRoad();
+        }
+
+        private static void BuildStraightRoad()
         {
             var root = new GameObject("Road").transform;
 
@@ -280,6 +267,31 @@ namespace HighwayRenegade.Editor
                 stripe.transform.localScale = new Vector3(0.35f, 0.02f, 6f);
                 stripe.transform.position = new Vector3(0f, 0.01f, z);
                 Paint(stripe, new Color(0.85f, 0.82f, 0.55f));
+            }
+        }
+
+        /// <summary>Places road segments oriented to the track spline for curved courses.</summary>
+        private static void BuildRoadAlongSpline(TrackSpline spline)
+        {
+            var root = new GameObject("Road").transform;
+            const float segmentLength = 40f;
+            int count = Mathf.Max(2, Mathf.CeilToInt(spline.TotalLength / segmentLength));
+
+            for (int i = 0; i < count; i++)
+            {
+                float distance = i * segmentLength;
+                Vector3 pos = spline.SamplePosition(distance);
+                Vector3 tangent = spline.SampleTangent(distance);
+                Vector3 up = spline.SampleUp(distance);
+                if (tangent.sqrMagnitude < 0.001f) tangent = Vector3.forward;
+
+                GameObject segment = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                segment.name = $"RoadSeg_{i}";
+                segment.transform.SetParent(root);
+                segment.transform.position = pos + up * -0.5f;
+                segment.transform.rotation = Quaternion.LookRotation(tangent, up);
+                segment.transform.localScale = new Vector3(RoadWidth, 1f, segmentLength + 0.5f);
+                Surface(segment, MaterialGenerator.Surface.Road, 8f, new Color(0.20f, 0.20f, 0.22f));
             }
         }
 
@@ -567,6 +579,9 @@ namespace HighwayRenegade.Editor
 
             var chase = go.AddComponent<ChaseCamera>();
             SerializedWiring.SetRef(chase, "_target", bike);
+
+            var mirror = go.AddComponent<RearViewMirror>();
+            SerializedWiring.SetRef(mirror, "_target", bike.transform);
         }
 
         private static void BuildManagers(BikeController player)
@@ -574,23 +589,23 @@ namespace HighwayRenegade.Editor
             var go = new GameObject("Managers");
             go.AddComponent<ThermalManager>();
 
+            go.AddComponent<RenderBudgetBootstrap>();
+
             RaceManager race = go.AddComponent<RaceManager>();
-            // Finish just short of the road's end so the line is never past the geometry.
             SerializedWiring.SetFloat(race, "_finishLineZ", RoadLength - 120f);
 
-            // No SpeedHud here any more. It was added alongside RaceHudScreen, and both
-            // drew speed, gear and race position - two speedometers and two position
-            // readouts stacked on one screen, which is what players were actually seeing.
-            // RaceHudScreen is the HUD; the IMGUI one is gone.
+            go.AddComponent<TrackSplineHost>();
 
-            // CampaignSession was absent from the generated scene entirely, which meant
-            // none of the progression layer ever ran: no prize money, no rival grudges
-            // carried between races, no bike damage, no bust handling. Every race was a
-            // sealed sandbox that wrote nothing to the save file.
             go.AddComponent<CampaignSession>();
 
-            // Music and SFX bus. Without it the only audio in the scene is the bike's own
-            // procedural engine synthesis.
+            go.AddComponent<BiomeDirector>();
+            go.AddComponent<DayNightController>();
+            go.AddComponent<WeatherController>();
+            go.AddComponent<TimeTrialManager>();
+            go.AddComponent<RaceHudExtras>();
+            go.AddComponent<RivalTauntOverlay>();
+
+            // Music and SFX bus.
             go.AddComponent<AudioManager>();
 
             // Haptics. The whole Android vibration layer existed and was instantiated

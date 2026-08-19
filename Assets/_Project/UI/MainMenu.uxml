@@ -21,6 +21,7 @@
             <ui:Label text="HIGHWAY RENEGADE" class="title" />
 
             <ui:Button name="BtnCampaign" text="CAMPAIGN" class="menu-button" />
+            <ui:Button name="BtnQuickRace" text="QUICK RACE" class="menu-button" />
             <ui:Button name="BtnGarage" text="GARAGE" class="menu-button" />
             <ui:Button name="BtnSettings" text="SETTINGS" class="menu-button" />
             <ui:Button name="BtnExit" text="EXIT" class="menu-button" />

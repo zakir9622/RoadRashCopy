@@ -45,6 +45,13 @@ namespace HighwayRenegade.Gameplay.Environment
         {
             if (_spline != null) return;
 
+            var host = FindFirstObjectByType<HighwayRenegade.Gameplay.Race.TrackSplineHost>();
+            if (host != null && host.Spline != null)
+            {
+                Initialize(host.Spline);
+                return;
+            }
+
             var generator = FindFirstObjectByType<SplineHighwayGenerator>();
             if (generator != null && generator.Spline != null)
             {
@@ -65,31 +72,47 @@ namespace HighwayRenegade.Gameplay.Environment
         {
             if (_spline == null) return;
 
-            // No prefab assigned is the normal case until real art exists, and returning
-            // early here used to leave the road completely empty with no warning.
             TrafficVehicle prefab = _vehiclePrefab != null
                 ? _vehiclePrefab
                 : PlaceholderArt.CreateTrafficVehicleTemplate();
             if (prefab == null) return;
 
-            // Simple distribution along the track
+            EnsurePool(prefab);
+
             float interval = _spline.TotalLength / (float)_initialVehicleCount;
             
-            for (int i = 1; i < _initialVehicleCount; i++) // Skip distance 0 so player has room
+            for (int i = 1; i < _initialVehicleCount; i++)
             {
                 float distance = i * interval + Random.Range(-10f, 10f);
-                distance = Mathf.Clamp(distance, 50f, _spline.TotalLength); // Don't spawn too close to start
+                distance = Mathf.Clamp(distance, 50f, _spline.TotalLength);
 
                 bool oncoming = Random.value > 0.5f;
-                // Simple logic: oncoming usually in left lane (-2.5), forward in right lane (2.5)
                 float laneOffset = oncoming ? _laneOffsets[0] : _laneOffsets[1];
                 float speed = Random.Range(10f, 20f);
 
-                var instance = Instantiate(prefab, transform);
-                instance.gameObject.SetActive(true);   // templates are inactive by design
+                TrafficVehicle instance = Core.Pooling.PoolRegistry.Spawn<TrafficVehicle>(
+                    Vector3.zero, Quaternion.identity);
+                if (instance == null)
+                {
+                    instance = Instantiate(prefab, transform);
+                    instance.gameObject.SetActive(true);
+                }
+                else
+                {
+                    instance.transform.SetParent(transform);
+                }
+
                 instance.Initialize(_spline, distance, oncoming, laneOffset, speed);
                 _vehicles.Add(instance);
             }
+        }
+
+        private static void EnsurePool(TrafficVehicle prefab)
+        {
+            if (Core.Pooling.PoolRegistry.GetPool<TrafficVehicle>() != null) return;
+            var pool = new Core.Pooling.ObjectPool<TrafficVehicle>(prefab, 32, transform);
+            pool.Prewarm();
+            Core.Pooling.PoolRegistry.RegisterPool(pool);
         }
     }
 }
