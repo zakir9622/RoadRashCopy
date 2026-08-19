@@ -1,6 +1,7 @@
 using UnityEngine;
 using HighwayRenegade.Core.AI;
 using HighwayRenegade.Core.Combat;
+using HighwayRenegade.Core.Race;
 using HighwayRenegade.Gameplay.Bike;
 using HighwayRenegade.Gameplay.Combat;
 
@@ -55,6 +56,7 @@ namespace HighwayRenegade.Gameplay.AI
         private float _aggression;
         private float _nextDecisionTime;
         private BikeInput _input;
+        private TrackSpline _spline;
 
         // Human reaction delay: ring buffer storing past target positions (8 steps ~ 130ms)
         private const int TargetHistorySteps = 8;
@@ -70,6 +72,9 @@ namespace HighwayRenegade.Gameplay.AI
 
         /// <summary>Remaining health as a 0..1 fraction.</summary>
         public float Health01 => _damageable != null ? _damageable.Health01 : 1f;
+
+        /// <summary>Assigns the track spline for curved-course steering.</summary>
+        public void SetTrackSpline(TrackSpline spline) => _spline = spline;
 
         private void Awake()
         {
@@ -274,7 +279,16 @@ namespace HighwayRenegade.Gameplay.AI
             return 0f;
         }
 
-        private Vector3 AimPointAhead() => transform.position + transform.forward * _lookAheadDistance;
+        private Vector3 AimPointAhead()
+        {
+            if (_spline != null)
+            {
+                float distance = _spline.ProjectToDistance(transform.position);
+                return TrackSplineFactory.SampleRacingLine(_spline, distance + _lookAheadDistance);
+            }
+
+            return transform.position + transform.forward * _lookAheadDistance;
+        }
 
         private float SteerToward(Vector3 worldPoint)
         {

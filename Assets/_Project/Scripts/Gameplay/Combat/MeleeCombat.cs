@@ -54,6 +54,9 @@ namespace HighwayRenegade.Gameplay.Combat
             set => _aggression = Mathf.Max(0f, value);
         }
 
+        /// <summary>Raised when a swing or kick is committed (Road Rash stamina).</summary>
+        public event System.Action<bool> Swung;
+
         private void Awake() => _bike = GetComponent<BikeController>();
 
         /// <summary>Replaces the held weapon, e.g. after picking one up.</summary>
@@ -74,6 +77,10 @@ namespace HighwayRenegade.Gameplay.Combat
             
             WeaponType activeWeapon = useKick ? WeaponType.Kick : _weapon;
             _nextSwingTime = Time.time + CombatMath.Cooldown(activeWeapon);
+            Swung?.Invoke(useKick);
+
+            if (useKick)
+                HighwayRenegade.Gameplay.Audio.AudioManager.Instance?.PlayKick(transform.position);
 
             // Aerodynamic recoil on the attacker: swinging a bat at 200 km/h creates drag
             if (TryGetComponent(out Rigidbody selfRb))

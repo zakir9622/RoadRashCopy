@@ -18,8 +18,13 @@ namespace HighwayRenegade.Gameplay.Race
     {
         [Header("Course")]
         [Tooltip("World Z at which the finish line sits. The placeholder track is a " +
-                 "straight, so progress is simply distance along Z.")]
+                 "straight, so progress is simply distance along Z. Overridden at runtime " +
+                 "when a TrackSplineHost is present.")]
         [SerializeField] private float _finishLineZ = 1000f;
+
+        private float _finishDistance;
+        private float _trackLength;
+        private bool _useSplineFinish;
 
         [Header("Start")]
         [SerializeField] private float _countdownSeconds = 3f;
@@ -66,6 +71,14 @@ namespace HighwayRenegade.Gameplay.Race
 
         /// <summary>Raised when the player crosses the line. Argument is finishing position.</summary>
         public event Action<int> PlayerFinished;
+
+        /// <summary>Configures spline-based finish detection from <see cref="TrackSplineHost"/>.</summary>
+        public void ConfigureFinish(float finishDistance, float trackLength)
+        {
+            _finishDistance = finishDistance;
+            _trackLength = trackLength;
+            _useSplineFinish = true;
+        }
 
         private void Start()
         {
@@ -132,7 +145,8 @@ namespace HighwayRenegade.Gameplay.Race
             for (int i = 0; i < _racers.Length; i++)
             {
                 if (_finished[i] || _racers[i] == null) continue;
-                if (_racers[i].transform.position.z < _finishLineZ) continue;
+
+                if (!HasCrossedFinish(_racers[i])) continue;
 
                 _finished[i] = true;
                 _finishTimes[i] = RaceTime;
@@ -146,6 +160,19 @@ namespace HighwayRenegade.Gameplay.Race
                 Phase = RacePhase.Finished;
                 PlayerFinished?.Invoke(PlayerPosition);
             }
+        }
+
+        private bool HasCrossedFinish(BikeController racer)
+        {
+            if (_useSplineFinish)
+            {
+                float distance = racer.TryGetComponent(out TrackProgress tp)
+                    ? tp.DistanceAlongTrack
+                    : racer.transform.position.z;
+                return distance >= _finishDistance;
+            }
+
+            return racer.transform.position.z >= _finishLineZ;
         }
 
         /// <summary>
@@ -221,7 +248,8 @@ namespace HighwayRenegade.Gameplay.Race
                 ? tp.DistanceAlongTrack
                 : _racers[_playerIndex].transform.position.z;
 
-            return Mathf.Max(0f, _finishLineZ - currentPos);
+            float finish = _useSplineFinish ? _finishDistance : _finishLineZ;
+            return Mathf.Max(0f, finish - currentPos);
         }
     }
 }

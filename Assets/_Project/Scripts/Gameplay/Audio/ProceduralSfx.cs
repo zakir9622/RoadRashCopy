@@ -39,6 +39,19 @@ namespace HighwayRenegade.Gameplay.Audio
         /// <summary>Short UI confirmation blip.</summary>
         public static AudioClip UiClick => _uiClick ??= BuildUiClick();
 
+        /// <summary>Road Rash kick thud.</summary>
+        public static AudioClip Kick => _kick ??= BuildKick();
+
+        /// <summary>Police siren wail when heat is high.</summary>
+        public static AudioClip PoliceSiren => _siren ??= BuildPoliceSiren();
+
+        /// <summary>Traffic horn blast.</summary>
+        public static AudioClip Horn => _horn ??= BuildHorn();
+
+        private static AudioClip _kick;
+        private static AudioClip _siren;
+        private static AudioClip _horn;
+
         /// <summary>
         /// A crash is a low body thump plus a wide noise burst: the thump carries the mass
         /// and the noise carries the debris. A pure noise burst reads as static rather
@@ -204,6 +217,49 @@ namespace HighwayRenegade.Gameplay.Audio
             }
 
             return FromSamples("SFX_UiClick", data);
+        }
+
+        private static AudioClip BuildKick()
+        {
+            const float duration = 0.18f;
+            int length = (int)(SampleRate * duration);
+            var data = new float[length];
+            for (int i = 0; i < length; i++)
+            {
+                float t = (float)i / SampleRate;
+                float env = Mathf.Exp(-18f * i / (float)length);
+                float thump = Mathf.Sin(2f * Mathf.PI * 90f * t) * 0.7f;
+                data[i] = thump * env;
+            }
+            return FromSamples("SFX_Kick", data);
+        }
+
+        private static AudioClip BuildPoliceSiren()
+        {
+            const float duration = 1.2f;
+            int length = (int)(SampleRate * duration);
+            var data = new float[length];
+            for (int i = 0; i < length; i++)
+            {
+                float t = (float)i / SampleRate;
+                float wail = Mathf.Sin(2f * Mathf.PI * Mathf.Lerp(420f, 880f, (Mathf.Sin(t * 6f) + 1f) * 0.5f) * t);
+                data[i] = wail * 0.25f;
+            }
+            return FromSamples("SFX_Siren", data);
+        }
+
+        private static AudioClip BuildHorn()
+        {
+            const float duration = 0.35f;
+            int length = (int)(SampleRate * duration);
+            var data = new float[length];
+            for (int i = 0; i < length; i++)
+            {
+                float t = (float)i / SampleRate;
+                float env = Mathf.Exp(-6f * i / (float)length);
+                data[i] = (Mathf.Sin(2f * Mathf.PI * 220f * t) + Mathf.Sin(2f * Mathf.PI * 330f * t) * 0.5f) * env * 0.4f;
+            }
+            return FromSamples("SFX_Horn", data);
         }
 
         private static AudioClip FromSamples(string name, float[] data)

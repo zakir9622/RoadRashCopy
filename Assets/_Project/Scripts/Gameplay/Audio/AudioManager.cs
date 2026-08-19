@@ -117,11 +117,17 @@ namespace HighwayRenegade.Gameplay.Audio
         public void PlayHit(Vector3 position)
         {
             AudioClip clip = _hitClip != null ? _hitClip : ProceduralSfx.Hit;
-
-            // Slight random detune so repeated swings do not machine-gun the identical
-            // sample, which is what makes synthesised combat audio sound cheap.
             PlaySfx(clip, position, volume: 0.85f, pitch: Random.Range(0.92f, 1.08f));
         }
+
+        public void PlayKick(Vector3 position) =>
+            PlaySfx(ProceduralSfx.Kick, position, volume: 0.9f, pitch: Random.Range(0.95f, 1.05f));
+
+        public void PlayPoliceSiren(Vector3 position) =>
+            PlaySfx(ProceduralSfx.PoliceSiren, position, volume: 0.55f);
+
+        public void PlayHorn(Vector3 position) =>
+            PlaySfx(ProceduralSfx.Horn, position, volume: 0.5f);
 
         public void PlayMusic(AudioClip track)
         {

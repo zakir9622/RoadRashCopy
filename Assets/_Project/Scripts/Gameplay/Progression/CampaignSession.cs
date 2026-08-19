@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using HighwayRenegade.Core.App;
 using HighwayRenegade.Core.Progression;
 using HighwayRenegade.Core.Race;
 using HighwayRenegade.Core.Story;
@@ -93,6 +94,9 @@ namespace HighwayRenegade.Gameplay.Progression
 
         private void Awake()
         {
+            if (!string.IsNullOrEmpty(RaceLaunchContext.EventId))
+                _eventId = RaceLaunchContext.EventId;
+
             _save = _startFresh ? new SaveData() : SaveService.Load();
             Campaign.EnsureRivalsRegistered(_save);
         }

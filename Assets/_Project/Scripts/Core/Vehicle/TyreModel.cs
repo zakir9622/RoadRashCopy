@@ -161,6 +161,15 @@ namespace HighwayRenegade.Core.Vehicle
         private static float Abs(float v) => v < 0f ? -v : v;
 
         private static float Clamp(float v, float lo, float hi) => v < lo ? lo : (v > hi ? hi : v);
+
+        /// <summary>Scales peak friction with purchased tire stage (0..5).</summary>
+        public static TyreSpec ApplyStage(in TyreSpec baseSpec, int stage)
+        {
+            TyreSpec upgraded = baseSpec;
+            float mul = 1f + Clamp(stage, 0, 5) * 0.05f;
+            upgraded.PeakFriction = baseSpec.PeakFriction * mul;
+            return upgraded;
+        }
     }
 }
 

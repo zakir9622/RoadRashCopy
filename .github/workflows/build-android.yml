@@ -1,34 +1,15 @@
 name: Android Build & Release
 
 on:
-  # Every merge into main. A pull request merge is a push to main, so this covers the
-  # "build the app when a PR lands" case without a separate pull_request_target job.
-  #
-  # paths-ignore is what stops this from looping: the build regenerates the scenes and
-  # commits them back to main (see "Commit regenerated scenes" below), and without this
-  # that commit would trigger another build, which would commit again. The generated
-  # scenes are build *output*, so a change confined to them is never a reason to rebuild.
+  # APK release only when code lands on main (PR merge = push to main).
+  # paths-ignore stops a loop when regenerated scenes are committed back.
   push:
     branches: [main]
     paths-ignore:
       - 'Assets/_Project/Scenes/**'
       - 'ProjectSettings/EditorBuildSettings.asset'
 
-  # Every push to an open pull request targeting main. This lets a long-lived feature
-  # branch - e.g. one under continuous autonomous development - self-verify on every push
-  # without a manual workflow_dispatch, and surfaces the EditMode/build result directly on
-  # the PR. Same-repo PRs (not forks) get full secrets access, so the Unity licence is
-  # available. Release publishing is gated to the main ref (see "Publish to GitHub
-  # Releases"), so a PR build runs the tests and produces an APK artifact but never cuts a
-  # release. The scene-commit-back step is likewise main-only, so there is no build loop.
-  pull_request:
-    branches: [main]
-
-  # Daily scheduled build at 00:00 UTC (No push/commit spam)
-  schedule:
-    - cron: '0 0 * * *'
-
-  # Manual 1-click trigger button in GitHub Actions tab
+  # Manual trigger from the Actions tab (sideload build, AAB, etc.).
   workflow_dispatch:
     inputs:
       create_release:

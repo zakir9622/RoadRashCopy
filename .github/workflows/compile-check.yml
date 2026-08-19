@@ -1,18 +1,12 @@
 name: Compile Check
 
-# A green gate that does not depend on Unity licensing.
-#
-# The Android build workflow cannot run until UNITY_LICENSE / UNITY_EMAIL /
-# UNITY_PASSWORD are configured, which left every push completely unverified. This
-# compiles the whole C# codebase with Roslyn against real Unity reference assemblies
-# instead, so broken code is caught on the commit that introduces it.
+# Manual compile gate — does not run on every push/PR (saves Actions minutes).
+# Run locally with: Tools/CompileCheck/compile-check.sh --tests
+# Or trigger from the Actions tab when you want a remote check.
 #
 # See Tools/CompileCheck/README.md for what this proves and what it does not.
 
 on:
-  push:
-    branches: ['**']
-  pull_request:
   workflow_dispatch:
 
 concurrency:

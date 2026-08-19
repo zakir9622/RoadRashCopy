@@ -6,6 +6,7 @@ using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 using UnityEngine.Rendering;
+using HighwayRenegade.Core.Race;
 
 namespace HighwayRenegade.Editor
 {
@@ -320,11 +321,14 @@ namespace HighwayRenegade.Editor
             // whatever pipeline happened to be active when they were made.
             RenderPipelineGenerator.Ensure();
 
-            Debug.Log("[Build] Regenerating the race track from TestTrackGenerator.");
-            TestTrackGenerator.Generate();
+            Debug.Log("[Build] Regenerating all race tracks from TestTrackGenerator.");
+            TestTrackGenerator.GenerateAllTracks();
 
             Debug.Log("[Build] Regenerating the menu scenes.");
             MenuSceneGenerator.GenerateAll();
+
+            foreach (TrackDefinition track in TrackCatalog.Tracks)
+                RegisterScene(TestTrackGenerator.ScenePathFor(track));
 
             RegisterScene(TestTrackGenerator.ScenePath);
             RegisterScene(MenuSceneGenerator.GaragePath);

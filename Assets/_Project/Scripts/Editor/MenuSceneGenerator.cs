@@ -11,16 +11,6 @@ namespace HighwayRenegade.Editor
 {
     /// <summary>
     /// Builds the MainMenu and Garage scenes from code.
-    ///
-    /// Why generated rather than authored: .unity files are large opaque YAML that cannot
-    /// be reviewed in a diff. Keeping the front end as code means the whole thing stays
-    /// readable and rebuildable from a clean clone - which is what lets CI produce a
-    /// runnable APK without a committed scene for every screen.
-    ///
-    /// This used to hand-build uGUI: canvases, scalers, raycasters, RectTransforms, and a
-    /// SerializedObject assignment per control - about 200 lines whose only job was to
-    /// reconnect references that a rename could silently break. The screens are UI Toolkit
-    /// now, so each one needs a document and its markup, and finds its own controls.
     /// </summary>
     public static class MenuSceneGenerator
     {
@@ -46,16 +36,23 @@ namespace HighwayRenegade.Editor
 
             var menu = UiSceneBuilder.AddScreen<MainMenuScreen>("MainMenu", UiSceneBuilder.BaseLayer);
 
-            // Settings sits above the menu and starts hidden, so opening it is a detour
-            // rather than a scene load with its own state and a way back.
             var settings = UiSceneBuilder.AddScreen<SettingsScreen>("Settings", UiSceneBuilder.ModalLayer);
             SetVisibleOnStart(settings, false);
 
-            SerializedWiring.SetRef(menu, "_settings", settings);
+            var campaign = UiSceneBuilder.AddScreen<CampaignScreen>("Campaign", UiSceneBuilder.ModalLayer);
+            SetVisibleOnStart(campaign, false);
 
-            // The flow manager survives scene changes, so the menu is the natural place to
-            // create it: it is the first scene the game boots into. It owns scene loading
-            // directly now - the separate SceneLoader that used to live alongside it is gone.
+            var quickRace = UiSceneBuilder.AddScreen<QuickRaceScreen>("QuickRace", UiSceneBuilder.ModalLayer);
+            SetVisibleOnStart(quickRace, false);
+
+            var chapterIntro = UiSceneBuilder.AddScreen<ChapterIntroScreen>("ChapterIntro", UiSceneBuilder.ModalLayer + 1);
+            SetVisibleOnStart(chapterIntro, false);
+
+            SerializedWiring.SetRef(menu, "_settings", settings);
+            SerializedWiring.SetRef(menu, "_campaign", campaign);
+            SerializedWiring.SetRef(menu, "_quickRace", quickRace);
+            SerializedWiring.SetRef(menu, "_chapterIntro", chapterIntro);
+
             var flow = new GameObject("GameFlow");
             flow.AddComponent<GameFlowManager>();
 
@@ -69,16 +66,12 @@ namespace HighwayRenegade.Editor
 
             BuildCameraAndInput();
 
-            // Visible from the start: in its own scene the garage is the whole screen,
-            // not an overlay waiting for a state change that already happened.
             var garage = UiSceneBuilder.AddScreen<GarageScreen>("Garage", UiSceneBuilder.BaseLayer);
             SetVisibleOnStart(garage, true);
 
             Save(scene, GaragePath);
             return GaragePath;
         }
-
-        // ------------------------------------------------------------------
 
         private static void BuildCameraAndInput()
         {
@@ -88,27 +81,16 @@ namespace HighwayRenegade.Editor
             cam.backgroundColor = Background;
             cam.orthographic = true;
 
-            // Same reason as the race camera: a URP camera serialised without its
-            // additional data renders a black screen and logs nothing. The menu going
-            // black would be the first thing a player saw.
             camGo.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
-
             camGo.AddComponent<AudioListener>();
 
-            // The SFX bus existed only in the race scene, so every button in the menus and
-            // the garage - which is where buttons are the entire interaction - would have
-            // clicked silently. AudioManager is a DontDestroyOnLoad singleton and no-ops
-            // on a duplicate, so adding it to the entry scene is safe.
             var audioGo = new GameObject("Audio");
             audioGo.AddComponent<HighwayRenegade.Gameplay.Audio.AudioManager>();
+            audioGo.AddComponent<HighwayRenegade.Gameplay.Audio.MusicDirector>();
 
             UiSceneBuilder.AddEventSystem();
         }
 
-        /// <summary>
-        /// Sets a screen's start-up visibility through its serialized field, so the value
-        /// is baked into the scene rather than depending on execution order at runtime.
-        /// </summary>
         private static void SetVisibleOnStart(UIScreen screen, bool visible)
         {
             SerializedWiring.SetBool(screen, "_visibleOnStart", visible);
@@ -121,10 +103,6 @@ namespace HighwayRenegade.Editor
             RegisterInBuildSettings(path);
         }
 
-        /// <summary>
-        /// Adds the scene to Build Settings if absent. A scene missing from the build is
-        /// unloadable at runtime however correct its contents are.
-        /// </summary>
         private static void RegisterInBuildSettings(string path)
         {
             var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>(
