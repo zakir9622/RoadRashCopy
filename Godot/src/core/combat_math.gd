@@ -65,7 +65,7 @@ static func can_steal(damage: float, victim_weapon: int, windup: bool = false) -
 
 static func better(a: int, b: int) -> int:
 	var rank := {Weapon.FISTS: 0, Weapon.KICK: 0, Weapon.CHAIN: 1, Weapon.BAT: 2}
-	return a if int(rank[a]) >= int(rank[b]) else b
+	return a if int(rank.get(a, 0)) >= int(rank.get(b, 0)) else b
 
 
 ## Classic RR: kick rival into traffic = devastating.

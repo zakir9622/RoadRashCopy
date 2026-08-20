@@ -15,14 +15,16 @@ func _init() -> void:
 	_test_story()
 	_test_bike_specs()
 	_test_track_geometry()
+	_test_world_biomes()
 	_test_heat()
 	_test_classic_rules()
+	_test_view()
 	_test_race_simulation()
 	_test_rider_rig()
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 98
+	const EXPECTED_CHECKS := 128
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -165,6 +167,49 @@ func _test_track_geometry() -> void:
 	track.queue_free()
 
 
+func _test_world_biomes() -> void:
+	var coast := Track.new()
+	root.add_child(coast)
+	coast.build(TrackCatalog.find("coast_run"))
+	check(coast.get_node_or_null("Ocean") != null, "coast has ocean")
+	check(coast.get_node_or_null("Ground") != null, "coast has ground")
+	check(coast.get_node_or_null("TerrainBank_R") != null, "coast has inland bank")
+	coast.queue_free()
+
+	var city := Track.new()
+	root.add_child(city)
+	city.build(TrackCatalog.find("downtown"))
+	check(city.get_node_or_null("Sidewalk_L") != null, "city sidewalk L")
+	check(city.get_node_or_null("Sidewalk_R") != null, "city sidewalk R")
+	check(city.find_child("City_Shops_0", true, false) != null, "city shops")
+	check(city.find_child("City_Horizon_0", true, false) != null, "city far skyline")
+	check(city.find_child("StreetTrees", true, false) != null, "city street trees")
+	check(city.find_child("Overpass", true, false) != null, "city overpass")
+	city.queue_free()
+
+	var desert := Track.new()
+	root.add_child(desert)
+	desert.build(TrackCatalog.find("palm_desert"))
+	check(desert.get_node_or_null("Ground") != null, "desert ground")
+	check(desert.get_node_or_null("TerrainBank_L") != null, "desert dunes")
+	desert.queue_free()
+
+	var mountain := Track.new()
+	root.add_child(mountain)
+	mountain.build(TrackCatalog.find("sierra_pass"))
+	check(mountain.get_node_or_null("TerrainBank_L") != null, "mountain canyon L")
+	check(mountain.get_node_or_null("TerrainBank_R") != null, "mountain canyon R")
+	check(mountain.get_node_or_null("HorizonPeaks") != null, "mountain horizon")
+	check(mountain.get_node_or_null("Tunnel") != null, "sierra tunnel")
+	mountain.queue_free()
+
+	for wav in ["wind", "ambience_coast", "ambience_desert", "ambience_city", "ambience_mountain"]:
+		check(ResourceLoader.exists("res://assets/audio/%s.wav" % wav), "%s audio exists" % wav)
+	check(ResourceLoader.exists("res://assets/models/palm.glb"), "palm model")
+	check(ResourceLoader.exists("res://assets/models/pine.glb"), "pine model")
+	check(ResourceLoader.exists("res://assets/models/building_office.glb"), "office tower")
+
+
 func _test_heat() -> void:
 	var heat := HeatDirector.new()
 	check(heat.heat == 0.0, "heat starts cold")
@@ -176,6 +221,18 @@ func _test_heat() -> void:
 	check(heat.heat == 0.0, "heat decays to zero")
 	heat.on_idle()
 	check(heat.heat >= HeatDirector.IDLE_HEAT * 0.9, "sitting still raises heat")
+
+
+func _test_view() -> void:
+	View.look_at(null, Vector3.ZERO)
+	var n := Node3D.new()
+	View.look_at(n, Vector3.ZERO)
+	View.look_at(n, Vector3(0.0, 0.0, 8.0))
+	check(n.position == Vector3.ZERO, "detached look_at is a no-op")
+	n.position = Vector3(1.0, 2.0, 3.0)
+	View.look_at(n, n.position)
+	check(n.position == Vector3(1.0, 2.0, 3.0), "null/coincident look_at does not move the node")
+	n.free()
 
 
 func _test_classic_rules() -> void:
@@ -318,6 +375,11 @@ func _test_rider_rig() -> void:
 	check(ap != null, "bike.glb has AnimationPlayer")
 	var skel := model.find_child("Skeleton3D", true, false)
 	check(skel != null, "bike.glb has Skeleton3D")
+	check(model.find_child("cockpit_cam", true, false) != null, "cockpit camera marker")
+	check(model.find_child("wheel_f", true, false) != null, "front wheel named for spin")
+	check(ResourceLoader.exists("res://assets/models/bike_rat.glb"), "Panda 250 glb exists")
+	check(ResourceLoader.exists("res://assets/models/bike_kami.glb"), "Kamikaze glb exists")
+	check(ResourceLoader.exists("res://assets/models/bike_super.glb"), "Diablo glb exists")
 	var names := PackedStringArray()
 	if ap != null:
 		names = ap.get_animation_list()

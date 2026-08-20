@@ -1,35 +1,60 @@
-# Project Highway Renegade
+# Road Rash
 
-## Overview
-Highway Renegade is an offline Android motorcycle combat racer (Road Rash–style) built in **Unity 6000.0.38f1** with **URP 17** and **Vulkan-only** rendering.
+Godot 4.7 combat racer — illegal California circuit, 15-bike pack, fists/chain/bat/kick.
+Open-source toolchain only (Godot MIT, Blender models, Poly Haven CC0, procedural SFX).
 
-## Technology Stack
-* **Engine:** Unity 6 (6000.0.38f1)
-* **Graphics:** URP 17, Vulkan, IL2CPP ARM64
-* **UI:** UI Toolkit
-* **Architecture:** Layered assemblies (`Core` pure logic + `Gameplay` glue). Traffic uses object pooling; there is **no DOTS/ECS** in this project.
-* **Target:** Android API 30–35, landscape
+## Play
 
-## Game Features
-* **Campaign:** 5 chapters, 10 events, persistent rival grudges, chapter intro beats
-* **Quick Race:** Unlocked tracks from `TrackCatalog` with free-run payouts
-* **Garage:** Buy/equip/repair bikes; engine and tire upgrades (stages 0–5)
-* **Tracks:** 5 catalog tracks generated as separate scenes with spline progress and curved-road support
-* **Combat:** Melee, kick, weapon steal, police pursuit
-* **Audio:** Procedural SFX + procedural music beds per biome/state
-* **Performance:** Thermal throttling, render budget bootstrap, post-processing scales with heat
+```bash
+godot --path Godot
+```
 
-## Development
-1. Clone and open in Unity 6000.0.38f1 with Android Build Support.
-2. Run `python3 Tools/Assets/fetch-assets.py` for CC0 textures/HDRIs (optional).
-3. Generate scenes: **Highway Renegade → Generate Menu Scenes** and **Generate Test Track**.
-4. **Compile locally** (no Unity licence needed):
-   ```bash
-   Tools/CompileCheck/compile-check.sh --tests
-   ```
-5. **CI:** GitHub Actions no longer runs on every push/PR. The Android build runs on **merge to `main`** (APK release) or **manual dispatch** from the Actions tab. Compile Check is **manual dispatch** only.
+Desktop: WASD/arrows drive · J/K punch · L kick · Shift nitro · Esc pause.
+Android: translucent steer pad (left) · GAS (right) · L/R punch, kick, nitro.
 
-## Ship Checklist
-* Confirm final `applicationIdentifier` before Play Store upload (currently `com.highwayrenegade.game`).
-* Add adaptive app icons under `Assets/Plugins/Android/` or Player Settings.
-* Device-tune physics in `Powertrain`, `TyreModel`, and `RidingAssists`.
+The race camera sits in the cockpit over the bars and rolls with lean.
+
+Sideload the latest APK from [Releases](https://github.com/zakir9622/RoadRashCopy/releases).
+
+## Game
+
+- **Big Game** — 5 divisions × 5 events. Start last, finish top 4, don't get busted.
+- **$1000** and a Panda 250. Shop: Panda / Shuriken / Kamikaze / Diablo at Olley's.
+- **Der Panzer Klub** between races. Natasha grudges. Broke = game over.
+- Tracks: Pacific Coast, Palm Desert, The City, Sierra Nevada, Night City.
+- Cops immune to punches; bust only while crashed or running. Cows, deer, oil, traffic.
+
+## Tests (the review gate)
+
+Every PR and `main` push runs this and nothing else:
+
+```bash
+cd Godot
+godot --headless --script res://tests/run_tests.gd   # logic + 300-frame sim
+godot --headless --script res://tests/smoke.gd       # Menu / Race / Garage boot
+```
+
+That is CI **Review**. It does not export an APK, so it stays fast.
+
+## APK
+
+Local (needs Godot export templates, JDK 17, Android SDK):
+
+```bash
+Godot/tools/build.sh
+```
+
+CI exports a debug-signed arm64 APK only after Review passes, and only on **push to `main`** or **Actions → CI → Run workflow**. The APK is uploaded as an artifact and published as a GitHub Release. Pull requests do not build it.
+
+## Layout
+
+```
+Godot/src/core     rules (stamina, combat, campaign, story) — no scenes
+Godot/src/race     track-space kinematics, AI, camera
+Godot/src/ui       menu, HUD, garage, results
+Godot/tests        headless suite
+Godot/tools        blender models, audio, CI helpers, APK pipeline
+```
+
+Movers live in track space (distance + lateral). Tracks are data in `track_catalog.gd`.
+The Unity project, Unity CI, and CompileCheck tools are gone. This repo is Godot only.

@@ -64,7 +64,7 @@ func _build_backdrop() -> void:
 		var t := track.sample(s, sin(progress * TAU) * 3.0, 3.0)
 		camera.global_position = t.origin
 		var ahead := track.sample(s + 55.0, 0.0, 0.5)
-		camera.look_at(ahead.origin, Vector3.UP)
+		View.look_at(camera, ahead.origin)
 	tween.tween_method(drift, 0.0, 1.0, 40.0)
 	tween.tween_method(drift, 1.0, 0.0, 40.0)
 

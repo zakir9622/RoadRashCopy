@@ -53,7 +53,8 @@ func step(delta: float, player: Rider) -> bool:
 		_siren_timer -= delta
 		if _siren_timer <= 0.0:
 			_siren_timer = 2.2
-			Sfx.play("siren", -8.0)
+			Sfx.play("siren", -4.0)
+			Sfx.play("horn", -8.0)
 
 	if behind and distance_to > escape_distance:
 		_escape_timer += delta

@@ -1,0 +1,119 @@
+name: CI
+
+# Two jobs. PRs stay fast (headless review only). APK is main/manual after review.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.7.2"
+
+jobs:
+  review:
+    name: Review
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/godot-ci
+          key: godot-${{ env.GODOT_VERSION }}-linux
+
+      - name: Cache imported assets
+        uses: actions/cache@v4
+        with:
+          path: Godot/.godot
+          key: import-${{ env.GODOT_VERSION }}-${{ hashFiles('Godot/project.godot', 'Godot/assets/**') }}
+
+      - name: Install Godot
+        run: Godot/tools/ci/install_godot.sh
+
+      - name: Import
+        working-directory: Godot
+        run: godot --headless --import >/dev/null 2>&1 || true
+
+      - name: Unit tests
+        working-directory: Godot
+        run: godot --headless --script res://tests/run_tests.gd
+
+      - name: Scene smoke
+        working-directory: Godot
+        run: |
+          godot --headless --script res://tests/smoke.gd | tee /tmp/smoke.log
+          grep -q "SMOKE OK" /tmp/smoke.log
+
+  apk:
+    name: APK
+    needs: review
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Cache Godot + templates
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/godot-ci
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-linux-android-templates
+
+      - name: Install Godot + Android templates
+        env:
+          INSTALL_TEMPLATES: "1"
+        run: Godot/tools/ci/install_godot.sh
+
+      - name: Configure Android export
+        run: Godot/tools/ci/configure_android.sh
+
+      - name: Import
+        working-directory: Godot
+        run: godot --headless --import >/dev/null 2>&1 || true
+
+      - name: Export APK
+        working-directory: Godot
+        run: |
+          mkdir -p build
+          godot --headless --export-debug Android build/HighwayRenegade.apk
+          test -s build/HighwayRenegade.apk
+          ls -lh build/HighwayRenegade.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HighwayRenegade-apk
+          path: Godot/build/HighwayRenegade.apk
+          retention-days: 14
+
+      - name: GitHub Release
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Road Rash build ${{ github.run_number }}
+          files: Godot/build/HighwayRenegade.apk
+          fail_on_unmatched_files: true
+          body: |
+            Sideload APK from `main` (`${{ github.sha }}`).
+            arm64, debug-signed. Allow unknown sources to install.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -6,32 +6,40 @@ extends Node3D
 const RIDER_MODEL := "res://assets/models/bike.glb"
 const RAT_MODEL := "res://assets/models/bike_rat.glb"
 const COP_MODEL := "res://assets/models/cop_bike.glb"
+const KAMI_MODEL := "res://assets/models/bike_kami.glb"
+const SUPER_MODEL := "res://assets/models/bike_super.glb"
 
 var manager: RaceManager
 var track: Track
 var player: Rider
 var camera: Camera3D
 var hud: CanvasLayer
+var _biome := "coast"
 
-var _fov_base := 50.0
-var _cam_back := 1.85
-var _cam_up := 1.12
-var _cam_look := 3.2
+var _fov_base := 62.0
+var _cam_back := 2.4
+var _cam_up := 1.35
+var _cam_look := 8.0
+var _cockpit: Node3D
 
 
 ## Autoloads fetched by tree path, not identifier: identifier globals bind to
 ## phantom instances under --script test harnesses, silently ignoring test
 ## setup. The path is identical in game mode and under tests.
 func _context() -> Node:
-	return get_node("/root/RaceContext")
+	return get_node_or_null("/root/RaceContext")
 
 
 func _state() -> Node:
-	return get_node("/root/GameState")
+	return get_node_or_null("/root/GameState")
 
 
 func _ready() -> void:
+	if _context() == null or _state() == null:
+		push_error("Race: RaceContext and GameState autoloads are required")
+		return
 	var definition: Dictionary = _context().track()
+	_biome = String(definition.get("biome", "coast"))
 
 	track = Track.new()
 	track.name = "Track"
@@ -154,20 +162,46 @@ func _make_rider(rider_name: String, start_s: float, start_x: float,
 	return rider
 
 
+func _bike_model_path(bike_id: String, cop: bool) -> String:
+	if cop:
+		return COP_MODEL
+	match bike_id:
+		"sport":
+			return RIDER_MODEL
+		"kami":
+			return KAMI_MODEL if ResourceLoader.exists(KAMI_MODEL) else RIDER_MODEL
+		"super":
+			return SUPER_MODEL if ResourceLoader.exists(SUPER_MODEL) else RIDER_MODEL
+		_:
+			return RAT_MODEL
+
+
 func _make_bike_visual(colour: Color, cop: bool, rider: Rider) -> Node3D:
-	var path := COP_MODEL if cop else RAT_MODEL
-	if not cop and rider != null and rider.is_player:
-		var bike_id := String(_state().save.get("bike", "rat"))
-		if bike_id != "rat" and ResourceLoader.exists(RIDER_MODEL):
-			path = RIDER_MODEL
-	elif not cop and ResourceLoader.exists(RIDER_MODEL):
-		path = RIDER_MODEL
+	var bike_id := "sport"
+	if cop:
+		bike_id = "cop"
+	elif rider != null and rider.is_player:
+		var state := _state()
+		if state != null:
+			bike_id = String(state.save.get("bike", "rat"))
+	elif rider != null and not rider.is_player:
+		if rider.top_speed > 55.0:
+			bike_id = "super"
+		elif rider.top_speed > 48.0:
+			bike_id = "kami"
+		else:
+			bike_id = "sport"
+	var path := _bike_model_path(bike_id, cop)
 	if ResourceLoader.exists(path):
 		var scene: PackedScene = load(path)
-		var model := scene.instantiate() as Node3D
-		model.scale = Vector3(1.08, 1.08, 1.08)
-		_tint_model(model, colour)
-		return model
+		if scene != null:
+			var model := scene.instantiate() as Node3D
+			if model != null:
+				model.scale = Vector3(1.0, 1.0, 1.0)
+				_tint_model(model, colour)
+				if rider != null and rider.is_player:
+					_hide_helmet_from_cockpit(model)
+				return model
 	# Fallback silhouette: body box + wheels, still clearly a bike.
 	var root := Node3D.new()
 	var body := MeshInstance3D.new()
@@ -220,64 +254,151 @@ static func _tint_model(model: Node3D, colour: Color) -> void:
 func _build_environment(definition: Dictionary) -> void:
 	var env := Environment.new()
 	var night := bool(definition.get("night", false))
+	var biome := String(definition.get("biome", "coast"))
 
-	var sky_path := "res://assets/sky/dikhololo_night_hdri.hdr" if night \
-		else "res://assets/sky/kloppenheim_02_puresky_hdri.hdr"
-	if ResourceLoader.exists(sky_path):
-		var sky_mat := PanoramaSkyMaterial.new()
-		sky_mat.panorama = load(sky_path)
-		var sky := Sky.new()
-		sky.sky_material = sky_mat
-		env.background_mode = Environment.BG_SKY
-		env.sky = sky
-		env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-		env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
-	else:
-		env.background_mode = Environment.BG_COLOR
-		env.background_color = Color(0.04, 0.05, 0.09) if night else Color(0.45, 0.65, 0.85)
-		env.ambient_light_color = Color(0.5, 0.55, 0.65)
-		env.ambient_light_energy = 1.0
-
+	# RR3D's signature look is a hot sunset sky over the highway, not a clean HDRI.
+	var sky_mat := ProceduralSkyMaterial.new()
+	match biome:
+		"night":
+			sky_mat.sky_top_color = Color(0.02, 0.03, 0.08)
+			sky_mat.sky_horizon_color = Color(0.12, 0.1, 0.22)
+			sky_mat.ground_horizon_color = Color(0.05, 0.05, 0.08)
+			sky_mat.ground_bottom_color = Color(0.02, 0.02, 0.03)
+		"desert":
+			sky_mat.sky_top_color = Color(0.45, 0.62, 0.88)
+			sky_mat.sky_horizon_color = Color(0.98, 0.78, 0.48)
+			sky_mat.ground_horizon_color = Color(0.72, 0.52, 0.32)
+			sky_mat.ground_bottom_color = Color(0.45, 0.32, 0.18)
+		"mountain":
+			sky_mat.sky_top_color = Color(0.18, 0.22, 0.38)
+			sky_mat.sky_horizon_color = Color(0.85, 0.42, 0.28)
+			sky_mat.ground_horizon_color = Color(0.28, 0.32, 0.26)
+			sky_mat.ground_bottom_color = Color(0.12, 0.14, 0.12)
+		_:
+			# City + coast: the orange RR3D dusk.
+			sky_mat.sky_top_color = Color(0.12, 0.1, 0.22)
+			sky_mat.sky_horizon_color = Color(0.98, 0.38, 0.16)
+			sky_mat.ground_horizon_color = Color(0.55, 0.22, 0.12)
+			sky_mat.ground_bottom_color = Color(0.12, 0.08, 0.06)
+	sky_mat.sun_angle_max = 8.0
+	sky_mat.sun_curve = 0.05
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_energy = 0.85 if not night else 0.35
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.0 if not night else 1.3
-	env.glow_enabled = true
-	env.glow_intensity = 0.5
-	env.glow_bloom = 0.1
+	env.tonemap_exposure = 1.05 if not night else 1.25
+	env.glow_enabled = false
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.05, 0.07, 0.12) if night else Color(0.75, 0.8, 0.88)
-	env.fog_density = 0.0035 if night else 0.0012
-	env.fog_sky_affect = 0.0
+	env.fog_sky_affect = 0.12
+	match biome:
+		"desert":
+			env.fog_light_color = Color(0.90, 0.82, 0.68)
+			env.fog_density = 0.00045
+		"coast":
+			env.fog_light_color = Color(0.86, 0.78, 0.72)
+			env.fog_density = 0.00032
+		"city":
+			env.fog_light_color = Color(0.82, 0.74, 0.70)
+			env.fog_density = 0.00038
+		"mountain":
+			env.fog_light_color = Color(0.78, 0.72, 0.70)
+			env.fog_density = 0.00042
+		_:
+			env.fog_light_color = Color(0.18, 0.18, 0.28)
+			env.fog_density = 0.0008
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
 
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-38.0, 40.0, 0.0)
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 220.0
-	sun.light_energy = 0.15 if night else 1.2
-	sun.light_color = Color(0.7, 0.75, 1.0) if night else Color(1.0, 0.95, 0.85)
+	sun.shadow_enabled = false
+	sun.directional_shadow_max_distance = 180.0
+	match biome:
+		"desert":
+			sun.rotation_degrees = Vector3(-42.0, 28.0, 0.0)
+			sun.light_energy = 1.5
+			sun.light_color = Color(1.0, 0.86, 0.6)
+		"night":
+			sun.rotation_degrees = Vector3(-12.0, 160.0, 0.0)
+			sun.light_energy = 0.18
+			sun.light_color = Color(0.45, 0.55, 0.95)
+		"mountain":
+			sun.rotation_degrees = Vector3(-8.0, 140.0, 0.0)
+			sun.light_energy = 0.85
+			sun.light_color = Color(1.0, 0.48, 0.28)
+		_:
+			sun.rotation_degrees = Vector3(-6.0, 150.0, 0.0)
+			sun.light_energy = 1.05
+			sun.light_color = Color(1.0, 0.42, 0.22)
 	add_child(sun)
+
+
+func _hide_helmet_from_cockpit(visual: Node3D) -> void:
+	# Cockpit sits in front of the visor; keep the head out of the lens.
+	for n in ["helmet", "mesh_head", "visor"]:
+		var node := visual.find_child(n, true, false)
+		if node is VisualInstance3D:
+			(node as VisualInstance3D).layers = 2
 
 
 func _build_camera() -> void:
 	camera = Camera3D.new()
 	camera.fov = _fov_base
-	camera.near = 0.2
+	camera.near = 0.12
 	camera.far = 900.0
+	camera.cull_mask = camera.cull_mask & ~2
 	add_child(camera)
 	camera.make_current()
+	if player != null and player.visual != null:
+		_cockpit = player.visual.find_child("cockpit_cam", true, false) as Node3D
 	_snap_camera()
 
 
 func _snap_camera() -> void:
+	_update_camera(1.0)
+
+
+func _update_camera(delta: float) -> void:
 	if player == null or track == null or camera == null:
 		return
-	var behind := track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.35, _cam_up)
-	camera.global_position = behind.origin
-	var look := track.sample(player.distance + _cam_look, player.lateral * 0.22, 0.55)
-	camera.look_at(look.origin, Vector3.UP)
+	if player.state == Rider.State.RIDING or player.state == Rider.State.REMOUNT \
+			or player.is_airborne():
+		_cockpit_camera(delta)
+	else:
+		_chase_camera(delta)
+
+
+func _cockpit_camera(delta: float) -> void:
+	if _cockpit == null and player.visual != null:
+		_cockpit = player.visual.find_child("cockpit_cam", true, false) as Node3D
+	var origin: Vector3
+	if _cockpit != null:
+		origin = _cockpit.global_position
+	else:
+		origin = track.sample(player.distance + 0.28, player.lateral, 1.18 + player.air_height).origin
+	var look := track.sample(player.distance + 16.0, player.lateral * 0.10, 0.62 + player.air_height * 0.25)
+	if delta >= 0.99 or camera.global_position.distance_to(origin) > 8.0:
+		camera.global_position = origin
+	else:
+		camera.global_position = camera.global_position.lerp(origin, 1.0 - exp(-16.0 * delta))
+	View.look_at(camera, look.origin)
+	camera.rotate_object_local(Vector3.FORWARD, player.lean * 1.05)
+	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
+	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 12.0, 7.0 * delta)
+
+
+func _chase_camera(delta: float) -> void:
+	var behind := track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.4, _cam_up)
+	var look := track.sample(player.distance + 4.0, player.lateral * 0.2, 0.55)
+	if delta >= 0.99 or camera.global_position.distance_to(behind.origin) > 10.0:
+		camera.global_position = behind.origin
+	else:
+		camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-10.0 * delta))
+	View.look_at(camera, look.origin)
 
 
 func _build_hud() -> void:
@@ -288,12 +409,18 @@ func _build_hud() -> void:
 
 
 func _process(delta: float) -> void:
+	if player == null or manager == null or camera == null:
+		return
 	_update_camera(delta)
-	Sfx.set_engine(player.speed / maxf(player.top_speed, 1.0),
-		manager.phase == RaceManager.Phase.RACING and player.state == Rider.State.RIDING)
+	var riding := manager.phase == RaceManager.Phase.RACING and player.state == Rider.State.RIDING
+	var speed01 := player.speed / maxf(player.top_speed, 1.0)
+	Sfx.set_engine(speed01, riding)
+	Sfx.set_world(_biome, speed01, riding)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if manager == null:
+		return
 	if event.is_action_pressed("pause") and manager.phase != RaceManager.Phase.FINISHED:
 		_toggle_pause()
 
@@ -350,37 +477,11 @@ func _toggle_pause() -> void:
 	box.add_child(quit_button)
 
 
-## Chase camera: behind and above the bike in track space, spring-damped, with
-## an FOV kick at speed so velocity is felt, not just read off the HUD.
-func _update_camera(delta: float) -> void:
-	if player == null or track == null:
-		return
-	var behind: Transform3D
-	var look_target: Transform3D
-	if player.state == Rider.State.CRASHED:
-		behind = track.sample(maxf(player.distance - 1.6, 0.0), player.lateral + 2.2, 1.05)
-		look_target = track.sample(player.distance, player.lateral, 0.4)
-	elif player.state == Rider.State.RUNNING:
-		behind = track.sample(maxf(player.distance - 2.4, 0.0), player.lateral * 0.4, 1.55)
-		look_target = track.sample(player.distance + 2.0, player.lateral * 0.2, 0.6)
-	elif player.is_airborne():
-		behind = track.sample(maxf(player.distance - 2.8, 0.0), player.lateral * 0.3, _cam_up + player.air_height * 0.4)
-		look_target = track.sample(player.distance + _cam_look, player.lateral * 0.2, 0.4 + player.air_height)
-	else:
-		behind = track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.35, _cam_up)
-		look_target = track.sample(player.distance + _cam_look, player.lateral * 0.22, 0.55)
-	if camera.global_position.distance_to(behind.origin) > 10.0:
-		camera.global_position = behind.origin
-	else:
-		camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-12.0 * delta))
-	camera.look_at(look_target.origin, Vector3.UP)
-
-	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
-	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 5.0, 6.0 * delta)
-
-
 func _on_finished(summary: Dictionary) -> void:
 	var results_scene: PackedScene = load("res://src/ui/Results.tscn")
+	if results_scene == null:
+		push_error("Race: Results.tscn missing")
+		return
 	var results := results_scene.instantiate()
 	add_child(results)
 	results.call_deferred("present", summary)
