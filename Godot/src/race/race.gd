@@ -13,10 +13,10 @@ var player: Rider
 var camera: Camera3D
 var hud: CanvasLayer
 
-var _fov_base := 48.0
-var _cam_back := 2.05
-var _cam_up := 1.18
-var _cam_look := 3.6
+var _fov_base := 50.0
+var _cam_back := 1.85
+var _cam_up := 1.12
+var _cam_look := 3.2
 
 
 ## Autoloads fetched by tree path, not identifier: identifier globals bind to
@@ -268,6 +268,16 @@ func _build_camera() -> void:
 	camera.far = 900.0
 	add_child(camera)
 	camera.make_current()
+	_snap_camera()
+
+
+func _snap_camera() -> void:
+	if player == null or track == null or camera == null:
+		return
+	var behind := track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.35, _cam_up)
+	camera.global_position = behind.origin
+	var look := track.sample(player.distance + _cam_look, player.lateral * 0.22, 0.55)
+	camera.look_at(look.origin, Vector3.UP)
 
 
 func _build_hud() -> void:
@@ -359,7 +369,10 @@ func _update_camera(delta: float) -> void:
 	else:
 		behind = track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.35, _cam_up)
 		look_target = track.sample(player.distance + _cam_look, player.lateral * 0.22, 0.55)
-	camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-10.0 * delta))
+	if camera.global_position.distance_to(behind.origin) > 10.0:
+		camera.global_position = behind.origin
+	else:
+		camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-12.0 * delta))
 	camera.look_at(look_target.origin, Vector3.UP)
 
 	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)

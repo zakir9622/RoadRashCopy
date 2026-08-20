@@ -26,9 +26,9 @@ func _run() -> void:
 	await process_frame
 
 	await _shoot("res://src/ui/MainMenu.tscn", "menu.png", 90, "")
-	await _shoot("res://src/race/Race.tscn", "race_coast.png", 260, "coast_run")
-	await _shoot("res://src/race/Race.tscn", "race_city.png", 260, "downtown")
-	await _shoot("res://src/race/Race.tscn", "race_night.png", 260, "night_city")
+	await _shoot("res://src/race/Race.tscn", "race_coast.png", 120, "coast_run")
+	await _shoot("res://src/race/Race.tscn", "race_city.png", 120, "downtown")
+	await _shoot("res://src/race/Race.tscn", "race_night.png", 120, "night_city")
 	await _shoot("res://src/ui/Garage.tscn", "garage.png", 30, "")
 
 	print("SCREENSHOTS DONE")

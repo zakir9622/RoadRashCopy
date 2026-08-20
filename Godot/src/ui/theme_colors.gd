@@ -16,6 +16,11 @@ const POLICE_BLUE := Color("2f80ff")
 static func place(control: Control, preset: int, margin: int = 24) -> void:
 	control.set_anchors_and_offsets_preset(preset, Control.PRESET_MODE_MINSIZE, margin)
 	match preset:
+		Control.PRESET_BOTTOM_WIDE:
+			control.grow_vertical = Control.GROW_DIRECTION_BEGIN
+			control.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		Control.PRESET_TOP_WIDE:
+			control.grow_horizontal = Control.GROW_DIRECTION_BOTH
 		Control.PRESET_TOP_RIGHT:
 			control.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 		Control.PRESET_BOTTOM_LEFT:

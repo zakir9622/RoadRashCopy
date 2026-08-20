@@ -280,10 +280,13 @@ func _build_city_skyline(rng: RandomNumberGenerator) -> void:
 			var side := -1.0 if (i + kits.find(kit_path)) % 2 == 0 else 1.0
 			var d := i * 38.0 + rng.randf_range(-6.0, 6.0)
 			var lateral := (half_width + rng.randf_range(5.0, 14.0)) * side
-			var t := sample(clampf(d, 0.0, length), lateral, -0.2)
+			var t := sample(clampf(d, 0.0, length), lateral, 0.0)
 			var h := rng.randf_range(0.8, 2.4)
 			var w := rng.randf_range(0.85, 1.35)
 			t.basis = Basis(Vector3.UP, side * PI * 0.5).scaled(Vector3(w, h, w))
+			# GLB / box meshes are centred — drop the footprint onto the verge.
+			var aabb := mesh.get_aabb()
+			t.origin += Vector3.UP * (-aabb.position.y * h)
 			mm.set_instance_transform(i, t)
 		var inst := MultiMeshInstance3D.new()
 		inst.name = "City_%s" % kit_path.get_file().get_basename()
