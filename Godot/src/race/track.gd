@@ -508,6 +508,20 @@ func _build_props(rng_seed: int) -> void:
 			]), "PalmsOcean", rng, 16.0, Vector2(6.0, 11.0), Vector2(8.0, 13.0), -0.8, [-1.0])
 			_scatter_prop(_first_model(["res://assets/models/kenney_tree.glb", "res://assets/models/tree.glb"]),
 				"Trees", rng, 28.0, Vector2(12.0, 32.0), Vector2(12.0, 20.0), -0.3, [1.0])
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney/suburban/building-type-a.glb",
+				"res://assets/models/building_shop.glb",
+			]), "CoastHouses", rng, 42.0, Vector2(14.0, 22.0), Vector2(8.0, 12.0), 0.0, [1.0], true)
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney/suburban/building-type-g.glb",
+				"res://assets/models/kenney/suburban/building-type-b.glb",
+			]), "CoastHousesB", rng, 58.0, Vector2(16.0, 26.0), Vector2(7.0, 11.0), 0.0, [1.0], true)
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney/suburban/fence.glb",
+			]), "CoastFences", rng, 14.0, Vector2(10.5, 13.5), Vector2(1.1, 1.4), 0.0, [1.0], true)
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney/roads/electricity-pole.glb",
+			]), "CoastPoles", rng, 64.0, Vector2(3.2, 4.4), Vector2(9.0, 11.0), 0.0, [1.0], true)
 		"desert":
 			_scatter_prop(_first_model(["res://assets/models/kenney_rock.glb", "res://assets/models/rock.glb"]),
 				"Rocks", rng, 16.0, Vector2(4.5, 28.0), Vector2(2.5, 8.0), -0.2)
@@ -517,6 +531,17 @@ func _build_props(rng_seed: int) -> void:
 			_scatter_prop(_first_model([
 				"res://assets/models/kenney_cactus_short.glb", "res://assets/models/cactus.glb"
 			]), "CactusLow", rng, 14.0, Vector2(5.0, 16.0), Vector2(1.2, 2.4), 0.0)
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney/suburban/building-type-c.glb",
+				"res://assets/models/kenney/suburban/building-type-e.glb",
+			]), "DesertShacks", rng, 55.0, Vector2(16.0, 28.0), Vector2(6.0, 9.0), 0.0, [1.0], true)
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney/suburban/building-type-d.glb",
+				"res://assets/models/kenney/suburban/building-type-f.glb",
+			]), "DesertShacksB", rng, 72.0, Vector2(18.0, 32.0), Vector2(5.5, 8.5), 0.0, [1.0], true)
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney/roads/electricity-pole.glb",
+			]), "DesertPoles", rng, 48.0, Vector2(5.0, 8.0), Vector2(9.0, 12.0), 0.0, [-1.0, 1.0], true)
 		"mountain":
 			_scatter_prop(_first_model(["res://assets/models/kenney_pine.glb", "res://assets/models/pine.glb"]),
 				"Pines", rng, 8.0, Vector2(3.6, 14.0), Vector2(14.0, 22.0), -0.15)
@@ -524,6 +549,9 @@ func _build_props(rng_seed: int) -> void:
 				"PineWall", rng, 12.0, Vector2(14.0, 28.0), Vector2(18.0, 30.0), -0.2)
 			_scatter_prop(_first_model(["res://assets/models/kenney_rock.glb", "res://assets/models/rock.glb"]),
 				"Boulders", rng, 16.0, Vector2(4.0, 12.0), Vector2(2.0, 6.0), -0.15)
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney/roads/electricity-pole.glb",
+			]), "MountainPoles", rng, 40.0, Vector2(2.4, 3.6), Vector2(10.0, 13.0), 0.0, [-1.0, 1.0], true)
 			_build_tunnel()
 		_:
 			_scatter_prop("res://assets/models/tree.glb", "Props", rng, 26.0, Vector2(6.0, 34.0), Vector2(8.0, 14.0), -0.4)
@@ -648,59 +676,46 @@ func _city_row(rng: RandomNumberGenerator, kits: Array, spacing: float, shoulder
 
 
 func _build_city_furniture(rng: RandomNumberGenerator) -> void:
-	var hydrant := CylinderMesh.new()
-	hydrant.top_radius = 0.12
-	hydrant.bottom_radius = 0.14
-	hydrant.height = 0.7
-	var hmat := StandardMaterial3D.new()
-	hmat.albedo_color = Color(0.82, 0.12, 0.1)
-	hmat.roughness = 0.45
-	hydrant.material = hmat
-	var d := 28.0
-	var n := 0
-	while d < length - 20.0:
-		n += 2
-		d += 36.0
-	if n <= 0:
-		return
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = hydrant
-	mm.instance_count = n
-	d = 28.0
-	var idx := 0
-	while d < length - 20.0 and idx < n:
-		for side in [-1.0, 1.0]:
-			if idx >= n:
-				break
-			var t := sample(d + rng.randf_range(-4.0, 4.0), (half_width + 1.1) * side, 0.38)
-			mm.set_instance_transform(idx, t)
-			idx += 1
-		d += 36.0
-	var inst := MultiMeshInstance3D.new()
-	inst.name = "City_Hydrants"
-	inst.multimesh = mm
-	add_child(inst)
+	_scatter_prop(_first_model([
+		"res://assets/models/kenney/roads/dumpster.glb",
+	]), "City_Dumpsters", rng, 36.0, Vector2(1.2, 1.8), Vector2(1.2, 1.6), 0.0, [-1.0, 1.0], true)
+	_scatter_prop(_first_model([
+		"res://assets/models/kenney/roads/construction-cone.glb",
+	]), "City_Cones", rng, 48.0, Vector2(0.6, 1.1), Vector2(0.7, 0.9), 0.0, [-1.0, 1.0])
+	_scatter_prop(_first_model([
+		"res://assets/models/kenney/roads/traffic-light.glb",
+	]), "City_TrafficLights", rng, 90.0, Vector2(1.4, 1.9), Vector2(3.4, 4.2), 0.0, [-1.0, 1.0], true)
+	_scatter_prop(_first_model([
+		"res://assets/models/kenney/roads/road-sign-stop.glb",
+	]), "City_StopSigns", rng, 72.0, Vector2(1.1, 1.6), Vector2(2.4, 2.8), 0.0, [-1.0, 1.0], true)
+	_scatter_prop(_first_model([
+		"res://assets/models/kenney/roads/construction-fence.glb",
+	]), "City_WorkFences", rng, 110.0, Vector2(1.5, 2.2), Vector2(1.4, 1.8), 0.0, [-1.0, 1.0], true)
+	_scatter_prop(_first_model([
+		"res://assets/models/kenney/roads/electricity-pole.glb",
+	]), "City_Poles", rng, 80.0, Vector2(2.0, 2.6), Vector2(8.5, 10.5), 0.0, [-1.0, 1.0], true)
 	_build_billboards(rng)
 
 
 func _build_billboards(rng: RandomNumberGenerator) -> void:
-	var board := BoxMesh.new()
-	board.size = Vector3(6.4, 3.6, 0.16)
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.15, 0.16, 0.22)
-	mat.emission_enabled = true
-	mat.emission = Color(0.95, 0.45, 0.12) if rng.randf() < 0.5 else Color(0.2, 0.55, 0.95)
-	mat.emission_energy_multiplier = 1.6
-	_apply_pbr_maps(mat, "res://assets/textures/rectangular_facade_tiles_02_Diffuse.jpg")
-	board.material = mat
-	var pole := CylinderMesh.new()
-	pole.top_radius = 0.09
-	pole.bottom_radius = 0.12
-	pole.height = 4.2
-	var pmat := StandardMaterial3D.new()
-	pmat.albedo_color = Color(0.18, 0.18, 0.2)
-	pole.material = pmat
+	var kit := _first_model([
+		"res://assets/models/kenney/roads/sign-highway.glb",
+		"res://assets/models/kenney/roads/sign-highway-wide.glb",
+	])
+	var mesh := _extract_mesh(kit)
+	if mesh == null:
+		var board := BoxMesh.new()
+		board.size = Vector3(6.4, 3.6, 0.16)
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.15, 0.16, 0.22)
+		mat.emission_enabled = true
+		mat.emission = Color(0.95, 0.45, 0.12) if rng.randf() < 0.5 else Color(0.2, 0.55, 0.95)
+		mat.emission_energy_multiplier = 1.6
+		_apply_pbr_maps(mat, "res://assets/textures/rectangular_facade_tiles_02_Diffuse.jpg")
+		board.material = mat
+		mesh = board
+	var aabb := mesh.get_aabb()
+	var base_h := maxf(aabb.size.y, 0.2)
 	var d := 90.0
 	var n := 0
 	while d < length - 80.0:
@@ -710,65 +725,77 @@ func _build_billboards(rng: RandomNumberGenerator) -> void:
 		return
 	var boards := MultiMesh.new()
 	boards.transform_format = MultiMesh.TRANSFORM_3D
-	boards.mesh = board
+	boards.mesh = mesh
 	boards.instance_count = n
-	var poles := MultiMesh.new()
-	poles.transform_format = MultiMesh.TRANSFORM_3D
-	poles.mesh = pole
-	poles.instance_count = n
 	d = 90.0
 	var idx := 0
 	while d < length - 80.0 and idx < n:
 		var side := -1.0 if int(d / 90.0) % 2 == 0 else 1.0
-		var xf := _facing_road(d, (half_width + 5.8) * side, 4.0, side)
+		var s := 5.8 / base_h
+		var xf := _facing_road(d, (half_width + 5.8) * side, 0.0, side)
+		xf.basis = xf.basis.scaled(Vector3(s, s, s))
+		xf.origin += xf.basis.y.normalized() * (-aabb.position.y * s)
 		boards.set_instance_transform(idx, xf)
-		var pole_xf := sample(d, (half_width + 5.8) * side, 2.1)
-		poles.set_instance_transform(idx, pole_xf)
 		d += 140.0
 		idx += 1
 	var board_inst := MultiMeshInstance3D.new()
 	board_inst.name = "Billboard"
 	board_inst.multimesh = boards
 	add_child(board_inst)
-	var pole_inst := MultiMeshInstance3D.new()
-	pole_inst.name = "BillboardPoles"
-	pole_inst.multimesh = poles
-	add_child(pole_inst)
 
 
 func _build_streetlights() -> void:
-	# Light poles with emissive heads — cheap city mood without shadowed lights.
-	var pole := CylinderMesh.new()
-	pole.top_radius = 0.05
-	pole.bottom_radius = 0.08
-	pole.height = 7.2
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.12, 0.12, 0.14)
-	mat.emission_enabled = true
-	mat.emission = Color(1.0, 0.82, 0.45) if String(definition.get("biome", "")) == "night" \
-		else Color(0.95, 0.9, 0.7)
-	mat.emission_energy_multiplier = 3.2 if String(definition.get("biome", "")) == "night" else 1.4
-	pole.material = mat
-
+	# Kenney curved lamps when present; otherwise an emissive pole. Anchors feed the omni pool.
+	var mesh := _extract_mesh(_first_model([
+		"res://assets/models/kenney/roads/light-curved.glb",
+		"res://assets/models/kenney/roads/light-square.glb",
+	]))
+	var kenney := mesh != null
+	if mesh == null:
+		var pole := CylinderMesh.new()
+		pole.top_radius = 0.05
+		pole.bottom_radius = 0.08
+		pole.height = 7.2
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.12, 0.12, 0.14)
+		mat.emission_enabled = true
+		mat.emission = Color(1.0, 0.82, 0.45) if String(definition.get("biome", "")) == "night" \
+			else Color(0.95, 0.9, 0.7)
+		mat.emission_energy_multiplier = 3.2 if String(definition.get("biome", "")) == "night" else 1.4
+		pole.material = mat
+		mesh = pole
+	var aabb := mesh.get_aabb()
+	var s := 7.2 / maxf(aabb.size.y, 0.2)
 	var spacing := 28.0
 	var steps := maxi(int(length / spacing), 1)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = pole
+	mm.mesh = mesh
 	mm.instance_count = steps * 2
 	var idx := 0
 	light_anchors.clear()
 	for i in steps:
 		for side: float in [-1.0, 1.0]:
-			var t := sample(i * spacing, (half_width + 0.85) * side, 3.6)
+			var t := sample(i * spacing, (half_width + 0.85) * side, 0.0)
+			if kenney:
+				var inward := -t.basis.x * side
+				inward.y = 0.0
+				if inward.length() < 0.001:
+					inward = Vector3.FORWARD
+				t.basis = Basis.looking_at(inward.normalized(), Vector3.UP).scaled(Vector3(s, s, s))
+				t.origin += t.basis.y.normalized() * (-aabb.position.y * s)
+				light_anchors.append(t.origin + Vector3.UP * (aabb.size.y * s * 0.82))
+			else:
+				t.origin += t.basis.y.normalized() * 3.6
+				light_anchors.append(t.origin)
 			mm.set_instance_transform(idx, t)
-			light_anchors.append(t.origin)
 			idx += 1
 	var inst := MultiMeshInstance3D.new()
 	inst.name = "Streetlights"
 	inst.multimesh = mm
 	add_child(inst)
-	_build_light_heads()
+	if not kenney:
+		_build_light_heads()
 
 
 func _build_light_heads() -> void:
@@ -801,8 +828,9 @@ func _build_light_heads() -> void:
 
 func _build_overpasses() -> void:
 	var deck_mat := StandardMaterial3D.new()
-	deck_mat.albedo_color = Color(0.42, 0.43, 0.46)
+	deck_mat.albedo_color = Color(0.72, 0.73, 0.74)
 	deck_mat.roughness = 0.9
+	_apply_pbr_maps(deck_mat, "res://assets/textures/concrete_wall_008_Diffuse.jpg")
 	var d := 380.0
 	var n := 0
 	while d < length - 200.0:
@@ -816,16 +844,26 @@ func _build_overpasses() -> void:
 		deck.global_transform = sample(d, 0.0, 6.4)
 		deck.set_meta("track_distance", d)
 		_window_nodes.append(deck)
+		var pillar_mesh := _extract_mesh("res://assets/models/kenney/roads/bridge-pillar.glb")
 		for side in [-1.0, 1.0]:
 			var pillar := MeshInstance3D.new()
-			var cyl := CylinderMesh.new()
-			cyl.top_radius = 0.45
-			cyl.bottom_radius = 0.55
-			cyl.height = 6.2
-			cyl.material = deck_mat
-			pillar.mesh = cyl
+			var px := sample(d, (half_width + 1.6) * side, 0.0)
+			if pillar_mesh != null:
+				pillar.mesh = pillar_mesh
+				var paabb := pillar_mesh.get_aabb()
+				var ps := 6.2 / maxf(paabb.size.y, 0.2)
+				px.basis = px.basis.scaled(Vector3(ps, ps, ps))
+				px.origin += px.basis.y.normalized() * (-paabb.position.y * ps)
+			else:
+				var cyl := CylinderMesh.new()
+				cyl.top_radius = 0.45
+				cyl.bottom_radius = 0.55
+				cyl.height = 6.2
+				cyl.material = deck_mat
+				pillar.mesh = cyl
+				px.origin += px.basis.y.normalized() * 3.1
 			add_child(pillar)
-			pillar.global_transform = sample(d, (half_width + 1.6) * side, 3.1)
+			pillar.global_transform = px
 		d += 420.0
 		n += 1
 		if n >= 4:
@@ -1041,9 +1079,12 @@ func _add_hazard(d: float, lat: float, kind: String, dir: float) -> void:
 	var hz := {"distance": d, "lateral": lat, "kind": kind, "dir": dir}
 	match kind:
 		"sign":
-			if ResourceLoader.exists("res://assets/models/sign.glb"):
+			var sign_file := "kenney/roads/road-sign-warning.glb"
+			if not ResourceLoader.exists("res://assets/models/%s" % sign_file):
+				sign_file = "sign.glb"
+			if ResourceLoader.exists("res://assets/models/%s" % sign_file):
 				var side := 1.0 if lat >= 0.0 else -1.0
-				_place_hazard_mesh(d, lat + half_width * side * 0.85, "sign.glb", 0.8)
+				_place_hazard_mesh(d, lat + half_width * side * 0.85, sign_file, 2.2)
 		"deer":
 			hz["node"] = _place_animal(d, lat, false)
 		"cow":
@@ -1053,15 +1094,27 @@ func _add_hazard(d: float, lat: float, kind: String, dir: float) -> void:
 	hazards.append(hz)
 
 
-func _place_hazard_mesh(d: float, lateral: float, file: String, scale: float) -> void:
+func _place_hazard_mesh(d: float, lateral: float, file: String, target_m: float) -> void:
 	var path := "res://assets/models/%s" % file
 	if not ResourceLoader.exists(path):
+		return
+	var mesh := _extract_mesh(path)
+	if mesh != null:
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		add_child(mi)
+		var aabb := mesh.get_aabb()
+		var s := target_m / maxf(aabb.size.y, 0.05)
+		var xf := sample(clampf(d, 0.0, length), lateral, 0.0)
+		xf.basis = xf.basis.scaled(Vector3(s, s, s))
+		xf.origin += xf.basis.y.normalized() * (-aabb.position.y * s)
+		mi.global_transform = xf
 		return
 	var scene: PackedScene = load(path)
 	var node := scene.instantiate() as Node3D
 	add_child(node)
 	node.global_transform = sample(clampf(d, 0.0, length), lateral, 0.0)
-	node.scale = Vector3(scale, scale, scale)
+	node.scale = Vector3(target_m, target_m, target_m)
 
 
 func _build_roadblocks(rng_seed: int) -> void:
@@ -1075,11 +1128,15 @@ func _build_roadblocks(rng_seed: int) -> void:
 		var d := (i + 1) * (length / float(count + 1))
 		var lat := rng.randf_range(-half_width * 0.35, half_width * 0.35)
 		roadblocks.append({"distance": d, "lateral": lat, "width": 3.2})
-		if ResourceLoader.exists("res://assets/models/barrier.glb"):
+		if ResourceLoader.exists("res://assets/models/kenney/roads/construction-barrier.glb"):
+			_place_hazard_mesh(d, lat, "kenney/roads/construction-barrier.glb", 1.2)
+		elif ResourceLoader.exists("res://assets/models/barrier.glb"):
 			_place_hazard_mesh(d, lat, "barrier.glb", 1.1)
 		# Police cruiser parked across a lane — classic blockade.
-		if ResourceLoader.exists("res://assets/models/car.glb"):
-			_place_hazard_mesh(d, lat + 2.4, "car.glb", 1.0)
+		if ResourceLoader.exists("res://assets/models/kenney/car/car_sedan.glb"):
+			_place_hazard_mesh(d, lat + 2.4, "kenney/car/car_sedan.glb", 1.55)
+		elif ResourceLoader.exists("res://assets/models/car.glb"):
+			_place_hazard_mesh(d, lat + 2.4, "car.glb", 1.4)
 
 
 func _build_water() -> void:
@@ -1093,10 +1150,13 @@ func _build_water() -> void:
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.albedo_color.a = 0.88
 	mat.uv1_scale = Vector3(6, 6, 1)
-	if ResourceLoader.exists("res://assets/textures/asphalt_02_nor_gl.jpg"):
+	var water_nor := "res://assets/textures/coast_sand_04_nor_gl.jpg"
+	if not ResourceLoader.exists(water_nor):
+		water_nor = "res://assets/textures/asphalt_02_nor_gl.jpg"
+	if ResourceLoader.exists(water_nor):
 		mat.normal_enabled = true
-		mat.normal_texture = load("res://assets/textures/asphalt_02_nor_gl.jpg")
-		mat.normal_scale = 0.45
+		mat.normal_texture = load(water_nor)
+		mat.normal_scale = 0.55
 	mesh.material = mat
 	_ocean_mat = mat
 	plane.mesh = mesh
@@ -1129,15 +1189,28 @@ func _process(delta: float) -> void:
 
 
 func _place_animal(d: float, lateral: float, cow: bool) -> Node3D:
+	var path := "res://assets/models/quaternius/cow.glb" if cow else "res://assets/models/quaternius/deer.glb"
+	var mesh := _extract_mesh(path)
 	var body := MeshInstance3D.new()
-	var mesh := CapsuleMesh.new()
-	mesh.radius = 0.42 if cow else 0.28
-	mesh.height = 1.6 if cow else 1.1
+	body.name = "Cow" if cow else "Deer"
+	if mesh != null:
+		body.mesh = mesh
+		add_child(body)
+		var aabb := mesh.get_aabb()
+		var target := 1.45 if cow else 1.35
+		var s := target / maxf(aabb.size.y, 0.15)
+		var xf := sample(clampf(d, 0.0, length), lateral, 0.0)
+		xf.basis = xf.basis.scaled(Vector3(s, s, s))
+		xf.origin += xf.basis.y.normalized() * (-aabb.position.y * s)
+		body.global_transform = xf
+		return body
+	var cap := CapsuleMesh.new()
+	cap.radius = 0.42 if cow else 0.28
+	cap.height = 1.6 if cow else 1.1
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.28, 0.18, 0.1) if cow else Color(0.45, 0.32, 0.18)
-	mesh.material = mat
-	body.mesh = mesh
-	body.name = "Cow" if cow else "Deer"
+	cap.material = mat
+	body.mesh = cap
 	add_child(body)
 	body.global_transform = sample(clampf(d, 0.0, length), lateral, 0.55 if cow else 0.45)
 	body.scale = Vector3(1.1, 0.9, 1.6) if cow else Vector3(0.7, 0.7, 1.2)
@@ -1203,20 +1276,47 @@ static func _checker_texture() -> ImageTexture:
 
 func _build_finish_crowd() -> void:
 	var finish_d := maxf(length - 6.0, 2.0)
+	var kits := [
+		"res://assets/models/kenney/characters/character-male-a.glb",
+		"res://assets/models/kenney/characters/character-male-c.glb",
+		"res://assets/models/kenney/characters/character-female-a.glb",
+		"res://assets/models/kenney/characters/character-female-d.glb",
+	]
+	var meshes: Array[Mesh] = []
+	for p in kits:
+		var m := _extract_mesh(String(p))
+		if m != null:
+			meshes.append(m)
+	if meshes.is_empty():
+		for i in 12:
+			var person := MeshInstance3D.new()
+			var cap := CapsuleMesh.new()
+			cap.radius = 0.18
+			cap.height = 1.5
+			var mat := StandardMaterial3D.new()
+			var palette := [ThemeColors.ACCENT, Color(0.8, 0.2, 0.15), Color(0.15, 0.2, 0.7), Color(0.9, 0.9, 0.85)]
+			mat.albedo_color = palette[i % palette.size()]
+			cap.material = mat
+			person.mesh = cap
+			add_child(person)
+			var side := -1.0 if i < 6 else 1.0
+			var lat := (half_width + 1.6 + (i % 6) * 0.45) * side
+			person.global_transform = sample(finish_d + (i % 3) * 1.1, lat, 0.85)
+		return
 	for i in 12:
+		var mesh: Mesh = meshes[i % meshes.size()]
 		var person := MeshInstance3D.new()
-		var mesh := CapsuleMesh.new()
-		mesh.radius = 0.18
-		mesh.height = 1.5
-		var mat := StandardMaterial3D.new()
-		var palette := [ThemeColors.ACCENT, Color(0.8, 0.2, 0.15), Color(0.15, 0.2, 0.7), Color(0.9, 0.9, 0.85)]
-		mat.albedo_color = palette[i % palette.size()]
-		mesh.material = mat
 		person.mesh = mesh
+		person.name = "Crowd"
 		add_child(person)
+		var aabb := mesh.get_aabb()
+		var s := 1.7 / maxf(aabb.size.y, 0.2)
 		var side := -1.0 if i < 6 else 1.0
 		var lat := (half_width + 1.6 + (i % 6) * 0.45) * side
-		person.global_transform = sample(finish_d + (i % 3) * 1.1, lat, 0.85)
+		var xf := sample(finish_d + (i % 3) * 1.1, lat, 0.0)
+		xf.basis = xf.basis.scaled(Vector3(s, s, s))
+		xf.origin += xf.basis.y.normalized() * (-aabb.position.y * s)
+		person.global_transform = xf
 
 
 func _facing_road(d: float, lateral: float, height: float, side: float) -> Transform3D:

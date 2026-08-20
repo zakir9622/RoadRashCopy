@@ -17,6 +17,7 @@ Highway Renegade uses public-domain (CC0) textures and kits so the world is not 
 | [rubber_tiles](https://polyhaven.com/a/rubber_tiles) | Tyre materials |
 | [metal_plate](https://polyhaven.com/a/metal_plate) | Chrome / pumps |
 | [leather_red_02](https://polyhaven.com/a/leather_red_02) | Rider suits (tinted per gang) |
+| [rough_wood](https://polyhaven.com/a/rough_wood) | Club / bat grips |
 
 Older asphalt, concrete, grass, and rust maps already in this folder are also Poly Haven CC0.
 
@@ -26,4 +27,11 @@ GLTF kits from [kenney.nl](https://kenney.nl) (CC0 1.0):
 
 - [Car Kit](https://kenney.nl/assets/car-kit) — `assets/models/kenney/car/` (plus `Textures/colormap.png`)
 - [City Kit (Commercial)](https://kenney.nl/assets/city-kit-commercial) — `assets/models/kenney/city/`
+- [City Kit (Roads)](https://kenney.nl/assets/city-kit-roads) — lamps, signs, barriers, dumpsters, traffic lights
+- [City Kit (Suburban)](https://kenney.nl/assets/city-kit-suburban) — coast/desert houses
+- [Mini Characters](https://kenney.nl/assets/mini-characters) — finish-line crowd
 - [Nature Kit](https://kenney.nl/assets/nature-kit) — trees, palms, pines, rocks, cactus beside the Blender fallbacks
+
+## Quaternius (CC0)
+
+Cow and deer from the [Ultimate Animated Animals](https://quaternius.com/packs/ultimateanimatedanimals.html) pack (public domain).
