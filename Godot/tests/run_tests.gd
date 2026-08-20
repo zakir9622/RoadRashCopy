@@ -25,7 +25,7 @@ func _init() -> void:
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 165
+	const EXPECTED_CHECKS := 178
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -199,6 +199,8 @@ func _test_world_biomes() -> void:
 	check(coast.get_node_or_null("Ocean") != null, "coast has ocean")
 	check(coast.get_node_or_null("Ground") != null, "coast has ground")
 	check(coast.get_node_or_null("TerrainBank_R") != null, "coast has inland bank")
+	check(coast.get_node_or_null("CoastHouses") != null, "coast suburban houses")
+	check(coast.find_child("Crowd", true, false) != null, "finish crowd")
 	coast.queue_free()
 
 	var city := Track.new()
@@ -210,6 +212,9 @@ func _test_world_biomes() -> void:
 	check(city.find_child("City_Horizon_0", true, false) != null, "city far skyline")
 	check(city.find_child("StreetTrees", true, false) != null, "city street trees")
 	check(city.find_child("Overpass", true, false) != null, "city overpass")
+	check(city.find_child("City_Dumpsters", true, false) != null, "city dumpsters")
+	check(city.find_child("Streetlights", true, false) != null, "Kenney streetlamps")
+	check(city.find_child("City_StopSigns", true, false) != null, "city stop signs")
 	city.queue_free()
 
 	var desert := Track.new()
@@ -217,6 +222,7 @@ func _test_world_biomes() -> void:
 	desert.build(TrackCatalog.find("palm_desert"))
 	check(desert.get_node_or_null("Ground") != null, "desert ground")
 	check(desert.get_node_or_null("TerrainBank_L") != null, "desert dunes")
+	check(desert.get_node_or_null("DesertShacks") != null, "desert suburban shacks")
 	desert.queue_free()
 
 	var mountain := Track.new()
@@ -513,6 +519,13 @@ func _test_cinematic_hud() -> void:
 	check(ResourceLoader.exists("res://assets/textures/rubber_tiles_Diffuse.jpg"), "CC0 rubber")
 	check(ResourceLoader.exists("res://assets/textures/painted_worn_brick_Diffuse.jpg"), "CC0 brick")
 	check(FileAccess.file_exists("res://assets/CC0.md"), "CC0 credits")
+	check(ResourceLoader.exists("res://assets/models/kenney/roads/light-curved.glb"), "Kenney streetlamp")
+	check(ResourceLoader.exists("res://assets/models/kenney/roads/construction-barrier.glb"), "Kenney barrier")
+	check(ResourceLoader.exists("res://assets/models/kenney/suburban/building-type-a.glb"), "Kenney suburban house")
+	check(ResourceLoader.exists("res://assets/models/kenney/characters/character-male-a.glb"), "Kenney crowd")
+	check(ResourceLoader.exists("res://assets/models/quaternius/cow.glb"), "CC0 cow")
+	check(ResourceLoader.exists("res://assets/models/quaternius/deer.glb"), "CC0 deer")
+	check(ResourceLoader.exists("res://assets/textures/rough_wood_Diffuse.jpg"), "CC0 wood")
 	check(Track._first_model([
 		"res://assets/models/missing_kit.glb",
 		"res://assets/models/kenney/city/kenney_shop_a.glb",

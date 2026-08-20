@@ -162,7 +162,40 @@ func _spawn_weapon(path: String, parent: Node) -> Node3D:
 	prop.scale = Vector3(0.45, 0.45, 0.45)
 	prop.rotation_degrees = Vector3(80, 0, 20)
 	parent.add_child(prop)
+	_bind_wood(prop)
 	return prop
+
+
+func _bind_wood(root: Node) -> void:
+	var diff := "res://assets/textures/rough_wood_Diffuse.jpg"
+	if not ResourceLoader.exists(diff):
+		return
+	for child in root.find_children("*", "MeshInstance3D", true, false):
+		var mesh := child as MeshInstance3D
+		if mesh == null or mesh.mesh == null:
+			continue
+		for i in mesh.mesh.get_surface_count():
+			var mat := mesh.get_surface_override_material(i)
+			if mat == null:
+				mat = mesh.mesh.surface_get_material(i)
+			var std := (mat as StandardMaterial3D)
+			if std == null:
+				std = StandardMaterial3D.new()
+			else:
+				std = std.duplicate() as StandardMaterial3D
+			std.albedo_texture = load(diff)
+			var nor := "res://assets/textures/rough_wood_nor_gl.jpg"
+			if ResourceLoader.exists(nor):
+				std.normal_enabled = true
+				std.normal_texture = load(nor)
+			var arm := "res://assets/textures/rough_wood_arm.jpg"
+			if ResourceLoader.exists(arm):
+				std.ao_enabled = true
+				std.ao_texture = load(arm)
+				std.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+				std.roughness_texture = load(arm)
+				std.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+			mesh.set_surface_override_material(i, std)
 
 
 func _load_weapon_loose() -> void:
@@ -178,6 +211,7 @@ func _try_loose_weapon(side: String, full: String) -> void:
 	prop.visible = false
 	prop.scale = Vector3(0.55, 0.55, 0.55)
 	add_child(prop)
+	_bind_wood(prop)
 	if side == "l":
 		_weapon_l = prop
 	else:
