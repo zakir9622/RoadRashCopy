@@ -336,10 +336,12 @@ static func _apply_hero_materials(model: Node3D) -> void:
 			if mat_name.begins_with("rubber"):
 				tuned.metallic = 0.0
 				tuned.roughness = 0.96
-				tuned.albedo_color = Color(0.03, 0.03, 0.03)
+				tuned.albedo_color = Color(0.08, 0.08, 0.08)
+				_bind_hero_maps(tuned, "res://assets/textures/rubber_tiles_Diffuse.jpg")
 			elif mat_name.begins_with("chrome"):
 				tuned.metallic = 1.0
 				tuned.roughness = 0.08
+				_bind_hero_maps(tuned, "res://assets/textures/metal_plate_Diffuse.jpg")
 			elif mat_name.begins_with("body"):
 				tuned.metallic = maxf(tuned.metallic, 0.48)
 				tuned.roughness = minf(tuned.roughness, 0.2)
@@ -349,6 +351,26 @@ static func _apply_hero_materials(model: Node3D) -> void:
 			else:
 				continue
 			mesh_child.set_surface_override_material(surface, tuned)
+
+
+static func _bind_hero_maps(mat: StandardMaterial3D, diffuse_path: String) -> void:
+	if not ResourceLoader.exists(diffuse_path):
+		return
+	mat.albedo_texture = load(diffuse_path)
+	var nor := diffuse_path.replace("_Diffuse.jpg", "_nor_gl.jpg")
+	var arm := diffuse_path.replace("_Diffuse.jpg", "_arm.jpg")
+	if ResourceLoader.exists(nor):
+		mat.normal_enabled = true
+		mat.normal_texture = load(nor)
+		mat.normal_scale = 0.55
+	if ResourceLoader.exists(arm):
+		mat.ao_enabled = true
+		mat.ao_texture = load(arm)
+		mat.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		mat.roughness_texture = load(arm)
+		mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+		mat.metallic_texture = load(arm)
+		mat.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
 
 
 func _build_environment(definition: Dictionary) -> void:

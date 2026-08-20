@@ -238,7 +238,8 @@ func _build_ground() -> void:
 	var verge := 90.0
 	match biome:
 		"desert":
-			tint = Color(1.28, 1.08, 0.68)
+			ground_tex = "res://assets/textures/sand_01_Diffuse.jpg"
+			tint = Color(1.08, 0.96, 0.72)
 			drop = 0.6
 			verge = 120.0
 		"city", "night":
@@ -247,18 +248,17 @@ func _build_ground() -> void:
 			drop = 0.08
 			verge = 28.0
 		"mountain":
-			ground_tex = "res://assets/textures/aerial_grass_rock_Diffuse.jpg"
-			tint = Color(0.55, 0.68, 0.48)
+			ground_tex = "res://assets/textures/rock_face_Diffuse.jpg"
+			tint = Color(0.78, 0.8, 0.76)
 			drop = 4.5
 			verge = 70.0
 		"coast":
-			tint = Color(0.62, 0.88, 0.55)
+			ground_tex = "res://assets/textures/coast_sand_04_Diffuse.jpg"
+			tint = Color(0.92, 0.88, 0.72)
 			drop = 1.4
 
 	var mat := StandardMaterial3D.new()
-	if ResourceLoader.exists(ground_tex):
-		mat.albedo_texture = load(ground_tex)
-		mat.uv1_scale = Vector3(18, 18, 1)
+	mat.uv1_scale = Vector3(18, 18, 1)
 	mat.albedo_color = tint
 	mat.roughness = 1.0
 	_apply_pbr_maps(mat, ground_tex)
@@ -323,19 +323,24 @@ func _build_terrain_banks() -> void:
 	var samples := int(length / step) + 1
 	var mat := StandardMaterial3D.new()
 	var tex := "res://assets/textures/aerial_grass_rock_Diffuse.jpg"
-	if ResourceLoader.exists(tex):
-		mat.albedo_texture = load(tex)
+	match biome:
+		"desert":
+			tex = "res://assets/textures/sand_01_Diffuse.jpg"
+		"mountain":
+			tex = "res://assets/textures/rock_face_Diffuse.jpg"
+		"coast":
+			tex = "res://assets/textures/coast_sand_04_Diffuse.jpg"
 	mat.uv1_scale = Vector3(0.08, 0.08, 0.08)
 	mat.roughness = 0.97
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_apply_pbr_maps(mat, tex)
 	match biome:
 		"desert":
-			mat.albedo_color = Color(0.95, 0.74, 0.44)
+			mat.albedo_color = Color(1.0, 0.92, 0.74)
 		"mountain":
-			mat.albedo_color = Color(0.48, 0.52, 0.42)
+			mat.albedo_color = Color(0.82, 0.82, 0.8)
 		_:
-			mat.albedo_color = Color(0.38, 0.52, 0.30)
+			mat.albedo_color = Color(0.95, 0.9, 0.78)
 	for side in [-1.0, 1.0]:
 		if biome == "coast" and side < 0.0:
 			continue
@@ -386,13 +391,14 @@ func _build_sidewalks() -> void:
 	var step := 4.0
 	var samples := int(length / step) + 1
 	var mat := StandardMaterial3D.new()
-	var tex := "res://assets/textures/concrete_wall_008_Diffuse.jpg"
-	if ResourceLoader.exists(tex):
-		mat.albedo_texture = load(tex)
+	var tex := "res://assets/textures/painted_worn_brick_Diffuse.jpg"
+	if not ResourceLoader.exists(tex):
+		tex = "res://assets/textures/concrete_wall_008_Diffuse.jpg"
 	mat.albedo_color = Color(0.78, 0.78, 0.80) if String(definition.get("biome", "")) == "city" \
 		else Color(0.28, 0.28, 0.32)
 	mat.roughness = 0.84
 	mat.uv1_scale = Vector3(0.35, 0.35, 0.35)
+	_apply_pbr_maps(mat, tex)
 	for side in [-1.0, 1.0]:
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -452,10 +458,9 @@ func _build_guardrails() -> void:
 	rail_mesh.size = Vector3(0.08, 0.35, SEGMENT + 0.3)
 	var mat := StandardMaterial3D.new()
 	var metal := "res://assets/textures/rusty_metal_02_Diffuse.jpg"
-	if ResourceLoader.exists(metal):
-		mat.albedo_texture = load(metal)
 	mat.metallic = 0.6
 	mat.roughness = 0.5
+	_apply_pbr_maps(mat, metal)
 	rail_mesh.material = mat
 
 	var steps := int(length / SEGMENT)
@@ -483,22 +488,42 @@ func _build_props(rng_seed: int) -> void:
 	if biome == "city" or biome == "night":
 		_build_city_skyline(rng)
 		_build_city_furniture(rng)
-		_scatter_prop("res://assets/models/tree.glb", "StreetTrees", rng, 18.0, Vector2(1.5, 2.4), Vector2(0.55, 0.85), 0.0, [-1.0, 1.0])
-		_scatter_prop("res://assets/models/car.glb", "ParkedCars", rng, 34.0, Vector2(2.0, 2.6), Vector2(0.95, 1.05), 0.0, [-1.0, 1.0], true)
+		_scatter_prop(_first_model(["res://assets/models/kenney_tree.glb", "res://assets/models/tree.glb"]),
+			"StreetTrees", rng, 18.0, Vector2(1.5, 2.4), Vector2(0.55, 0.85), 0.0, [-1.0, 1.0])
+		_scatter_prop(_first_model([
+			"res://assets/models/car_sedan.glb", "res://assets/models/car.glb"
+		]), "ParkedCars", rng, 34.0, Vector2(2.0, 2.6), Vector2(0.95, 1.05), 0.0, [-1.0, 1.0], true)
+		_scatter_prop(_first_model([
+			"res://assets/models/car_van.glb", "res://assets/models/car.glb"
+		]), "ParkedVans", rng, 52.0, Vector2(2.2, 2.8), Vector2(0.95, 1.05), 0.0, [-1.0, 1.0], true)
 		return
 
 	match biome:
 		"coast":
-			_scatter_prop("res://assets/models/palm.glb", "Palms", rng, 10.0, Vector2(4.2, 9.0), Vector2(0.9, 1.4), -0.05, [1.0])
-			_scatter_prop("res://assets/models/palm.glb", "PalmsOcean", rng, 16.0, Vector2(6.0, 11.0), Vector2(0.8, 1.2), -0.8, [-1.0])
-			_scatter_prop("res://assets/models/tree.glb", "Trees", rng, 28.0, Vector2(12.0, 32.0), Vector2(0.9, 1.7), -0.3, [1.0])
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney_tree_palmTall.glb", "res://assets/models/palm.glb"
+			]), "Palms", rng, 10.0, Vector2(4.2, 9.0), Vector2(0.9, 1.4), -0.05, [1.0])
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney_tree_palm.glb", "res://assets/models/palm.glb"
+			]), "PalmsOcean", rng, 16.0, Vector2(6.0, 11.0), Vector2(0.8, 1.2), -0.8, [-1.0])
+			_scatter_prop(_first_model(["res://assets/models/kenney_tree.glb", "res://assets/models/tree.glb"]),
+				"Trees", rng, 28.0, Vector2(12.0, 32.0), Vector2(0.9, 1.7), -0.3, [1.0])
 		"desert":
-			_scatter_prop("res://assets/models/rock.glb", "Rocks", rng, 16.0, Vector2(4.5, 28.0), Vector2(0.7, 2.1), -0.2)
-			_scatter_prop("res://assets/models/cactus.glb", "Cactus", rng, 22.0, Vector2(6.0, 20.0), Vector2(0.8, 1.6), 0.0)
+			_scatter_prop(_first_model(["res://assets/models/kenney_rock.glb", "res://assets/models/rock.glb"]),
+				"Rocks", rng, 16.0, Vector2(4.5, 28.0), Vector2(0.7, 2.1), -0.2)
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney_cactus_tall.glb", "res://assets/models/cactus.glb"
+			]), "Cactus", rng, 22.0, Vector2(6.0, 20.0), Vector2(0.8, 1.6), 0.0)
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney_cactus_short.glb", "res://assets/models/cactus.glb"
+			]), "CactusLow", rng, 14.0, Vector2(5.0, 16.0), Vector2(0.7, 1.3), 0.0)
 		"mountain":
-			_scatter_prop("res://assets/models/pine.glb", "Pines", rng, 8.0, Vector2(3.6, 14.0), Vector2(1.0, 1.9), -0.15)
-			_scatter_prop("res://assets/models/pine.glb", "PineWall", rng, 12.0, Vector2(14.0, 28.0), Vector2(1.2, 2.2), -0.2)
-			_scatter_prop("res://assets/models/rock.glb", "Boulders", rng, 16.0, Vector2(4.0, 12.0), Vector2(0.8, 2.0), -0.15)
+			_scatter_prop(_first_model(["res://assets/models/kenney_pine.glb", "res://assets/models/pine.glb"]),
+				"Pines", rng, 8.0, Vector2(3.6, 14.0), Vector2(1.0, 1.9), -0.15)
+			_scatter_prop(_first_model(["res://assets/models/kenney_pine.glb", "res://assets/models/pine.glb"]),
+				"PineWall", rng, 12.0, Vector2(14.0, 28.0), Vector2(1.2, 2.2), -0.2)
+			_scatter_prop(_first_model(["res://assets/models/kenney_rock.glb", "res://assets/models/rock.glb"]),
+				"Boulders", rng, 16.0, Vector2(4.0, 12.0), Vector2(0.8, 2.0), -0.15)
 			_build_tunnel()
 		_:
 			_scatter_prop("res://assets/models/tree.glb", "Props", rng, 26.0, Vector2(6.0, 34.0), Vector2(0.8, 1.6), -0.4)
@@ -543,7 +568,7 @@ func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 	inst.name = node_name
 	inst.multimesh = mm
 	add_child(inst)
-	if node_name == "ParkedCars" or node_name == "StreetTrees":
+	if node_name == "ParkedCars" or node_name == "ParkedVans" or node_name == "StreetTrees":
 		var xforms: Array = []
 		for i in mm.instance_count:
 			xforms.append(mm.get_instance_transform(i))
@@ -552,15 +577,23 @@ func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 
 func _build_city_skyline(rng: RandomNumberGenerator) -> void:
 	# RR3D city: shop fronts hard against the curb, then a wall of towers, then a far skyline.
-	_city_row(rng, ["res://assets/models/building_shop.glb"], 8.2, 3.6, Vector2(0.95, 1.15), Vector2(0.9, 1.15), "City_Shops")
 	_city_row(rng, [
-		"res://assets/models/building.glb",
+		"res://assets/models/kenney_shop_a.glb",
+		"res://assets/models/kenney_shop_b.glb",
+		"res://assets/models/kenney_shop_c.glb",
+		"res://assets/models/building_shop.glb",
+	], 8.2, 3.6, Vector2(0.95, 1.15), Vector2(0.9, 1.15), "City_Shops")
+	_city_row(rng, [
+		"res://assets/models/kenney_tower_a.glb",
+		"res://assets/models/kenney_tower_b.glb",
+		"res://assets/models/kenney_tower_c.glb",
 		"res://assets/models/building_apartment.glb",
 		"res://assets/models/building_office.glb",
 	], 11.0, 10.5, Vector2(0.95, 1.35), Vector2(0.85, 1.7), "City_Towers")
 	_city_row(rng, [
+		"res://assets/models/kenney_horizon_a.glb",
+		"res://assets/models/kenney_horizon_b.glb",
 		"res://assets/models/building_office.glb",
-		"res://assets/models/building.glb",
 	], 22.0, 24.0, Vector2(1.6, 2.4), Vector2(1.8, 2.6), "City_Horizon")
 
 
@@ -656,6 +689,7 @@ func _build_billboards(rng: RandomNumberGenerator) -> void:
 	mat.emission_enabled = true
 	mat.emission = Color(0.95, 0.45, 0.12) if rng.randf() < 0.5 else Color(0.2, 0.55, 0.95)
 	mat.emission_energy_multiplier = 1.6
+	_apply_pbr_maps(mat, "res://assets/textures/rectangular_facade_tiles_02_Diffuse.jpg")
 	board.material = mat
 	var pole := CylinderMesh.new()
 	pole.top_radius = 0.09
@@ -799,13 +833,19 @@ func _build_horizon_peaks() -> void:
 	var biome := String(definition.get("biome", "coast"))
 	var mat := StandardMaterial3D.new()
 	mat.roughness = 1.0
+	var peak_tex := "res://assets/textures/aerial_grass_rock_Diffuse.jpg"
 	match biome:
 		"desert":
-			mat.albedo_color = Color(0.72, 0.52, 0.32)
+			mat.albedo_color = Color(0.92, 0.78, 0.52)
+			peak_tex = "res://assets/textures/sand_01_Diffuse.jpg"
 		"coast":
-			mat.albedo_color = Color(0.28, 0.38, 0.26)
+			mat.albedo_color = Color(0.55, 0.62, 0.48)
+		"mountain":
+			mat.albedo_color = Color(0.62, 0.64, 0.6)
+			peak_tex = "res://assets/textures/rock_face_Diffuse.jpg"
 		_:
 			mat.albedo_color = Color(0.32, 0.38, 0.34)
+	_apply_pbr_maps(mat, peak_tex)
 	var mesh: Mesh
 	if biome == "mountain":
 		var prism := PrismMesh.new()
@@ -838,8 +878,9 @@ func _build_horizon_peaks() -> void:
 
 func _build_tunnel() -> void:
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.28, 0.28, 0.3)
+	mat.albedo_color = Color(0.55, 0.54, 0.52)
 	mat.roughness = 0.95
+	_apply_pbr_maps(mat, "res://assets/textures/rock_face_Diffuse.jpg")
 	var start := length * 0.42
 	var wall_h := 6.4
 	var wall_z := 38.0
@@ -885,13 +926,23 @@ func _build_tunnel() -> void:
 static func _extract_mesh(path: String) -> Mesh:
 	if not ResourceLoader.exists(path):
 		return null
-	var scene: PackedScene = load(path)
-	if scene == null:
-		return null
-	var node := scene.instantiate()
-	var mesh := _find_mesh(node)
-	node.queue_free()
-	return mesh
+	var packed := load(path)
+	if packed is PackedScene:
+		var node := packed.instantiate()
+		var mesh := _find_mesh(node)
+		node.queue_free()
+		return mesh
+	if packed is Mesh:
+		return packed
+	return null
+
+
+static func _first_model(paths: Array) -> String:
+	for p in paths:
+		var s := String(p)
+		if ResourceLoader.exists(s):
+			return s
+	return String(paths[0]) if not paths.is_empty() else ""
 
 
 static func _find_mesh(node: Node) -> Mesh:
@@ -910,7 +961,9 @@ static func _fallback_prop_mesh(biome: String) -> Mesh:
 		var box := BoxMesh.new()
 		box.size = Vector3(8, 18, 8)
 		var m := StandardMaterial3D.new()
-		m.albedo_color = Color(0.16, 0.17, 0.2)
+		m.albedo_color = Color(0.82, 0.84, 0.86)
+		m.roughness = 0.86
+		_apply_pbr_maps(m, "res://assets/textures/painted_plaster_wall_Diffuse.jpg")
 		box.material = m
 		return box
 	var capsule := CapsuleMesh.new()
@@ -1147,6 +1200,8 @@ func _facing_road(d: float, lateral: float, height: float, side: float) -> Trans
 
 
 static func _apply_pbr_maps(mat: StandardMaterial3D, diffuse_path: String) -> void:
+	if ResourceLoader.exists(diffuse_path):
+		mat.albedo_texture = load(diffuse_path)
 	var nor := diffuse_path.replace("_Diffuse.jpg", "_nor_gl.jpg")
 	var arm := diffuse_path.replace("_Diffuse.jpg", "_arm.jpg")
 	if ResourceLoader.exists(nor):
@@ -1156,7 +1211,12 @@ static func _apply_pbr_maps(mat: StandardMaterial3D, diffuse_path: String) -> vo
 	if ResourceLoader.exists(arm):
 		mat.ao_enabled = true
 		mat.ao_texture = load(arm)
+		mat.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 		mat.ao_light_affect = 0.6
+		mat.roughness_texture = load(arm)
+		mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+		mat.metallic_texture = load(arm)
+		mat.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
 
 
 func _build_landmarks() -> void:
@@ -1176,6 +1236,19 @@ func _build_landmarks() -> void:
 
 
 func _make_landmark(kind: int) -> Node3D:
+	var shops := [
+		"res://assets/models/kenney_shop_a.glb",
+		"res://assets/models/kenney_shop_b.glb",
+		"res://assets/models/kenney_shop_c.glb",
+	]
+	if kind != 0:
+		var path := _first_model([shops[kind % shops.size()], shops[0]])
+		if ResourceLoader.exists(path):
+			var packed: PackedScene = load(path)
+			var shop := packed.instantiate() as Node3D
+			if shop != null:
+				shop.scale = Vector3(1.15, 1.15, 1.15)
+				return shop
 	var root := Node3D.new()
 	match kind:
 		0:
@@ -1198,6 +1271,7 @@ func _make_landmark(kind: int) -> Node3D:
 				box.size = Vector3(0.6, 1.4, 0.45)
 				var pmat := StandardMaterial3D.new()
 				pmat.albedo_color = Color(0.85, 0.85, 0.82)
+				_apply_pbr_maps(pmat, "res://assets/textures/metal_plate_Diffuse.jpg")
 				box.material = pmat
 				pump.mesh = box
 				pump.position = Vector3(-2.0 + i * 2.0, 0.7, 0.0)
@@ -1208,7 +1282,8 @@ func _make_landmark(kind: int) -> Node3D:
 			var slab_mesh := BoxMesh.new()
 			slab_mesh.size = Vector3(10.0, 0.18, 8.0)
 			var smat := StandardMaterial3D.new()
-			smat.albedo_color = Color(0.55, 0.56, 0.58)
+			smat.albedo_color = Color(0.78, 0.78, 0.76)
+			_apply_pbr_maps(smat, "res://assets/textures/painted_worn_brick_Diffuse.jpg")
 			slab_mesh.material = smat
 			slab.mesh = slab_mesh
 			slab.position = Vector3(0, 0.1, 0)
@@ -1217,10 +1292,11 @@ func _make_landmark(kind: int) -> Node3D:
 			var kmesh := BoxMesh.new()
 			kmesh.size = Vector3(3.2, 3.4, 3.2)
 			var kmat := StandardMaterial3D.new()
-			kmat.albedo_color = Color(0.18, 0.22, 0.28)
+			kmat.albedo_color = Color(0.85, 0.86, 0.88)
 			kmat.emission_enabled = true
 			kmat.emission = Color(0.4, 0.7, 1.0)
 			kmat.emission_energy_multiplier = 0.6
+			_apply_pbr_maps(kmat, "res://assets/textures/painted_plaster_wall_Diffuse.jpg")
 			kmesh.material = kmat
 			kiosk.mesh = kmesh
 			kiosk.position = Vector3(0, 1.8, 0)
@@ -1231,7 +1307,8 @@ func _make_landmark(kind: int) -> Node3D:
 			var shed_mesh := BoxMesh.new()
 			shed_mesh.size = Vector3(5.5, 3.2, 4.0)
 			var shed_mat := StandardMaterial3D.new()
-			shed_mat.albedo_color = Color(0.42, 0.36, 0.28)
+			shed_mat.albedo_color = Color(0.78, 0.74, 0.68)
+			_apply_pbr_maps(shed_mat, "res://assets/textures/painted_plaster_wall_Diffuse.jpg")
 			shed_mesh.material = shed_mat
 			shed.mesh = shed_mesh
 			shed.position = Vector3(0, 1.6, 0)

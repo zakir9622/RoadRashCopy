@@ -1,7 +1,7 @@
 # Road Rash
 
 Godot 4.7 combat racer — illegal California circuit, 15-bike pack, fists/chain/bat/kick.
-Open-source toolchain only (Godot MIT, Blender models, Poly Haven CC0, procedural SFX).
+Open-source toolchain only (Godot MIT, Blender models, Poly Haven CC0, Kenney CC0, procedural SFX).
 
 ## Play
 

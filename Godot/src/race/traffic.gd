@@ -17,12 +17,24 @@ func build(p_track: Track, count: int, player: Rider, rng_seed: int = 99) -> voi
 	_rng.seed = rng_seed
 
 	var meshes: Array[Mesh] = []
-	var glb := Track._extract_mesh("res://assets/models/car.glb")
-	if glb != null:
-		meshes.append(glb)
-	meshes.append(_box_car(Vector3(1.85, 1.35, 4.4), Color(0.62, 0.16, 0.12)))
-	meshes.append(_box_car(Vector3(1.95, 1.85, 4.9), Color(0.18, 0.22, 0.38)))
-	meshes.append(_box_car(Vector3(2.05, 1.55, 5.4), Color(0.72, 0.72, 0.7)))
+	var lifts: Array[float] = []
+	for path in _traffic_mesh_paths():
+		var glb := Track._extract_mesh(String(path))
+		if glb == null:
+			continue
+		var kit := glb.duplicate(true) as Mesh
+		if kit == null:
+			kit = glb
+		_enable_instance_colors(kit)
+		meshes.append(kit)
+		lifts.append(-kit.get_aabb().position.y)
+	if meshes.size() < 3:
+		meshes.append(_box_car(Vector3(1.85, 1.35, 4.4), Color(0.62, 0.16, 0.12)))
+		lifts.append(0.7)
+		meshes.append(_box_car(Vector3(1.95, 1.85, 4.9), Color(0.18, 0.22, 0.38)))
+		lifts.append(0.7)
+		meshes.append(_box_car(Vector3(2.05, 1.55, 5.4), Color(0.72, 0.72, 0.7)))
+		lifts.append(0.7)
 
 	var palette := [
 		Color(0.75, 0.73, 0.7), Color(0.2, 0.25, 0.55), Color(0.55, 0.12, 0.1),
@@ -47,7 +59,7 @@ func build(p_track: Track, count: int, player: Rider, rng_seed: int = 99) -> voi
 			"oncoming": oncoming,
 			"mesh": mesh_i,
 			"local": groups[mesh_i].size(),
-			"color": palette[i % palette.size()],
+			"color": Color(1, 1, 1).lerp(palette[i % palette.size()], 0.32),
 			"lane_cd": _rng.randf_range(6.0, 18.0),
 		}
 		cars.append(car)
@@ -69,7 +81,7 @@ func build(p_track: Track, count: int, player: Rider, rng_seed: int = 99) -> voi
 		inst.name = "Traffic_%d" % mesh_i
 		inst.multimesh = mm
 		add_child(inst)
-		_batches.append({"mm": mm, "cars": group})
+		_batches.append({"mm": mm, "cars": group, "y_lift": lifts[mesh_i]})
 
 
 static func _box_car(size: Vector3, colour: Color) -> Mesh:
@@ -93,7 +105,9 @@ func step(delta: float) -> void:
 			var car: Dictionary = group[j]
 			_step_car(car, delta)
 			var s := float(car["s"])
-			var t := track.sample(s, float(car["lane"]), 0.7)
+			var y_lift := float(batch.get("y_lift", 0.7))
+			var t := track.sample(s, float(car["lane"]), 0.0)
+			t.origin += t.basis.y.normalized() * y_lift
 			if bool(car["oncoming"]):
 				t.basis = t.basis.rotated(t.basis.y.normalized(), PI)
 			mm.set_instance_transform(j, t)
@@ -136,3 +150,25 @@ func _braking(car: Dictionary) -> bool:
 	if bool(car["oncoming"]):
 		return false
 	return ahead > 0.0 and ahead < 28.0 and _player.speed > float(car["speed"]) + 6.0
+
+
+static func _traffic_mesh_paths() -> Array:
+	return [
+		"res://assets/models/car_sedan.glb",
+		"res://assets/models/car_van.glb",
+		"res://assets/models/car_suv.glb",
+		"res://assets/models/car_taxi.glb",
+		"res://assets/models/car_hatch.glb",
+		"res://assets/models/car.glb",
+	]
+
+
+static func _enable_instance_colors(mesh: Mesh) -> void:
+	for i in mesh.get_surface_count():
+		var mat := mesh.surface_get_material(i)
+		var std := mat as StandardMaterial3D
+		if std == null:
+			continue
+		var dup := std.duplicate() as StandardMaterial3D
+		dup.vertex_color_use_as_albedo = true
+		mesh.surface_set_material(i, dup)

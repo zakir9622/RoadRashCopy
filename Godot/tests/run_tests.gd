@@ -25,7 +25,7 @@ func _init() -> void:
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 155
+	const EXPECTED_CHECKS := 165
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -503,4 +503,18 @@ func _test_cinematic_hud() -> void:
 	check(vary, "traffic speed variance")
 	traffic.queue_free()
 	coast.queue_free()
+
+	check(ResourceLoader.exists("res://assets/models/car_sedan.glb"), "Kenney sedan")
+	check(ResourceLoader.exists("res://assets/models/kenney_shop_a.glb"), "Kenney shop")
+	check(ResourceLoader.exists("res://assets/models/kenney_tree.glb"), "Kenney tree")
+	check(ResourceLoader.exists("res://assets/models/kenney_cactus_tall.glb"), "Kenney cactus")
+	check(ResourceLoader.exists("res://assets/textures/leather_red_02_Diffuse.jpg"), "CC0 leather")
+	check(ResourceLoader.exists("res://assets/textures/sand_01_Diffuse.jpg"), "CC0 sand")
+	check(ResourceLoader.exists("res://assets/textures/rubber_tiles_Diffuse.jpg"), "CC0 rubber")
+	check(ResourceLoader.exists("res://assets/textures/painted_worn_brick_Diffuse.jpg"), "CC0 brick")
+	check(ResourceLoader.exists("res://assets/CC0.md"), "CC0 credits")
+	check(Track._first_model([
+		"res://assets/models/missing_kit.glb",
+		"res://assets/models/kenney_shop_a.glb",
+	]) == "res://assets/models/kenney_shop_a.glb", "first_model skips missing kits")
 
