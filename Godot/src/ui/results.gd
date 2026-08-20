@@ -18,7 +18,8 @@ func present(summary: Dictionary) -> void:
 	panel.add_child(box)
 
 	var rank := Label.new()
-	rank.text = str(int(summary["position"])) if int(summary["position"]) > 0 else "-"
+	var place := int(summary.get("position", 0))
+	rank.text = str(place) if place > 0 else "-"
 	rank.add_theme_font_size_override("font_size", 84)
 	rank.add_theme_color_override("font_color", ThemeColors.ACCENT)
 	rank.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -31,10 +32,10 @@ func present(summary: Dictionary) -> void:
 	elif bool(summary.get("champion", false)):
 		headline.text = "CHAMPION"
 		headline.add_theme_color_override("font_color", ThemeColors.ACCENT)
-	elif bool(summary["busted"]):
+	elif bool(summary.get("busted", false)):
 		headline.text = "BUSTED"
 		headline.add_theme_color_override("font_color", ThemeColors.POLICE_BLUE)
-	elif bool(summary["won"]):
+	elif bool(summary.get("won", false)):
 		headline.text = "EVENT WON"
 		headline.add_theme_color_override("font_color", ThemeColors.INK)
 	else:
@@ -44,15 +45,18 @@ func present(summary: Dictionary) -> void:
 	headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(headline)
 
-	_row(box, "RACE PRIZE", "$%d" % int(summary["prize"]), ThemeColors.INK)
-	_row(box, "KNOCKOUTS (%d)" % int(summary["knockouts"]),
-		"+$%d" % int(summary["combat_bonus"]), ThemeColors.INK)
-	_row(box, "REPAIRS", "-$%d" % int(summary["repair_bill"]), ThemeColors.DANGER)
-	if int(summary["fine"]) > 0:
-		_row(box, "POLICE FINE", "-$%d" % int(summary["fine"]), ThemeColors.POLICE_BLUE)
-	_row(box, "BALANCE", "$%d" % int(summary["balance"]), ThemeColors.ACCENT, 24)
+	_row(box, "RACE PRIZE", "$%d" % int(summary.get("prize", 0)), ThemeColors.INK)
+	_row(box, "KNOCKOUTS (%d)" % int(summary.get("knockouts", 0)),
+		"+$%d" % int(summary.get("combat_bonus", 0)), ThemeColors.INK)
+	_row(box, "REPAIRS", "-$%d" % int(summary.get("repair_bill", 0)), ThemeColors.DANGER)
+	if int(summary.get("fine", 0)) > 0:
+		_row(box, "POLICE FINE", "-$%d" % int(summary.get("fine", 0)), ThemeColors.POLICE_BLUE)
+	_row(box, "BALANCE", "$%d" % int(summary.get("balance", 0)), ThemeColors.ACCENT, 24)
 
-	var state := get_node("/root/GameState")
+	var state := get_node_or_null("/root/GameState")
+	if state == null:
+		get_tree().paused = false
+		return
 	var beat: Dictionary = Story.vignette(state.save, summary)
 	var speaker := Label.new()
 	speaker.text = String(beat.get("speaker", "")).to_upper()
@@ -72,12 +76,12 @@ func present(summary: Dictionary) -> void:
 		button.text = "NEW CAREER"
 		button.pressed.connect(func():
 			state.reset_career()
-			AudioDirector.play("click", -8.0)
+			Sfx.play("click", -8.0)
 			get_tree().change_scene_to_file("res://src/ui/MainMenu.tscn"))
 	else:
 		button.text = "CONTINUE"
 		button.pressed.connect(func():
-			AudioDirector.play("click", -8.0)
+			Sfx.play("click", -8.0)
 			get_tree().change_scene_to_file("res://src/ui/MainMenu.tscn"))
 	button.add_theme_font_size_override("font_size", 22)
 	button.add_theme_stylebox_override("normal", ThemeColors.button_style())

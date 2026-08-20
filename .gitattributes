@@ -1,41 +1,10 @@
-# ==============================================================================
-# Git attributes — Unity project
-# Normalizes line endings and routes large binary assets through Git LFS.
-# NOTE: Run `git lfs install` once per machine before cloning/committing binaries.
-# ==============================================================================
+# Godot Road Rash
 
-# Auto-detect text files, normalize to LF in the repo
-* text=auto
-
-# Unity YAML files — force LF and mark as text so meta/scene/prefab merges work
-*.cs        text diff=csharp
-*.shader    text
-*.cginc     text
-*.hlsl      text
-*.uss       text
-*.uxml      text
-*.json      text
-*.md        text
-*.asmdef    text
-*.meta      text
-
-# --- Git LFS: deliberately not used ---
-#
-# The LFS filters that used to live here are gone, and they are gone because they
-# actively caused a bug rather than preventing one.
-#
-# *.png was routed through LFS, so MainMenuBackground.png and HudReference.png were
-# committed as 131-byte pointer files whose objects were never pushed. Both CI jobs
-# already pass `lfs: true` and still received the stubs. Unity imported the text as a
-# texture without complaining, and MainMenu.uss's background-image resolved to nothing -
-# a title screen with no artwork and no error anywhere explaining why.
-#
-# Beyond that the free tier is 1 GB of storage and 1 GB of bandwidth per month, which one
-# texture pack exhausts, and the failure mode when it runs out is another silent pointer.
-#
-# Binary assets come through Tools/Assets/fetch-assets.py instead: declared in
-# Tools/Assets/manifest.json with a licence and a SHA-256, downloaded in CI, cached, and
-# never committed. The repository stores the recipe, not the output - the same reasoning
-# that keeps scenes as generators.
-#
-# Tools/CompileCheck/check-lfs-pointers.py fails the build if a pointer ever reappears.
+* text=auto eol=lf
+*.gd text diff=python
+*.md text
+*.yml text
+*.json text
+*.cfg text
+*.import text
+*.gdshader text

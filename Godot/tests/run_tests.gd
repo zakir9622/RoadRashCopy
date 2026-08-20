@@ -17,12 +17,13 @@ func _init() -> void:
 	_test_track_geometry()
 	_test_heat()
 	_test_classic_rules()
+	_test_view()
 	_test_race_simulation()
 	_test_rider_rig()
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 98
+	const EXPECTED_CHECKS := 100
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -176,6 +177,18 @@ func _test_heat() -> void:
 	check(heat.heat == 0.0, "heat decays to zero")
 	heat.on_idle()
 	check(heat.heat >= HeatDirector.IDLE_HEAT * 0.9, "sitting still raises heat")
+
+
+func _test_view() -> void:
+	View.look_at(null, Vector3.ZERO)
+	var n := Node3D.new()
+	View.look_at(n, Vector3.ZERO)
+	View.look_at(n, Vector3(0.0, 0.0, 8.0))
+	check(n.position == Vector3.ZERO, "detached look_at is a no-op")
+	n.position = Vector3(1.0, 2.0, 3.0)
+	View.look_at(n, n.position)
+	check(n.position == Vector3(1.0, 2.0, 3.0), "null/coincident look_at does not move the node")
+	n.free()
 
 
 func _test_classic_rules() -> void:

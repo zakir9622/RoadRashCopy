@@ -23,14 +23,17 @@ var _cam_look := 3.2
 ## phantom instances under --script test harnesses, silently ignoring test
 ## setup. The path is identical in game mode and under tests.
 func _context() -> Node:
-	return get_node("/root/RaceContext")
+	return get_node_or_null("/root/RaceContext")
 
 
 func _state() -> Node:
-	return get_node("/root/GameState")
+	return get_node_or_null("/root/GameState")
 
 
 func _ready() -> void:
+	if _context() == null or _state() == null:
+		push_error("Race: RaceContext and GameState autoloads are required")
+		return
 	var definition: Dictionary = _context().track()
 
 	track = Track.new()
@@ -157,17 +160,22 @@ func _make_rider(rider_name: String, start_s: float, start_x: float,
 func _make_bike_visual(colour: Color, cop: bool, rider: Rider) -> Node3D:
 	var path := COP_MODEL if cop else RAT_MODEL
 	if not cop and rider != null and rider.is_player:
-		var bike_id := String(_state().save.get("bike", "rat"))
+		var state := _state()
+		var bike_id := "rat"
+		if state != null:
+			bike_id = String(state.save.get("bike", "rat"))
 		if bike_id != "rat" and ResourceLoader.exists(RIDER_MODEL):
 			path = RIDER_MODEL
 	elif not cop and ResourceLoader.exists(RIDER_MODEL):
 		path = RIDER_MODEL
 	if ResourceLoader.exists(path):
 		var scene: PackedScene = load(path)
-		var model := scene.instantiate() as Node3D
-		model.scale = Vector3(1.08, 1.08, 1.08)
-		_tint_model(model, colour)
-		return model
+		if scene != null:
+			var model := scene.instantiate() as Node3D
+			if model != null:
+				model.scale = Vector3(1.08, 1.08, 1.08)
+				_tint_model(model, colour)
+				return model
 	# Fallback silhouette: body box + wheels, still clearly a bike.
 	var root := Node3D.new()
 	var body := MeshInstance3D.new()
@@ -277,7 +285,7 @@ func _snap_camera() -> void:
 	var behind := track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.35, _cam_up)
 	camera.global_position = behind.origin
 	var look := track.sample(player.distance + _cam_look, player.lateral * 0.22, 0.55)
-	camera.look_at(look.origin, Vector3.UP)
+	View.look_at(camera, look.origin)
 
 
 func _build_hud() -> void:
@@ -288,12 +296,16 @@ func _build_hud() -> void:
 
 
 func _process(delta: float) -> void:
+	if player == null or manager == null or camera == null:
+		return
 	_update_camera(delta)
 	Sfx.set_engine(player.speed / maxf(player.top_speed, 1.0),
 		manager.phase == RaceManager.Phase.RACING and player.state == Rider.State.RIDING)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if manager == null:
+		return
 	if event.is_action_pressed("pause") and manager.phase != RaceManager.Phase.FINISHED:
 		_toggle_pause()
 
@@ -373,7 +385,7 @@ func _update_camera(delta: float) -> void:
 		camera.global_position = behind.origin
 	else:
 		camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-12.0 * delta))
-	camera.look_at(look_target.origin, Vector3.UP)
+	View.look_at(camera, look_target.origin)
 
 	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
 	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 5.0, 6.0 * delta)
@@ -381,6 +393,9 @@ func _update_camera(delta: float) -> void:
 
 func _on_finished(summary: Dictionary) -> void:
 	var results_scene: PackedScene = load("res://src/ui/Results.tscn")
+	if results_scene == null:
+		push_error("Race: Results.tscn missing")
+		return
 	var results := results_scene.instantiate()
 	add_child(results)
 	results.call_deferred("present", summary)

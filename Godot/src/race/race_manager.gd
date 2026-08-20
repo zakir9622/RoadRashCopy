@@ -87,6 +87,8 @@ func _physics_process(delta: float) -> void:
 
 
 func _step_race(delta: float) -> void:
+	if player == null or track == null:
+		return
 	heat.tick(delta)
 	_spawn_cooldown = maxf(_spawn_cooldown - delta, 0.0)
 	_tick_idle_heat(delta)
@@ -281,8 +283,16 @@ func _finish(position: int) -> void:
 
 	var purse := int(track.definition.get("purse", 800))
 	var repair := int((100.0 - player.health) * 3.0)
-	var state := get_node("/root/GameState")
-	var summary := Campaign.apply_result(
-		state.save, position, player.knockouts, purse, busted, repair)
-	state.persist()
+	var state := get_node_or_null("/root/GameState")
+	var summary: Dictionary
+	if state == null:
+		summary = {
+			"won": false, "position": position, "prize": 0, "knockouts": player.knockouts,
+			"combat_bonus": 0, "repair_bill": repair, "fine": 0, "net": -repair,
+			"balance": 0, "busted": busted, "game_over": false, "champion": false,
+		}
+	else:
+		summary = Campaign.apply_result(
+			state.save, position, player.knockouts, purse, busted, repair)
+		state.persist()
 	finished.emit(summary)

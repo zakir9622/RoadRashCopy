@@ -113,7 +113,7 @@ func _add_bike_preview() -> void:
 	var cam := Camera3D.new()
 	cam.position = Vector3(2.4, 1.4, 2.2)
 	world.add_child(cam)
-	cam.look_at(Vector3(0, 0.8, 0), Vector3.UP)
+	View.look_at(cam, Vector3(0, 0.8, 0))
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-40, 30, 0)
 	world.add_child(light)

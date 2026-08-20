@@ -1,9 +1,7 @@
 extends SceneTree
 ## Visual QA harness:  xvfb-run godot --rendering-driver vulkan --script res://tests/screenshot.gd
-## Renders key scenes with the real pipeline (shaders, HDRI, glow, fog) and
-## writes PNGs for review. Requires a rendering context — not --headless.
-
-const OUT_DIR := "/workspace/artifacts"
+## Renders key scenes with the real pipeline and writes PNGs. Needs a display
+## (not --headless). Not part of CI.
 
 const AUTOLOADS := {
 	"GameState": "res://src/autoload/game_state.gd",
@@ -16,8 +14,14 @@ func _init() -> void:
 	_run()
 
 
+func _out_dir() -> String:
+	var env := OS.get_environment("SCREENSHOT_DIR")
+	return env if env != "" else "user://screenshots"
+
+
 func _run() -> void:
-	DirAccess.make_dir_recursive_absolute(OUT_DIR)
+	var out := _out_dir()
+	DirAccess.make_dir_recursive_absolute(out)
 	for autoload_name in AUTOLOADS:
 		var node := Node.new()
 		node.name = autoload_name
@@ -25,36 +29,40 @@ func _run() -> void:
 		root.add_child(node)
 	await process_frame
 
-	await _shoot("res://src/ui/MainMenu.tscn", "menu.png", 90, "")
-	await _shoot("res://src/race/Race.tscn", "race_coast.png", 120, "coast_run")
-	await _shoot("res://src/race/Race.tscn", "race_city.png", 120, "downtown")
-	await _shoot("res://src/race/Race.tscn", "race_night.png", 120, "night_city")
-	await _shoot("res://src/ui/Garage.tscn", "garage.png", 30, "")
+	await _shoot("res://src/ui/MainMenu.tscn", out.path_join("menu.png"), 90, "")
+	await _shoot("res://src/race/Race.tscn", out.path_join("race_coast.png"), 120, "coast_run")
+	await _shoot("res://src/race/Race.tscn", out.path_join("race_city.png"), 120, "downtown")
+	await _shoot("res://src/race/Race.tscn", out.path_join("race_night.png"), 120, "night_city")
+	await _shoot("res://src/ui/Garage.tscn", out.path_join("garage.png"), 30, "")
 
 	print("SCREENSHOTS DONE")
 	quit(0)
 
 
-func _shoot(scene_path: String, out_name: String, frames: int, track_id: String) -> void:
+func _shoot(scene_path: String, out_path: String, frames: int, track_id: String) -> void:
 	if track_id != "":
-		var context := root.get_node("RaceContext")
+		var context := root.get_node_or_null("RaceContext")
+		if context == null:
+			printerr("SHOT FAIL: RaceContext missing")
+			return
 		context.track_id = track_id
-	print("SHOT: %s -> %s" % [scene_path, out_name])
+	print("SHOT: %s -> %s" % [scene_path, out_path])
 	var scene: PackedScene = load(scene_path)
+	if scene == null:
+		printerr("SHOT FAIL: could not load %s" % scene_path)
+		return
 	var instance := scene.instantiate()
 	root.add_child(instance)
 
-	# Drive the player forward so race shots capture motion, not the grid.
 	for frame in frames:
-		var race := instance as Node3D
-		if scene_path.contains("Race") and race != null and race.get("player") != null:
-			var player: Rider = race.get("player")
+		if scene_path.contains("Race") and instance.get("player") != null:
+			var player: Rider = instance.get("player")
 			player.in_throttle = 1.0
 		await process_frame
 
 	var image := root.get_viewport().get_texture().get_image()
-	image.save_png(OUT_DIR.path_join(out_name))
-	print("WROTE %s (%dx%d)" % [out_name, image.get_width(), image.get_height()])
+	image.save_png(out_path)
+	print("WROTE %s (%dx%d)" % [out_path, image.get_width(), image.get_height()])
 
 	instance.queue_free()
 	await process_frame

@@ -33,9 +33,13 @@ var _touch_root: Control
 
 
 func bind(race: Node3D) -> void:
+	if race == null:
+		return
 	_race = race
 	_build()
 	var player: Rider = race.player
+	if player == null:
+		return
 	player.damaged.connect(_on_player_damaged)
 	player.attacked.connect(_on_player_attacked)
 	player.weapon_stolen.connect(_on_weapon_stolen)
@@ -362,7 +366,7 @@ func _update_rival_portrait(rival: Rider) -> void:
 
 
 func _process(delta: float) -> void:
-	if _race == null or _race.manager == null:
+	if _race == null or _race.manager == null or _race.player == null or _race.track == null:
 		return
 	var manager: RaceManager = _race.manager
 	var player: Rider = _race.player
@@ -370,7 +374,7 @@ func _process(delta: float) -> void:
 
 	_speed_value.text = str(int(TrackCatalog.to_mph(player.speed)))
 	_position_label.text = "POS %d/%d" % [manager.position_of(player), manager.racers.size()]
-	_weapon_label.text = String(CombatMath.WEAPON_NAMES[player.weapon])
+	_weapon_label.text = String(CombatMath.WEAPON_NAMES.get(player.weapon, "FISTS"))
 	_stamina_bar.value = player.stamina / StaminaRules.MAX
 	_bike_bar.value = player.health / 100.0
 	if _nitro_bar != null:
@@ -452,9 +456,9 @@ func _update_mirrors(player: Rider, track: Track) -> void:
 	if _mirror_l_cam != null:
 		_mirror_l_cam.global_transform = back_t
 		var look := track.sample(maxf(player.distance - 28.0, 0.0), player.lateral - 1.2, 0.8)
-		_mirror_l_cam.look_at(look.origin, Vector3.UP)
+		View.look_at(_mirror_l_cam, look.origin)
 	if _mirror_r_cam != null:
 		var back_r := track.sample(back_s, player.lateral + 0.5, 1.35)
 		_mirror_r_cam.global_transform = back_r
 		var look_r := track.sample(maxf(player.distance - 28.0, 0.0), player.lateral + 1.2, 0.8)
-		_mirror_r_cam.look_at(look_r.origin, Vector3.UP)
+		View.look_at(_mirror_r_cam, look_r.origin)
