@@ -25,7 +25,7 @@ func _init() -> void:
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 187
+	const EXPECTED_CHECKS := 190
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -72,6 +72,7 @@ func _test_combat() -> void:
 	check(rasher.weapon == CombatMath.Weapon.CHAIN, "holding chain")
 	check(not rasher.pickup_weapon(CombatMath.Weapon.CHAIN), "same weapon is not a pickup")
 	check(rasher.pickup_weapon(CombatMath.Weapon.BAT), "chain upgrades to bat")
+	check(rasher.has_signal("landed"), "landing camera punch signal")
 	rasher.free()
 
 
@@ -244,7 +245,8 @@ func _test_world_biomes() -> void:
 	check(mountain.get_node_or_null("Tunnel") != null, "sierra tunnel")
 	mountain.queue_free()
 
-	for wav in ["wind", "ambience_coast", "ambience_desert", "ambience_city", "ambience_mountain"]:
+	for wav in ["wind", "ambience_coast", "ambience_desert", "ambience_city", "ambience_mountain",
+			"sting", "cheer"]:
 		check(ResourceLoader.exists("res://assets/audio/%s.wav" % wav), "%s audio exists" % wav)
 	check(ResourceLoader.exists("res://assets/models/palm.glb"), "palm model")
 	check(ResourceLoader.exists("res://assets/models/pine.glb"), "pine model")

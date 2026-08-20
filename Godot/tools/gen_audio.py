@@ -108,6 +108,34 @@ def go():
              * env(i, n, 0.005, 0.5) * 0.5 for i in range(n) ]
 
 
+def sting():
+    """Short KO sting — minor-key hit that cuts through engine noise."""
+    n = int(RATE * 0.42)
+    out = []
+    for i in range(n):
+        t = i / RATE
+        f = 220.0 * math.exp(-t * 2.4)
+        brass = math.sin(2 * math.pi * (f * 2) * t) * 0.45
+        fifth = math.sin(2 * math.pi * (f * 3) * t) * 0.22
+        click = noise() * math.exp(-t * 28) * 0.2
+        out.append((brass + fifth + click) * env(i, n, 0.004, 0.55))
+    return out
+
+
+def cheer():
+    """Finish-line crowd — filtered noise bursts, not a stadium recording."""
+    n = int(RATE * 1.6)
+    out = []
+    lp = 0.0
+    for i in range(n):
+        t = i / RATE
+        lp += (noise() - lp) * 0.18
+        burst = 0.55 + 0.45 * math.sin(2 * math.pi * 6.0 * t)
+        yell = math.sin(2 * math.pi * (420 + 80 * math.sin(2 * math.pi * 3.5 * t)) * t) * 0.08
+        out.append((lp * 0.55 * burst + yell) * env(i, n, 0.04, 0.35))
+    return out
+
+
 def engine():
     # Seamless loop: 250cc twin rumble + exhaust rasp.
     cycles = 48
@@ -240,6 +268,8 @@ if __name__ == "__main__":
     write("click", click())
     write("pickup", pickup())
     write("go", go())
+    write("sting", sting())
+    write("cheer", cheer())
     write("engine", engine())
     write("music", music())
     write("wind", wind())

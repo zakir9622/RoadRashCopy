@@ -24,6 +24,12 @@ var _mirror_r_cam: Camera3D
 var _mirror_row: Control
 var _damage_flash: ColorRect
 var _flash_level: float = 0.0
+var _flash_l: ColorRect
+var _flash_r: ColorRect
+var _split_label: Label
+var _race_clock: float = 0.0
+var _next_split: float = 400.0
+var _last_ko: int = 0
 var _rival_portrait: PanelContainer
 var _banter_label: Label
 var _banter_timer: float = 0.0
@@ -69,6 +75,19 @@ func _build() -> void:
 	_damage_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_damage_flash)
 
+	_flash_l = ColorRect.new()
+	_flash_l.color = Color(1, 0.25, 0.2, 0.0)
+	_flash_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_flash_l.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	_flash_l.offset_right = 48
+	root.add_child(_flash_l)
+	_flash_r = ColorRect.new()
+	_flash_r.color = Color(1, 0.25, 0.2, 0.0)
+	_flash_r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_flash_r.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	_flash_r.offset_left = -48
+	root.add_child(_flash_r)
+
 	_countdown_overlay = Label.new()
 	_countdown_overlay.add_theme_font_size_override("font_size", 72)
 	_countdown_overlay.add_theme_color_override("font_color", ThemeColors.ACCENT)
@@ -87,6 +106,10 @@ func _build() -> void:
 func _build_dashboard(root: Control) -> void:
 	_weapon_label = _label(root, "FISTS", 13, ThemeColors.INK)
 	ThemeColors.place(_weapon_label, Control.PRESET_TOP_LEFT, 12)
+
+	_split_label = _label(root, "", 14, ThemeColors.ACCENT)
+	_split_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ThemeColors.place(_split_label, Control.PRESET_CENTER_TOP, 88)
 
 	_position_label = _label(root, "POS 15/15", 18, ThemeColors.ACCENT)
 	ThemeColors.place(_position_label, Control.PRESET_CENTER_TOP, 10)
@@ -352,8 +375,12 @@ func _bar(parent: Control, colour: Color) -> ProgressBar:
 	return bar
 
 
-func _on_player_damaged(_amount: float, _from_side: float) -> void:
+func _on_player_damaged(_amount: float, from_side: float) -> void:
 	_flash_level = 0.55
+	if _flash_l != null and from_side < -0.15:
+		_flash_l.color.a = 0.55
+	if _flash_r != null and from_side > 0.15:
+		_flash_r.color.a = 0.55
 
 
 func _on_player_attacked(_side: float, _kick: bool) -> void:
@@ -401,6 +428,13 @@ func _process(delta: float) -> void:
 		_rpm_bar.value = clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.0)
 	_position_label.text = "POS %d/%d" % [manager.position_of(player), manager.racers.size()]
 	_weapon_label.text = String(CombatMath.WEAPON_NAMES.get(player.weapon, "FISTS"))
+	match int(player.weapon):
+		CombatMath.Weapon.CHAIN:
+			_weapon_label.add_theme_color_override("font_color", Color(0.78, 0.82, 0.88))
+		CombatMath.Weapon.BAT:
+			_weapon_label.add_theme_color_override("font_color", Color(0.9, 0.62, 0.28))
+		_:
+			_weapon_label.add_theme_color_override("font_color", ThemeColors.INK)
 	_stamina_bar.value = player.stamina / StaminaRules.MAX
 	_bike_bar.value = player.health / 100.0
 	if _nitro_bar != null:
@@ -426,6 +460,19 @@ func _process(delta: float) -> void:
 		_banter_label.text = ""
 
 	_ko_label.text = "KO %d" % player.knockouts
+	if player.knockouts > _last_ko:
+		show_banter("KO!")
+	_last_ko = player.knockouts
+
+	if manager.phase == RaceManager.Phase.RACING:
+		_race_clock += delta
+		if player.distance >= _next_split:
+			var miles := TrackCatalog.to_miles(_next_split)
+			var mins := int(_race_clock / 60.0)
+			var secs := int(_race_clock) % 60
+			if _split_label != null:
+				_split_label.text = "CP %.1f   %d:%02d" % [miles, mins, secs]
+			_next_split += 400.0
 
 	match manager.phase:
 		RaceManager.Phase.COUNTDOWN:
@@ -460,6 +507,10 @@ func _process(delta: float) -> void:
 
 	_flash_level = maxf(_flash_level - delta * 2.2, 0.0)
 	_damage_flash.color.a = _flash_level
+	if _flash_l != null:
+		_flash_l.color.a = maxf(_flash_l.color.a - delta * 2.4, 0.0)
+	if _flash_r != null:
+		_flash_r.color.a = maxf(_flash_r.color.a - delta * 2.4, 0.0)
 
 
 func _nearest_rival(manager: RaceManager, player: Rider) -> Rider:

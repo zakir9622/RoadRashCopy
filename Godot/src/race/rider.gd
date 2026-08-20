@@ -9,6 +9,7 @@ signal knocked_out(rider: Rider)
 signal damaged(amount: float, from_side: float)
 signal attacked(side: float, kick: bool)
 signal weapon_stolen(from_name: String)
+signal landed
 
 enum State { RIDING, CRASHED, RUNNING, REMOUNT }
 
@@ -207,10 +208,13 @@ func _step_air(delta: float) -> void:
 	lateral = clampf(lateral, -limit, limit)
 	lean = lerpf(lean, 0.0, 4.0 * delta)
 	if air_height <= 0.0:
+		var was_air := airborne > 0.12
 		air_height = 0.0
 		air_v = 0.0
 		airborne = 0.0
 		speed *= 0.92
+		if was_air:
+			landed.emit()
 	else:
 		airborne += delta
 
@@ -307,6 +311,8 @@ func take_rider_hit(amount: float, from_side: float, attacker: Rider) -> void:
 		crash()
 		if attacker != null:
 			attacker.knockouts += 1
+			if attacker.is_player:
+				Sfx.play("sting", -3.0, 1.0)
 		knocked_out.emit(self)
 	elif health <= 0.0:
 		knocked_out.emit(self)
@@ -391,7 +397,8 @@ func _apply_pose() -> void:
 		return
 	var pose_t := clampf(_pose_timer / 0.38, 0.0, 1.0) if _pose_timer > 0.0 else 0.0
 	_visual_anim.apply(state, speed, lean, _pose_kind, pose_t,
-			state == State.RUNNING, _run_phase, weapon, _crash_phase, _windup_active, _windup_side)
+			state == State.RUNNING, _run_phase, weapon, _crash_phase, _windup_active, _windup_side,
+			in_nitro and nitro_fuel > 0.0 and nitro_boost > 0.0)
 
 
 func _apply_transform() -> void:

@@ -26,6 +26,10 @@ var _cam_back := 6.2
 var _cam_up := 2.05
 var _cam_look := 55.0
 var _cockpit: Node3D
+var _land_punch := 0.0
+var _chopper: Node3D
+var _rotor: Node3D
+var _searchlight: SpotLight3D
 
 
 ## Autoloads fetched by tree path, not identifier: identifier globals bind to
@@ -128,6 +132,7 @@ func _ready() -> void:
 
 	_spawn_weather()
 	_spawn_street_lights()
+	_spawn_chopper()
 	apply_graphics()
 
 	Sfx.play_music()
@@ -151,6 +156,8 @@ func _spawn_grid(definition: Dictionary) -> void:
 	player.accel = float(spec["accel"])
 	player.handling = float(spec["handling"])
 	player.nitro_boost = float(spec["nitro"])
+	if not player.landed.is_connected(_on_player_landed):
+		player.landed.connect(_on_player_landed)
 
 	var controller := PlayerController.new()
 	controller.name = "PlayerController"
@@ -513,7 +520,8 @@ func _chase_camera(delta: float) -> void:
 		camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-12.0 * delta))
 	View.look_at(camera, look.origin)
 	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
-	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 10.0, 6.0 * delta)
+	_land_punch = maxf(_land_punch - delta * 8.0, 0.0)
+	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 10.0 + _land_punch, 6.0 * delta)
 	if player.state == Rider.State.RIDING:
 		camera.rotate_object_local(Vector3.FORWARD, player.lean * 0.35)
 
@@ -529,6 +537,7 @@ func _process(delta: float) -> void:
 	if player == null or manager == null or camera == null:
 		return
 	_update_camera(delta)
+	_update_chopper(delta)
 	var riding := manager.phase == RaceManager.Phase.RACING and player.state == Rider.State.RIDING
 	var speed01 := player.speed / maxf(player.top_speed, 1.0)
 	Sfx.set_engine(speed01, riding)
@@ -619,6 +628,78 @@ func _toggle_pause() -> void:
 	box.add_child(quit_button)
 
 
+func _on_player_landed() -> void:
+	_land_punch = 14.0
+	Sfx.play("hit", -8.0, 0.7)
+
+
+func _spawn_chopper() -> void:
+	if int(_context().track().get("police", 0)) < 1:
+		return
+	_chopper = Node3D.new()
+	_chopper.name = "Chopper"
+	add_child(_chopper)
+	var body := MeshInstance3D.new()
+	var hull := BoxMesh.new()
+	hull.size = Vector3(1.6, 0.7, 3.4)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.12, 0.14, 0.18)
+	mat.metallic = 0.55
+	mat.roughness = 0.35
+	hull.material = mat
+	body.mesh = hull
+	_chopper.add_child(body)
+	var tail := MeshInstance3D.new()
+	var boom := BoxMesh.new()
+	boom.size = Vector3(0.18, 0.18, 2.4)
+	boom.material = mat
+	tail.mesh = boom
+	tail.position = Vector3(0.0, 0.1, 2.6)
+	_chopper.add_child(tail)
+	_rotor = Node3D.new()
+	_rotor.position = Vector3(0.0, 0.55, 0.0)
+	_chopper.add_child(_rotor)
+	var blade := MeshInstance3D.new()
+	var blade_mesh := BoxMesh.new()
+	blade_mesh.size = Vector3(5.4, 0.04, 0.22)
+	var bmat := StandardMaterial3D.new()
+	bmat.albedo_color = Color(0.08, 0.08, 0.09)
+	blade_mesh.material = bmat
+	blade.mesh = blade_mesh
+	_rotor.add_child(blade)
+	var light := SpotLight3D.new()
+	light.light_color = Color(0.95, 0.92, 0.75)
+	light.light_energy = 6.0 if _night else 2.4
+	light.spot_range = 48.0
+	light.spot_angle = 22.0
+	light.shadow_enabled = false
+	light.position = Vector3(0.0, -0.2, 0.4)
+	_chopper.add_child(light)
+	_searchlight = light
+
+
+func _update_chopper(delta: float) -> void:
+	if _chopper == null or track == null or player == null:
+		return
+	if _rotor != null:
+		_rotor.rotate_y(delta * 22.0)
+	var follow := player.distance - 18.0
+	var lat := player.lateral * 0.15
+	if manager != null:
+		for ai in manager.police_ais:
+			if ai == null or ai.rider == null:
+				continue
+			if ai.dormant and not ai.pursuing:
+				continue
+			follow = float(ai.rider.distance) - 10.0
+			lat = float(ai.rider.lateral)
+			break
+	var xf := track.sample(clampf(follow, 0.0, track.length), lat, 16.5)
+	_chopper.global_transform = xf
+	if _searchlight != null:
+		View.look_at(_searchlight, player.global_position + Vector3.UP * 0.4)
+
+
 func _on_finished(summary: Dictionary) -> void:
 	var results_scene: PackedScene = load("res://src/ui/Results.tscn")
 	if results_scene == null:
@@ -626,4 +707,5 @@ func _on_finished(summary: Dictionary) -> void:
 		return
 	var results := results_scene.instantiate()
 	add_child(results)
+	Sfx.play("cheer", -6.0, 1.0)
 	results.call_deferred("present", summary)
