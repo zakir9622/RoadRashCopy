@@ -2,9 +2,10 @@ extends CanvasLayer
 ## Road Rash dashboard HUD: diegetic bottom instrument cluster, dual rear
 ## mirrors, clear centre view, and bottom-thumb touch controls on mobile.
 
-const DASH_H := 168.0
-const MIRROR_W := 128.0
-const MIRROR_H := 56.0
+const DASH_H := 210.0
+const MIRROR_W := 88.0
+const MIRROR_H := 44.0
+const PORTRAIT := true
 
 var _race: Node3D
 var _speed_value: Label
@@ -18,12 +19,16 @@ var _police_label: Label
 var _stamina_bar: ProgressBar
 var _bike_bar: ProgressBar
 var _rival_bar: ProgressBar
+var _nitro_bar: ProgressBar
 var _mirror_l_cam: Camera3D
 var _mirror_r_cam: Camera3D
 var _mirror_l_tex: TextureRect
 var _mirror_r_tex: TextureRect
 var _damage_flash: ColorRect
 var _flash_level: float = 0.0
+var _rival_portrait: PanelContainer
+var _banter_label: Label
+var _banter_timer: float = 0.0
 var _touch_root: Control
 
 
@@ -33,6 +38,7 @@ func bind(race: Node3D) -> void:
 	var player: Rider = race.player
 	player.damaged.connect(_on_player_damaged)
 	player.attacked.connect(_on_player_attacked)
+	player.weapon_stolen.connect(_on_weapon_stolen)
 
 
 func _build() -> void:
@@ -86,7 +92,7 @@ func _build_dashboard(root: Control) -> void:
 	row.add_child(left)
 	_speed_value = _label(left, "0", 44, ThemeColors.INK)
 	_speed_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_label(left, "KM/H", 13, ThemeColors.INK_MUTED).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_label(left, "MPH", 13, ThemeColors.INK_MUTED).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_position_label = _label(left, "POS 1/8", 18, ThemeColors.ACCENT)
 	_position_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
@@ -109,6 +115,11 @@ func _build_dashboard(root: Control) -> void:
 	bar_row.add_child(bike_col)
 	_label(bike_col, "BIKE", 12, ThemeColors.INK_MUTED)
 	_bike_bar = _bar(bike_col, ThemeColors.DANGER)
+	var nitro_col := VBoxContainer.new()
+	nitro_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar_row.add_child(nitro_col)
+	_label(nitro_col, "N2O", 12, ThemeColors.INK_MUTED)
+	_nitro_bar = _bar(nitro_col, ThemeColors.POLICE_BLUE)
 
 	var rival_row := HBoxContainer.new()
 	centre.add_child(rival_row)
@@ -116,6 +127,19 @@ func _build_dashboard(root: Control) -> void:
 	_rival_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_rival_bar = _bar(centre, ThemeColors.POLICE_BLUE)
 	_rival_bar.custom_minimum_size = Vector2(0, 10)
+
+	_rival_portrait = PanelContainer.new()
+	var portrait_style := StyleBoxFlat.new()
+	portrait_style.bg_color = Color(0.05, 0.06, 0.08, 0.9)
+	portrait_style.border_color = ThemeColors.ACCENT_DIM
+	portrait_style.set_border_width_all(2)
+	_rival_portrait.add_theme_stylebox_override("panel", portrait_style)
+	_rival_portrait.custom_minimum_size = Vector2(52, 52)
+	rival_row.add_child(_rival_portrait)
+
+	_banter_label = _label(root, "", 16, ThemeColors.ACCENT)
+	_banter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	ThemeColors.place(_banter_label, Control.PRESET_TOP_WIDE, 58)
 
 	var info_row := HBoxContainer.new()
 	centre.add_child(info_row)
@@ -139,18 +163,26 @@ func _build_dashboard(root: Control) -> void:
 
 func _build_mirrors(root: Control) -> void:
 	var mirror_row := HBoxContainer.new()
-	mirror_row.add_theme_constant_override("separation", 8)
+	mirror_row.add_theme_constant_override("separation", 6)
 	root.add_child(mirror_row)
-	ThemeColors.place(mirror_row, Control.PRESET_BOTTOM_WIDE, int(DASH_H + 6))
+	if PORTRAIT:
+		ThemeColors.place(mirror_row, Control.PRESET_TOP_WIDE, 8)
+	else:
+		ThemeColors.place(mirror_row, Control.PRESET_BOTTOM_WIDE, int(DASH_H + 6))
 
 	var spacer_l := Control.new()
 	spacer_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mirror_row.add_child(spacer_l)
 
 	_mirror_l_tex = _make_mirror_panel(mirror_row, "mirror_l")
-	var gap := Control.new()
-	gap.custom_minimum_size = Vector2(280, 0)
-	mirror_row.add_child(gap)
+	if PORTRAIT:
+		var gap := Control.new()
+		gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mirror_row.add_child(gap)
+	else:
+		var gap := Control.new()
+		gap.custom_minimum_size = Vector2(280, 0)
+		mirror_row.add_child(gap)
 	_mirror_r_tex = _make_mirror_panel(mirror_row, "mirror_r")
 
 	var spacer_r := Control.new()
@@ -212,7 +244,7 @@ func _build_touch_controls(root: Control) -> void:
 	_touch_root.add_child(bar)
 	bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	bar.offset_bottom = -(DASH_H + bottom_inset + 8)
-	bar.offset_top = bar.offset_bottom - 108
+	bar.offset_top = bar.offset_bottom - (128 if PORTRAIT else 108)
 	bar.offset_left = 12
 	bar.offset_right = -12
 
@@ -245,8 +277,11 @@ func _build_touch_controls(root: Control) -> void:
 	punch_l.pressed.connect(func(): controller.touch_attack_left = true)
 	var punch_r := _touch_btn(action_box, "👊R", Vector2(88, 100))
 	punch_r.pressed.connect(func(): controller.touch_attack_right = true)
-	var kick := _touch_btn(action_box, "KICK", Vector2(88, 100))
+	var kick := _touch_btn(action_box, "KICK", Vector2(72, 92))
 	kick.pressed.connect(func(): controller.touch_kick = true)
+	var nitro := _touch_btn(action_box, "N2O", Vector2(72, 92))
+	nitro.button_down.connect(func(): controller.touch_nitro = true)
+	nitro.button_up.connect(func(): controller.touch_nitro = false)
 
 
 func _touch_btn(parent: Control, text: String, size: Vector2) -> Button:
@@ -298,6 +333,34 @@ func _on_player_attacked(_side: float, _kick: bool) -> void:
 		_race.manager.register_heat_punch()
 
 
+func _on_weapon_stolen(from_name: String) -> void:
+	show_banter("Yeah! Stole from %s!" % from_name)
+
+
+func show_banter(text: String) -> void:
+	if _banter_label == null:
+		return
+	_banter_label.text = text
+	_banter_timer = 2.8
+
+
+func _update_rival_portrait(rival: Rider) -> void:
+	if _rival_portrait == null:
+		return
+	for child in _rival_portrait.get_children():
+		child.queue_free()
+	if rival == null:
+		return
+	var face := Label.new()
+	face.text = rival.rider_name.substr(0, 1)
+	face.add_theme_font_size_override("font_size", 28)
+	face.add_theme_color_override("font_color", rival.suit_color.lightened(0.35))
+	face.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	face.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	face.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_rival_portrait.add_child(face)
+
+
 func _process(delta: float) -> void:
 	if _race == null or _race.manager == null:
 		return
@@ -305,22 +368,32 @@ func _process(delta: float) -> void:
 	var player: Rider = _race.player
 	var track: Track = _race.track
 
-	_speed_value.text = str(int(player.speed * 3.6))
+	_speed_value.text = str(int(TrackCatalog.to_mph(player.speed)))
 	_position_label.text = "POS %d/%d" % [manager.position_of(player), manager.racers.size()]
 	_weapon_label.text = String(CombatMath.WEAPON_NAMES[player.weapon])
 	_stamina_bar.value = player.stamina / StaminaRules.MAX
 	_bike_bar.value = player.health / 100.0
+	if _nitro_bar != null:
+		_nitro_bar.value = player.nitro_fuel
 
-	var remaining := maxf(track.length - player.distance, 0.0)
-	_distance_label.text = "%.1f KM" % (remaining / 1000.0)
+	var remaining := TrackCatalog.to_miles(maxf(track.length - player.distance, 0.0))
+	var traveled := TrackCatalog.to_miles(player.distance)
+	_distance_label.text = "ODO %.1f  ·  %.1f LEFT" % [traveled, remaining]
 
 	var nearest: Rider = _nearest_rival(manager, player)
 	if nearest != null:
-		_rival_name.text = nearest.rider_name.to_upper()
+		_rival_name.text = "%s%s" % [nearest.rider_name.to_upper(),
+			" · %s" % nearest.gang.to_upper() if nearest.gang != "" else ""]
 		_rival_bar.value = nearest.stamina / StaminaRules.MAX
+		_update_rival_portrait(nearest)
 	else:
 		_rival_name.text = "CLEAR"
 		_rival_bar.value = 0.0
+		_update_rival_portrait(null)
+
+	_banter_timer = maxf(_banter_timer - delta, 0.0)
+	if _banter_timer <= 0.0 and _banter_label != null and _banter_label.text != "":
+		_banter_label.text = ""
 
 	_ko_label.text = "KO %d" % player.knockouts
 

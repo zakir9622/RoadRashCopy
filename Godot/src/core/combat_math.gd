@@ -36,25 +36,38 @@ static func cooldown(weapon: int) -> float:
 		_: return 0.45
 
 
+static func windup_cooldown(weapon: int) -> float:
+	return cooldown(weapon) * 0.65
+
+
 ## Relative speed matters: two riders locked side by side are stationary with
 ## respect to each other, and a punch should still feel like a punch.
-static func compute_damage(weapon: int, relative_speed: float, aggression: float = 1.0) -> float:
+static func compute_damage(weapon: int, relative_speed: float, aggression: float = 1.0,
+		steer_toward: float = 0.0, windup: bool = false) -> float:
 	var speed_bonus: float = clampf(absf(relative_speed) * 0.35, 0.0, 12.0)
-	return (base_damage(weapon) + speed_bonus) * maxf(aggression, 0.0)
+	var steer_bonus := clampf(steer_toward, 0.0, 1.0) * 6.0
+	var windup_bonus := 4.0 if windup else 0.0
+	return (base_damage(weapon) + speed_bonus + steer_bonus + windup_bonus) * maxf(aggression, 0.0)
 
 
 ## Lateral shove in metres/sec applied to the victim. Kicks trade damage for push.
 static func knockback(weapon: int, damage: float) -> float:
-	var scale := 8.0 if weapon == Weapon.KICK else 2.5
+	var scale := 14.0 if weapon == Weapon.KICK else 2.5
 	return damage * scale * 0.05
 
 
 ## Whether a hit this hard knocks the victim's weapon loose.
-static func can_steal(damage: float, victim_weapon: int) -> bool:
-	return victim_weapon != Weapon.FISTS and damage >= 16.0
+static func can_steal(damage: float, victim_weapon: int, windup: bool = false) -> bool:
+	if victim_weapon == Weapon.FISTS:
+		return false
+	return damage >= 16.0 or (windup and damage >= 12.0)
 
 
 static func better(a: int, b: int) -> int:
-	# Bat > chain > fists. Kick is a move, not a holdable, and is never "held".
 	var rank := {Weapon.FISTS: 0, Weapon.KICK: 0, Weapon.CHAIN: 1, Weapon.BAT: 2}
 	return a if int(rank[a]) >= int(rank[b]) else b
+
+
+## Classic RR: kick rival into traffic = devastating.
+static func traffic_hit_damage(relative_speed: float) -> float:
+	return minf(38.0 + absf(relative_speed) * 0.9, 85.0)

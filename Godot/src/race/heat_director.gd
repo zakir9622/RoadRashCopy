@@ -10,6 +10,7 @@ const PUNCH_HEAT := 0.08
 const KICK_HEAT := 0.05
 const NEAR_MISS_HEAT := 0.04
 const CRASH_HEAT := 0.15
+const IDLE_HEAT := 0.22
 const SPAWN_THRESHOLD := 0.45
 const REINFORCE_THRESHOLD := 0.75
 
@@ -32,6 +33,11 @@ func on_near_miss() -> void:
 
 func on_crash() -> void:
 	heat = minf(heat + CRASH_HEAT, 1.0)
+
+
+func on_idle() -> void:
+	# Classic: sit still long enough and a motor officer appears.
+	heat = minf(heat + IDLE_HEAT, 1.0)
 
 
 func should_spawn_cop(active_cops: int, max_cops: int) -> bool:

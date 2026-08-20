@@ -1,7 +1,8 @@
 class_name PoliceAI
 extends RefCounted
 ## Classic Road Rash police: approach from behind, siren in the mirrors, bust
-## only when you crash or run back to your bike — never for standing still.
+## only when you crash or run back to your bike. Sitting still raises heat so
+## an officer spawns — it does not bust you while you are still riding.
 
 var rider: Rider
 var bust_radius: float = 16.0
