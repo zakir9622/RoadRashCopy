@@ -111,7 +111,7 @@ func _add_bike_preview() -> void:
 	var model := (load("res://assets/models/bike.glb") as PackedScene).instantiate()
 	world.add_child(model)
 	var cam := Camera3D.new()
-	cam.position = Vector3(2.4, 1.4, 2.2)
+	cam.position = Vector3(2.8, 1.5, 3.2)
 	world.add_child(cam)
 	View.look_at(cam, Vector3(0, 0.8, 0))
 	var light := DirectionalLight3D.new()

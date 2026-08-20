@@ -2,9 +2,9 @@ extends CanvasLayer
 ## Road Rash dashboard HUD: diegetic bottom instrument cluster, dual rear
 ## mirrors, clear centre view, and bottom-thumb touch controls on mobile.
 
-const DASH_H := 210.0
-const MIRROR_W := 88.0
-const MIRROR_H := 44.0
+const DASH_H := 0.0
+const MIRROR_W := 96.0
+const MIRROR_H := 52.0
 const PORTRAIT := true
 
 var _race: Node3D
@@ -20,6 +20,8 @@ var _stamina_bar: ProgressBar
 var _bike_bar: ProgressBar
 var _rival_bar: ProgressBar
 var _nitro_bar: ProgressBar
+var _speed_gauge: Control
+var _rpm_gauge: Control
 var _mirror_l_cam: Camera3D
 var _mirror_r_cam: Camera3D
 var _mirror_l_tex: TextureRect
@@ -71,98 +73,87 @@ func _build() -> void:
 
 
 func _build_dashboard(root: Control) -> void:
-	var dash := PanelContainer.new()
-	var dash_style := StyleBoxFlat.new()
-	dash_style.bg_color = Color(0.02, 0.03, 0.05, 0.92)
-	dash_style.border_width_top = 3
-	dash_style.border_color = ThemeColors.ACCENT_DIM
-	dash_style.content_margin_left = 16.0
-	dash_style.content_margin_right = 16.0
-	dash_style.content_margin_top = 10.0
-	dash_style.content_margin_bottom = 10.0
-	dash.add_theme_stylebox_override("panel", dash_style)
-	dash.custom_minimum_size = Vector2(0, DASH_H)
-	root.add_child(dash)
-	ThemeColors.place(dash, Control.PRESET_BOTTOM_WIDE, 0)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 18)
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	dash.add_child(row)
-
-	# Left gauge cluster — speedo
-	var left := VBoxContainer.new()
-	left.custom_minimum_size = Vector2(150, 0)
-	row.add_child(left)
-	_speed_value = _label(left, "0", 44, ThemeColors.INK)
-	_speed_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_label(left, "MPH", 13, ThemeColors.INK_MUTED).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_position_label = _label(left, "POS 1/8", 18, ThemeColors.ACCENT)
+	# Thin top strip — never covers the road. Analog cluster sits over the bars.
+	_position_label = _label(root, "POS 15/15", 18, ThemeColors.ACCENT)
+	ThemeColors.place(_position_label, Control.PRESET_CENTER_TOP, 10)
 	_position_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	# Centre — stamina, bike, rival, weapon, distance
-	var centre := VBoxContainer.new()
-	centre.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	centre.add_theme_constant_override("separation", 6)
-	row.add_child(centre)
+	_police_label = _label(root, "", 15, ThemeColors.POLICE_BLUE)
+	ThemeColors.place(_police_label, Control.PRESET_CENTER_TOP, 32)
+	_police_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	var bar_row := HBoxContainer.new()
-	bar_row.add_theme_constant_override("separation", 12)
-	centre.add_child(bar_row)
-	var stam_col := VBoxContainer.new()
-	stam_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar_row.add_child(stam_col)
-	_label(stam_col, "STAMINA", 12, ThemeColors.INK_MUTED)
-	_stamina_bar = _bar(stam_col, ThemeColors.ACCENT)
-	var bike_col := VBoxContainer.new()
-	bike_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar_row.add_child(bike_col)
-	_label(bike_col, "BIKE", 12, ThemeColors.INK_MUTED)
-	_bike_bar = _bar(bike_col, ThemeColors.DANGER)
-	var nitro_col := VBoxContainer.new()
-	nitro_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar_row.add_child(nitro_col)
-	_label(nitro_col, "N2O", 12, ThemeColors.INK_MUTED)
-	_nitro_bar = _bar(nitro_col, ThemeColors.POLICE_BLUE)
+	_ko_label = _label(root, "KO 0", 14, ThemeColors.ACCENT)
+	ThemeColors.place(_ko_label, Control.PRESET_TOP_RIGHT, 12)
 
-	var rival_row := HBoxContainer.new()
-	centre.add_child(rival_row)
-	_rival_name = _label(rival_row, "RIVAL —", 13, ThemeColors.INK_MUTED)
-	_rival_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_rival_bar = _bar(centre, ThemeColors.POLICE_BLUE)
-	_rival_bar.custom_minimum_size = Vector2(0, 10)
+	_weapon_label = _label(root, "FISTS", 14, ThemeColors.INK)
+	ThemeColors.place(_weapon_label, Control.PRESET_TOP_LEFT, 12)
 
-	_rival_portrait = PanelContainer.new()
-	var portrait_style := StyleBoxFlat.new()
-	portrait_style.bg_color = Color(0.05, 0.06, 0.08, 0.9)
-	portrait_style.border_color = ThemeColors.ACCENT_DIM
-	portrait_style.set_border_width_all(2)
-	_rival_portrait.add_theme_stylebox_override("panel", portrait_style)
-	_rival_portrait.custom_minimum_size = Vector2(52, 52)
-	rival_row.add_child(_rival_portrait)
+	_rival_name = _label(root, "", 14, ThemeColors.INK_MUTED)
+	ThemeColors.place(_rival_name, Control.PRESET_TOP_WIDE, 52)
+	_rival_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	_banter_label = _label(root, "", 16, ThemeColors.ACCENT)
 	_banter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ThemeColors.place(_banter_label, Control.PRESET_TOP_WIDE, 58)
+	ThemeColors.place(_banter_label, Control.PRESET_TOP_WIDE, 72)
 
-	var info_row := HBoxContainer.new()
-	centre.add_child(info_row)
-	_weapon_label = _label(info_row, "FISTS", 15, ThemeColors.INK)
-	_weapon_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_distance_label = _label(info_row, "2.4 KM", 15, ThemeColors.INK_MUTED)
-	_police_label = _label(info_row, "", 14, ThemeColors.POLICE_BLUE)
+	_rival_portrait = PanelContainer.new()
+	_rival_portrait.visible = false
+	root.add_child(_rival_portrait)
 
-	# Right gauge — tach style readout + KO
-	var right := VBoxContainer.new()
-	right.custom_minimum_size = Vector2(150, 0)
-	row.add_child(right)
-	var tach := _label(right, "RPM", 13, ThemeColors.INK_MUTED)
-	tach.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	var rpm := _label(right, "x4", 36, ThemeColors.INK)
-	rpm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_label(right, "KNOCKOUTS", 12, ThemeColors.INK_MUTED).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_ko_label = _label(right, "KO 0", 18, ThemeColors.ACCENT)
-	_ko_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var cluster := HBoxContainer.new()
+	cluster.add_theme_constant_override("separation", 28)
+	root.add_child(cluster)
+	ThemeColors.place(cluster, Control.PRESET_CENTER_BOTTOM, 18)
+
+	_rpm_gauge = _make_gauge(cluster, "RPM")
+	var mid := VBoxContainer.new()
+	mid.add_theme_constant_override("separation", 4)
+	cluster.add_child(mid)
+	_speed_gauge = _make_gauge(mid, "MPH")
+	_speed_value = _label(mid, "0", 22, ThemeColors.INK)
+	_speed_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_distance_label = _label(mid, "", 12, ThemeColors.INK_MUTED)
+	_distance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	var bars := VBoxContainer.new()
+	bars.add_theme_constant_override("separation", 3)
+	cluster.add_child(bars)
+	_stamina_bar = _bar(bars, ThemeColors.ACCENT)
+	_stamina_bar.custom_minimum_size = Vector2(92, 8)
+	_bike_bar = _bar(bars, ThemeColors.DANGER)
+	_bike_bar.custom_minimum_size = Vector2(92, 8)
+	_nitro_bar = _bar(bars, ThemeColors.POLICE_BLUE)
+	_nitro_bar.custom_minimum_size = Vector2(92, 8)
+	_rival_bar = _bar(bars, Color(0.4, 0.7, 1.0, 0.8))
+	_rival_bar.custom_minimum_size = Vector2(92, 6)
+
+
+func _make_gauge(parent: Control, caption: String) -> Control:
+	var g := Control.new()
+	g.custom_minimum_size = Vector2(108, 108)
+	g.set_meta("value", 0.0)
+	g.set_meta("caption", caption)
+	g.draw.connect(func():
+		var c := g.size * 0.5
+		var r := minf(g.size.x, g.size.y) * 0.42
+		g.draw_arc(c, r, PI * 0.75, PI * 2.25, 28, Color(0, 0, 0, 0.45), 10.0, true)
+		g.draw_arc(c, r, PI * 0.75, PI * 2.25, 28, ThemeColors.ACCENT_DIM, 2.0, true)
+		var t := clampf(float(g.get_meta("value")), 0.0, 1.0)
+		var ang := lerpf(PI * 0.75, PI * 2.25, t)
+		var needle := c + Vector2(cos(ang), sin(ang)) * r * 0.82
+		g.draw_line(c, needle, ThemeColors.ACCENT, 3.0, true)
+		g.draw_circle(c, 4.0, ThemeColors.INK)
+	)
+	parent.add_child(g)
+	var cap := Label.new()
+	cap.text = caption
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cap.add_theme_font_size_override("font_size", 11)
+	cap.add_theme_color_override("font_color", ThemeColors.INK_MUTED)
+	cap.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	cap.offset_top = -16
+	g.add_child(cap)
+	return g
 
 
 func _build_mirrors(root: Control) -> void:
@@ -239,66 +230,91 @@ func _build_touch_controls(root: Control) -> void:
 	_touch_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_touch_root)
 
-	var safe := DisplayServer.get_display_safe_area()
-	var bottom_inset := maxf(0.0, float(get_viewport().get_visible_rect().size.y - safe.end.y))
+	# Left: translucent steer pad. Right: throttle + compact punches.
+	var steer := _ghost_pad(_touch_root, Vector2(132, 132))
+	ThemeColors.place(steer, Control.PRESET_BOTTOM_LEFT, 20)
+	steer.gui_input.connect(func(event: InputEvent) -> void:
+		if event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventMouseButton or event is InputEventMouseMotion:
+			var local := steer.get_local_mouse_position()
+			var x := clampf((local.x / maxf(steer.size.x, 1.0)) * 2.0 - 1.0, -1.0, 1.0)
+			if event is InputEventScreenTouch and not event.pressed:
+				controller.touch_steer = 0.0
+			elif event is InputEventMouseButton and not event.pressed:
+				controller.touch_steer = 0.0
+			else:
+				controller.touch_steer = x
+	)
 
-	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 10)
-	bar.alignment = BoxContainer.ALIGNMENT_END
-	_touch_root.add_child(bar)
-	bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bar.offset_bottom = -(DASH_H + bottom_inset + 8)
-	bar.offset_top = bar.offset_bottom - (128 if PORTRAIT else 108)
-	bar.offset_left = 12
-	bar.offset_right = -12
+	var throttle := _ghost_pad(_touch_root, Vector2(120, 150))
+	ThemeColors.place(throttle, Control.PRESET_BOTTOM_RIGHT, 20)
+	var go_lbl := Label.new()
+	go_lbl.text = "GAS"
+	go_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	go_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	go_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	go_lbl.add_theme_font_size_override("font_size", 16)
+	go_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
+	throttle.add_child(go_lbl)
+	throttle.gui_input.connect(func(event: InputEvent) -> void:
+		var down := false
+		if event is InputEventScreenTouch:
+			down = event.pressed
+			controller.touch_throttle = 1.0 if down else 0.0
+		elif event is InputEventMouseButton:
+			down = event.pressed
+			controller.touch_throttle = 1.0 if down else 0.0
+	)
 
-	# Steer cluster — bottom-left
-	var steer_box := HBoxContainer.new()
-	steer_box.add_theme_constant_override("separation", 8)
-	steer_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.add_child(steer_box)
-	var steer_l := _touch_btn(steer_box, "◄", Vector2(108, 100))
-	steer_l.button_down.connect(func(): controller.touch_steer = -1.0)
-	steer_l.button_up.connect(func(): controller.touch_steer = 0.0)
-	var steer_r := _touch_btn(steer_box, "►", Vector2(108, 100))
-	steer_r.button_down.connect(func(): controller.touch_steer = 1.0)
-	steer_r.button_up.connect(func(): controller.touch_steer = 0.0)
+	var punches := HBoxContainer.new()
+	punches.add_theme_constant_override("separation", 8)
+	_touch_root.add_child(punches)
+	ThemeColors.place(punches, Control.PRESET_BOTTOM_RIGHT, 24)
+	punches.offset_bottom = -180
+	punches.offset_top = punches.offset_bottom - 56
+	punches.offset_right = -20
+	punches.offset_left = -220
 
-	# Drive + combat — bottom-right
-	var action_box := HBoxContainer.new()
-	action_box.add_theme_constant_override("separation", 8)
-	bar.add_child(action_box)
-
-	var brake := _touch_btn(action_box, "BRK", Vector2(88, 100))
+	var brake := _ghost_btn(punches, "BRK")
 	brake.button_down.connect(func(): controller.touch_brake = 1.0)
 	brake.button_up.connect(func(): controller.touch_brake = 0.0)
-
-	var go := _touch_btn(action_box, "GO", Vector2(108, 100))
-	go.button_down.connect(func(): controller.touch_throttle = 1.0)
-	go.button_up.connect(func(): controller.touch_throttle = 0.0)
-
-	var punch_l := _touch_btn(action_box, "👊L", Vector2(88, 100))
+	var punch_l := _ghost_btn(punches, "L")
 	punch_l.pressed.connect(func(): controller.touch_attack_left = true)
-	var punch_r := _touch_btn(action_box, "👊R", Vector2(88, 100))
+	var punch_r := _ghost_btn(punches, "R")
 	punch_r.pressed.connect(func(): controller.touch_attack_right = true)
-	var kick := _touch_btn(action_box, "KICK", Vector2(72, 92))
+	var kick := _ghost_btn(punches, "K")
 	kick.pressed.connect(func(): controller.touch_kick = true)
-	var nitro := _touch_btn(action_box, "N2O", Vector2(72, 92))
+	var nitro := _ghost_btn(punches, "N")
 	nitro.button_down.connect(func(): controller.touch_nitro = true)
 	nitro.button_up.connect(func(): controller.touch_nitro = false)
 
 
-func _touch_btn(parent: Control, text: String, size: Vector2) -> Button:
+func _ghost_pad(parent: Control, size: Vector2) -> Control:
+	var p := Panel.new()
+	p.custom_minimum_size = size
+	p.mouse_filter = Control.MOUSE_FILTER_STOP
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(1, 1, 1, 0.08)
+	st.set_corner_radius_all(int(minf(size.x, size.y) * 0.5))
+	st.border_color = Color(1, 1, 1, 0.18)
+	st.set_border_width_all(1)
+	p.add_theme_stylebox_override("panel", st)
+	parent.add_child(p)
+	return p
+
+
+func _ghost_btn(parent: Control, text: String) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = size
-	b.add_theme_font_size_override("font_size", 18)
-	var normal := ThemeColors.button_style()
-	normal.bg_color = Color(1, 1, 1, 0.12)
+	b.custom_minimum_size = Vector2(52, 52)
+	b.add_theme_font_size_override("font_size", 15)
+	var normal := StyleBoxFlat.new()
+	normal.bg_color = Color(1, 1, 1, 0.10)
+	normal.set_corner_radius_all(26)
+	normal.set_border_width_all(1)
+	normal.border_color = Color(1, 1, 1, 0.22)
 	b.add_theme_stylebox_override("normal", normal)
-	b.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
 	b.add_theme_stylebox_override("pressed", ThemeColors.button_style(true))
-	b.add_theme_color_override("font_color", ThemeColors.INK)
+	b.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
 	parent.add_child(b)
 	return b
 
@@ -373,6 +389,12 @@ func _process(delta: float) -> void:
 	var track: Track = _race.track
 
 	_speed_value.text = str(int(TrackCatalog.to_mph(player.speed)))
+	if _speed_gauge != null:
+		_speed_gauge.set_meta("value", clampf(TrackCatalog.to_mph(player.speed) / 150.0, 0.0, 1.0))
+		_speed_gauge.queue_redraw()
+	if _rpm_gauge != null:
+		_rpm_gauge.set_meta("value", clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.0))
+		_rpm_gauge.queue_redraw()
 	_position_label.text = "POS %d/%d" % [manager.position_of(player), manager.racers.size()]
 	_weapon_label.text = String(CombatMath.WEAPON_NAMES.get(player.weapon, "FISTS"))
 	_stamina_bar.value = player.stamina / StaminaRules.MAX

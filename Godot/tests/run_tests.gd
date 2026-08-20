@@ -23,7 +23,7 @@ func _init() -> void:
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 100
+	const EXPECTED_CHECKS := 105
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -331,6 +331,11 @@ func _test_rider_rig() -> void:
 	check(ap != null, "bike.glb has AnimationPlayer")
 	var skel := model.find_child("Skeleton3D", true, false)
 	check(skel != null, "bike.glb has Skeleton3D")
+	check(model.find_child("cockpit_cam", true, false) != null, "cockpit camera marker")
+	check(model.find_child("wheel_f", true, false) != null, "front wheel named for spin")
+	check(ResourceLoader.exists("res://assets/models/bike_rat.glb"), "Panda 250 glb exists")
+	check(ResourceLoader.exists("res://assets/models/bike_kami.glb"), "Kamikaze glb exists")
+	check(ResourceLoader.exists("res://assets/models/bike_super.glb"), "Diablo glb exists")
 	var names := PackedStringArray()
 	if ap != null:
 		names = ap.get_animation_list()

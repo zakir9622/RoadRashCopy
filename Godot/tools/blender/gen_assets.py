@@ -14,6 +14,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "asse
 os.makedirs(OUT, exist_ok=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rider_rig import build_rigged_rider
+from motorcycle import build_street_bike
 
 
 def reset():
@@ -155,73 +156,33 @@ def build_bike(style="sport", cop=False):
     root = bpy.data.objects.new("bike_root", None)
     bpy.context.collection.objects.link(root)
 
-    body_c = (0.08, 0.18, 0.72) if cop else (1.0, 0.0, 0.0)
-    body = mat("body", body_c, metallic=0.58, roughness=0.26)
-    dark = mat("dark", (0.04, 0.04, 0.05), roughness=0.92)
-    chrome = mat("chrome", (0.74, 0.76, 0.8), metallic=1.0, roughness=0.15)
-    rubber = mat("rubber", (0.03, 0.03, 0.04), roughness=0.98)
-    leather = mat("leather", (0.09, 0.08, 0.07), roughness=0.9)
-    glass = mat("glass", (0.02, 0.02, 0.05), metallic=0.75, roughness=0.06)
-    suit = mat("suit", (0.14, 0.14, 0.16), roughness=0.82)
-    skin = mat("skin", (0.72, 0.52, 0.4), roughness=0.85)
-    helm = mat("helmet", body_c, metallic=0.35, roughness=0.28) if not cop else mat(
-        "helmet", (0.92, 0.92, 0.95), metallic=0.35, roughness=0.28)
+    kind = "cop" if cop else style
+    paint = {
+        "rat": (0.82, 0.12, 0.10),
+        "sport": (0.08, 0.18, 0.72),
+        "kami": (0.08, 0.08, 0.09),
+        "super": (0.72, 0.04, 0.10),
+        "cop": (0.10, 0.18, 0.55),
+    }[kind]
+    suit = mat("suit", (0.12, 0.12, 0.13), roughness=0.78)
+    skin = mat("skin", (0.78, 0.56, 0.42), roughness=0.62)
+    helm = mat("helmet", paint, metallic=0.45, roughness=0.22)
+    if cop:
+        helm = mat("helmet", (0.92, 0.92, 0.95), metallic=0.4, roughness=0.22)
+    glass = mat("glass", (0.04, 0.05, 0.08), metallic=0.3, roughness=0.05)
 
-    sc = 0.84 if style == "rat" else 1.0
-    wb = 2.05 * sc
-
-    # Wheels — named for Godot spin
-    fr, rr = 0.37 * sc, 0.4 * sc
-    wf = cyl("wheel_f", fr, 0.14 * sc, (0, wb * 0.43, fr), rubber, (0, math.pi / 2, 0), parent=root)
-    wr = cyl("wheel_r", rr, 0.18 * sc, (0, -wb * 0.43, rr), rubber, (0, math.pi / 2, 0), parent=root)
-    cyl("tyre_f", fr * 1.04, 0.16 * sc, wf.location, rubber, (0, math.pi / 2, 0), parent=root)
-    cyl("disc_f", fr * 0.68, 0.035, (0, wb * 0.43, fr + 0.02), chrome, (0, math.pi / 2, 0), parent=root)
-    cyl("disc_r", rr * 0.68, 0.04, (0, -wb * 0.43, rr + 0.02), chrome, (0, math.pi / 2, 0), parent=root)
-
-    # Frame / engine block
-    box("frame", (0.12 * sc, 1.15 * sc, 0.14 * sc), (0, 0.04 * sc, 0.56 * sc), chrome, bevel=0.02, parent=root)
-    box("engine", (0.4 * sc, 0.58 * sc, 0.36 * sc), (0, 0.02 * sc, 0.44 * sc), dark, bevel=0.05, parent=root)
-
-    if style == "rat":
-        box("tank", (0.34 * sc, 0.58 * sc, 0.24 * sc), (0, 0.14 * sc, 0.8 * sc), body, bevel=0.05, parent=root)
-        box("tail", (0.26 * sc, 0.42 * sc, 0.14 * sc), (0, -0.4 * sc, 0.78 * sc), body,
-            rot=(math.radians(-12), 0, 0), bevel=0.04, parent=root)
-    else:
-        # Curved fairing stack — RR3D sportbike silhouette
-        box("nose", (0.38 * sc, 0.42 * sc, 0.34 * sc), (0, wb * 0.4, 0.96 * sc), body,
-            rot=(math.radians(-18), 0, 0), bevel=0.07, parent=root)
-        box("side_l", (0.06 * sc, 0.52 * sc, 0.28 * sc), (-0.2 * sc, 0.1 * sc, 0.66 * sc), body,
-            rot=(0, 0, math.radians(8)), bevel=0.04, parent=root)
-        box("side_r", (0.06 * sc, 0.52 * sc, 0.28 * sc), (0.2 * sc, 0.1 * sc, 0.66 * sc), body,
-            rot=(0, 0, math.radians(-8)), bevel=0.04, parent=root)
-        box("belly", (0.36 * sc, 0.66 * sc, 0.28 * sc), (0, 0.06 * sc, 0.62 * sc), body, bevel=0.05, parent=root)
-        box("tail", (0.3 * sc, 0.52 * sc, 0.18 * sc), (0, -0.46 * sc, 0.84 * sc), body,
-            rot=(math.radians(-16), 0, 0), bevel=0.05, parent=root)
-        box("windscreen", (0.3 * sc, 0.06 * sc, 0.24 * sc), (0, wb * 0.36, 1.06 * sc), glass,
-            rot=(math.radians(-32), 0, 0), bevel=0.015, parent=root)
-
-    box("seat", (0.32 * sc, 0.46 * sc, 0.09 * sc), (0, -0.18 * sc, 0.82 * sc), leather, bevel=0.03, parent=root)
-
-    for sx in (-0.095, 0.095):
-        cyl(f"fork_{sx}", 0.03 * sc, 0.78 * sc, (sx * sc, wb * 0.38, 0.64 * sc), chrome,
-            rot=(math.radians(-20), 0, 0), parent=root)
-    box("bars", (0.58 * sc, 0.05 * sc, 0.05 * sc), (0, wb * 0.3, 1.04 * sc), dark, parent=root)
-    box("clamp", (0.24 * sc, 0.07 * sc, 0.06 * sc), (0, wb * 0.34, 0.9 * sc), dark, parent=root)
-
-    for sx in (0.15, 0.22):
-        cyl(f"exhaust_{sx}", 0.048 * sc, 0.82 * sc, (sx * sc, -0.34 * sc, 0.46 * sc), chrome,
-            rot=(math.radians(82), 0, 0), parent=root)
-
-    sphere("headlight", 0.09 * sc, (0, wb * 0.46, 1.02 * sc),
-           mat("light", (1, 0.98, 0.9), emission=(1, 0.95, 0.82)), parent=root)
-
+    sc = {"rat": 0.86, "sport": 1.0, "kami": 1.04, "super": 1.08, "cop": 1.0}[kind]
+    build_street_bike(root, kind)
     build_rigged_rider(root, suit, skin, helm, glass, sc)
 
-    if cop:
-        box("beacon", (0.12 * sc, 0.1 * sc, 0.08 * sc), (0, -0.04 * sc, 0.98 * sc),
-            mat("beacon", (0.95, 0.1, 0.1), emission=(1, 0.1, 0.1)), bevel=0.02, parent=root)
-
-    export("cop_bike.glb" if cop else ("bike_rat.glb" if style == "rat" else "bike.glb"), animations=True)
+    out = {
+        "cop": "cop_bike.glb",
+        "rat": "bike_rat.glb",
+        "sport": "bike.glb",
+        "kami": "bike_kami.glb",
+        "super": "bike_super.glb",
+    }[kind]
+    export(out, animations=True)
 
 
 def build_runner():
@@ -337,6 +298,8 @@ def build_barrier():
 if __name__ == "__main__":
     build_bike("sport", cop=False)
     build_bike("rat", cop=False)
+    build_bike("kami", cop=False)
+    build_bike("super", cop=False)
     build_bike("sport", cop=True)
     build_runner()
     build_car()

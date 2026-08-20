@@ -98,7 +98,7 @@ func set_engine(speed01: float, active: bool) -> void:
 		return
 	if active and not _engine.playing:
 		_engine.stream = _streams["engine"]
-		_engine.volume_db = -14.0
+		_engine.volume_db = -5.0
 		_engine.play()
 		if not _engine.finished.is_connected(_on_engine_finished):
 			_engine.finished.connect(_on_engine_finished)

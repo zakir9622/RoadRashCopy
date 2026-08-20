@@ -10,7 +10,9 @@ godot --path Godot
 ```
 
 Desktop: WASD/arrows drive · J/K punch · L kick · Shift nitro · Esc pause.
-Android: on-screen thumb controls.
+Android: translucent steer pad (left) · GAS (right) · L/R punch, kick, nitro.
+
+The race camera sits in the cockpit over the bars and rolls with lean.
 
 Sideload the latest APK from [Releases](https://github.com/zakir9622/RoadRashCopy/releases).
 

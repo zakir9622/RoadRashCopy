@@ -6,6 +6,8 @@ extends Node3D
 const RIDER_MODEL := "res://assets/models/bike.glb"
 const RAT_MODEL := "res://assets/models/bike_rat.glb"
 const COP_MODEL := "res://assets/models/cop_bike.glb"
+const KAMI_MODEL := "res://assets/models/bike_kami.glb"
+const SUPER_MODEL := "res://assets/models/bike_super.glb"
 
 var manager: RaceManager
 var track: Track
@@ -13,10 +15,11 @@ var player: Rider
 var camera: Camera3D
 var hud: CanvasLayer
 
-var _fov_base := 50.0
-var _cam_back := 1.85
-var _cam_up := 1.12
-var _cam_look := 3.2
+var _fov_base := 62.0
+var _cam_back := 2.4
+var _cam_up := 1.35
+var _cam_look := 8.0
+var _cockpit: Node3D
 
 
 ## Autoloads fetched by tree path, not identifier: identifier globals bind to
@@ -157,24 +160,45 @@ func _make_rider(rider_name: String, start_s: float, start_x: float,
 	return rider
 
 
+func _bike_model_path(bike_id: String, cop: bool) -> String:
+	if cop:
+		return COP_MODEL
+	match bike_id:
+		"sport":
+			return RIDER_MODEL
+		"kami":
+			return KAMI_MODEL if ResourceLoader.exists(KAMI_MODEL) else RIDER_MODEL
+		"super":
+			return SUPER_MODEL if ResourceLoader.exists(SUPER_MODEL) else RIDER_MODEL
+		_:
+			return RAT_MODEL
+
+
 func _make_bike_visual(colour: Color, cop: bool, rider: Rider) -> Node3D:
-	var path := COP_MODEL if cop else RAT_MODEL
-	if not cop and rider != null and rider.is_player:
+	var bike_id := "sport"
+	if cop:
+		bike_id = "cop"
+	elif rider != null and rider.is_player:
 		var state := _state()
-		var bike_id := "rat"
 		if state != null:
 			bike_id = String(state.save.get("bike", "rat"))
-		if bike_id != "rat" and ResourceLoader.exists(RIDER_MODEL):
-			path = RIDER_MODEL
-	elif not cop and ResourceLoader.exists(RIDER_MODEL):
-		path = RIDER_MODEL
+	elif rider != null and not rider.is_player:
+		if rider.top_speed > 55.0:
+			bike_id = "super"
+		elif rider.top_speed > 48.0:
+			bike_id = "kami"
+		else:
+			bike_id = "sport"
+	var path := _bike_model_path(bike_id, cop)
 	if ResourceLoader.exists(path):
 		var scene: PackedScene = load(path)
 		if scene != null:
 			var model := scene.instantiate() as Node3D
 			if model != null:
-				model.scale = Vector3(1.08, 1.08, 1.08)
+				model.scale = Vector3(1.0, 1.0, 1.0)
 				_tint_model(model, colour)
+				if rider != null and rider.is_player:
+					_hide_helmet_from_cockpit(model)
 				return model
 	# Fallback silhouette: body box + wheels, still clearly a bike.
 	var root := Node3D.new()
@@ -269,22 +293,67 @@ func _build_environment(definition: Dictionary) -> void:
 	add_child(sun)
 
 
+func _hide_helmet_from_cockpit(visual: Node3D) -> void:
+	# Cockpit sits in front of the visor; keep the head out of the lens.
+	for n in ["helmet", "mesh_head", "visor"]:
+		var node := visual.find_child(n, true, false)
+		if node is VisualInstance3D:
+			(node as VisualInstance3D).layers = 2
+
+
 func _build_camera() -> void:
 	camera = Camera3D.new()
 	camera.fov = _fov_base
-	camera.near = 0.2
+	camera.near = 0.12
 	camera.far = 900.0
+	camera.cull_mask = camera.cull_mask & ~2
 	add_child(camera)
 	camera.make_current()
+	if player != null and player.visual != null:
+		_cockpit = player.visual.find_child("cockpit_cam", true, false) as Node3D
 	_snap_camera()
 
 
 func _snap_camera() -> void:
+	_update_camera(1.0)
+
+
+func _update_camera(delta: float) -> void:
 	if player == null or track == null or camera == null:
 		return
-	var behind := track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.35, _cam_up)
-	camera.global_position = behind.origin
-	var look := track.sample(player.distance + _cam_look, player.lateral * 0.22, 0.55)
+	if player.state == Rider.State.RIDING or player.state == Rider.State.REMOUNT \
+			or player.is_airborne():
+		_cockpit_camera(delta)
+	else:
+		_chase_camera(delta)
+
+
+func _cockpit_camera(delta: float) -> void:
+	if _cockpit == null and player.visual != null:
+		_cockpit = player.visual.find_child("cockpit_cam", true, false) as Node3D
+	var origin: Vector3
+	if _cockpit != null:
+		origin = _cockpit.global_position
+	else:
+		origin = track.sample(player.distance + 0.28, player.lateral, 1.18 + player.air_height).origin
+	var look := track.sample(player.distance + 16.0, player.lateral * 0.10, 0.62 + player.air_height * 0.25)
+	if delta >= 0.99 or camera.global_position.distance_to(origin) > 8.0:
+		camera.global_position = origin
+	else:
+		camera.global_position = camera.global_position.lerp(origin, 1.0 - exp(-16.0 * delta))
+	View.look_at(camera, look.origin)
+	camera.rotate_object_local(Vector3.FORWARD, player.lean * 1.05)
+	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
+	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 12.0, 7.0 * delta)
+
+
+func _chase_camera(delta: float) -> void:
+	var behind := track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.4, _cam_up)
+	var look := track.sample(player.distance + 4.0, player.lateral * 0.2, 0.55)
+	if delta >= 0.99 or camera.global_position.distance_to(behind.origin) > 10.0:
+		camera.global_position = behind.origin
+	else:
+		camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-10.0 * delta))
 	View.look_at(camera, look.origin)
 
 
@@ -360,35 +429,6 @@ func _toggle_pause() -> void:
 		get_tree().paused = false
 		get_tree().change_scene_to_file("res://src/ui/MainMenu.tscn"))
 	box.add_child(quit_button)
-
-
-## Chase camera: behind and above the bike in track space, spring-damped, with
-## an FOV kick at speed so velocity is felt, not just read off the HUD.
-func _update_camera(delta: float) -> void:
-	if player == null or track == null:
-		return
-	var behind: Transform3D
-	var look_target: Transform3D
-	if player.state == Rider.State.CRASHED:
-		behind = track.sample(maxf(player.distance - 1.6, 0.0), player.lateral + 2.2, 1.05)
-		look_target = track.sample(player.distance, player.lateral, 0.4)
-	elif player.state == Rider.State.RUNNING:
-		behind = track.sample(maxf(player.distance - 2.4, 0.0), player.lateral * 0.4, 1.55)
-		look_target = track.sample(player.distance + 2.0, player.lateral * 0.2, 0.6)
-	elif player.is_airborne():
-		behind = track.sample(maxf(player.distance - 2.8, 0.0), player.lateral * 0.3, _cam_up + player.air_height * 0.4)
-		look_target = track.sample(player.distance + _cam_look, player.lateral * 0.2, 0.4 + player.air_height)
-	else:
-		behind = track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.35, _cam_up)
-		look_target = track.sample(player.distance + _cam_look, player.lateral * 0.22, 0.55)
-	if camera.global_position.distance_to(behind.origin) > 10.0:
-		camera.global_position = behind.origin
-	else:
-		camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-12.0 * delta))
-	View.look_at(camera, look_target.origin)
-
-	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
-	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 5.0, 6.0 * delta)
 
 
 func _on_finished(summary: Dictionary) -> void:
