@@ -26,6 +26,7 @@ func build(track_def: Dictionary, rng_seed: int = 1337) -> void:
 	_build_props(rng_seed)
 	_build_hazards(rng_seed)
 	_build_roadblocks(rng_seed)
+	_build_finish()
 	if String(definition.get("biome", "")) == "coast":
 		_build_water()
 
@@ -362,17 +363,42 @@ func _build_hazards(rng_seed: int) -> void:
 	hazards.clear()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed * 13 + 3
+	# Classic set is always present so every race has oil, wildlife, and a sign.
+	_add_hazard(400.0, -half_width * 0.25, "oil", 1.0)
+	_add_hazard(minf(720.0, length * 0.28), half_width * 0.2, "deer", 1.0)
+	_add_hazard(minf(1100.0, length * 0.42), -half_width * 0.15, "cow", -1.0)
 	var steps := int(length / 180.0)
 	for i in steps:
-		if rng.randf() > 0.55:
+		if rng.randf() > 0.5:
 			continue
 		var d := i * 180.0 + rng.randf_range(20.0, 80.0)
-		var kind := "oil" if rng.randf() < 0.45 else "sign"
-		var lat := rng.randf_range(-half_width * 0.5, half_width * 0.5)
-		hazards.append({"distance": d, "lateral": lat, "kind": kind})
-		if ResourceLoader.exists("res://assets/models/sign.glb") and kind == "sign":
-			var side := 1.0 if lat >= 0.0 else -1.0
-			_place_hazard_mesh(d, lat + half_width * side * 0.85, "sign.glb", 0.8)
+		if d < 450.0:
+			continue
+		var roll := rng.randf()
+		var kind := "oil"
+		if roll > 0.7:
+			kind = "sign"
+		elif roll > 0.45:
+			kind = "cow" if rng.randf() < 0.5 else "deer"
+		var lat := rng.randf_range(-half_width * 0.55, half_width * 0.55)
+		var dir := -1.0 if rng.randf() < 0.5 else 1.0
+		_add_hazard(d, lat, kind, dir)
+
+
+func _add_hazard(d: float, lat: float, kind: String, dir: float) -> void:
+	var hz := {"distance": d, "lateral": lat, "kind": kind, "dir": dir}
+	match kind:
+		"sign":
+			if ResourceLoader.exists("res://assets/models/sign.glb"):
+				var side := 1.0 if lat >= 0.0 else -1.0
+				_place_hazard_mesh(d, lat + half_width * side * 0.85, "sign.glb", 0.8)
+		"deer":
+			hz["node"] = _place_animal(d, lat, false)
+		"cow":
+			hz["node"] = _place_animal(d, lat, true)
+		"oil":
+			_place_oil(d, lat)
+	hazards.append(hz)
 
 
 func _place_hazard_mesh(d: float, lateral: float, file: String, scale: float) -> void:
@@ -399,6 +425,9 @@ func _build_roadblocks(rng_seed: int) -> void:
 		roadblocks.append({"distance": d, "lateral": lat, "width": 3.2})
 		if ResourceLoader.exists("res://assets/models/barrier.glb"):
 			_place_hazard_mesh(d, lat, "barrier.glb", 1.1)
+		# Police cruiser parked across a lane — classic blockade.
+		if ResourceLoader.exists("res://assets/models/car.glb"):
+			_place_hazard_mesh(d, lat + 2.4, "car.glb", 1.0)
 
 
 func _build_water() -> void:
@@ -418,3 +447,95 @@ func _build_water() -> void:
 	var t := sample(length * 0.25, -half_width - 38.0, -1.2)
 	plane.global_transform = t
 	plane.rotate_object_local(Vector3.RIGHT, -PI * 0.5)
+
+
+func _place_animal(d: float, lateral: float, cow: bool) -> Node3D:
+	var body := MeshInstance3D.new()
+	var mesh := CapsuleMesh.new()
+	mesh.radius = 0.42 if cow else 0.28
+	mesh.height = 1.6 if cow else 1.1
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.28, 0.18, 0.1) if cow else Color(0.45, 0.32, 0.18)
+	mesh.material = mat
+	body.mesh = mesh
+	body.name = "Cow" if cow else "Deer"
+	add_child(body)
+	body.global_transform = sample(clampf(d, 0.0, length), lateral, 0.55 if cow else 0.45)
+	body.scale = Vector3(1.1, 0.9, 1.6) if cow else Vector3(0.7, 0.7, 1.2)
+	return body
+
+
+func _place_oil(d: float, lateral: float) -> void:
+	var slick := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 1.6
+	mesh.bottom_radius = 1.6
+	mesh.height = 0.04
+	mesh.rings = 1
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.05, 0.05, 0.06, 0.85)
+	mat.roughness = 0.08
+	mat.metallic = 0.7
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mesh.material = mat
+	slick.mesh = mesh
+	slick.name = "Oil"
+	add_child(slick)
+	slick.global_transform = sample(clampf(d, 0.0, length), lateral, 0.03)
+
+
+func _build_finish() -> void:
+	for side in [-1.0, 1.0]:
+		var pole := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.08
+		cyl.bottom_radius = 0.1
+		cyl.height = 4.2
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.9, 0.9, 0.92)
+		cyl.material = mat
+		pole.mesh = cyl
+		add_child(pole)
+		pole.global_transform = sample(maxf(length - 4.0, 1.0), half_width * 0.92 * side, 2.1)
+	var banner := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(half_width * 1.9, 0.12, 0.9)
+	var bmat := StandardMaterial3D.new()
+	bmat.albedo_texture = _checker_texture()
+	bmat.uv1_scale = Vector3(10, 2, 1)
+	bmat.emission_enabled = true
+	bmat.emission = Color(0.9, 0.9, 0.9)
+	bmat.emission_energy_multiplier = 0.25
+	box.material = bmat
+	banner.mesh = box
+	banner.name = "FinishBanner"
+	add_child(banner)
+	banner.global_transform = sample(maxf(length - 4.0, 1.0), 0.0, 3.6)
+	_build_finish_crowd()
+
+
+static func _checker_texture() -> ImageTexture:
+	var img := Image.create(8, 2, false, Image.FORMAT_RGBA8)
+	for x in 8:
+		for y in 2:
+			img.set_pixel(x, y, Color.BLACK if (x + y) % 2 == 0 else Color.WHITE)
+	return ImageTexture.create_from_image(img)
+
+
+func _build_finish_crowd() -> void:
+	var finish_d := maxf(length - 6.0, 2.0)
+	for i in 12:
+		var person := MeshInstance3D.new()
+		var mesh := CapsuleMesh.new()
+		mesh.radius = 0.18
+		mesh.height = 1.5
+		var mat := StandardMaterial3D.new()
+		var palette := [ThemeColors.ACCENT, Color(0.8, 0.2, 0.15), Color(0.15, 0.2, 0.7), Color(0.9, 0.9, 0.85)]
+		mat.albedo_color = palette[i % palette.size()]
+		mesh.material = mat
+		person.mesh = mesh
+		add_child(person)
+		var side := -1.0 if i < 6 else 1.0
+		var lat := (half_width + 1.6 + (i % 6) * 0.45) * side
+		person.global_transform = sample(finish_d + (i % 3) * 1.1, lat, 0.85)
+

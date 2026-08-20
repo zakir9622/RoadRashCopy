@@ -19,6 +19,7 @@ var _police_label: Label
 var _stamina_bar: ProgressBar
 var _bike_bar: ProgressBar
 var _rival_bar: ProgressBar
+var _nitro_bar: ProgressBar
 var _mirror_l_cam: Camera3D
 var _mirror_r_cam: Camera3D
 var _mirror_l_tex: TextureRect
@@ -91,7 +92,7 @@ func _build_dashboard(root: Control) -> void:
 	row.add_child(left)
 	_speed_value = _label(left, "0", 44, ThemeColors.INK)
 	_speed_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_label(left, "KM/H", 13, ThemeColors.INK_MUTED).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_label(left, "MPH", 13, ThemeColors.INK_MUTED).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_position_label = _label(left, "POS 1/8", 18, ThemeColors.ACCENT)
 	_position_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
@@ -114,6 +115,11 @@ func _build_dashboard(root: Control) -> void:
 	bar_row.add_child(bike_col)
 	_label(bike_col, "BIKE", 12, ThemeColors.INK_MUTED)
 	_bike_bar = _bar(bike_col, ThemeColors.DANGER)
+	var nitro_col := VBoxContainer.new()
+	nitro_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar_row.add_child(nitro_col)
+	_label(nitro_col, "N2O", 12, ThemeColors.INK_MUTED)
+	_nitro_bar = _bar(nitro_col, ThemeColors.POLICE_BLUE)
 
 	var rival_row := HBoxContainer.new()
 	centre.add_child(rival_row)
@@ -362,14 +368,17 @@ func _process(delta: float) -> void:
 	var player: Rider = _race.player
 	var track: Track = _race.track
 
-	_speed_value.text = str(int(player.speed * 3.6))
+	_speed_value.text = str(int(TrackCatalog.to_mph(player.speed)))
 	_position_label.text = "POS %d/%d" % [manager.position_of(player), manager.racers.size()]
 	_weapon_label.text = String(CombatMath.WEAPON_NAMES[player.weapon])
 	_stamina_bar.value = player.stamina / StaminaRules.MAX
 	_bike_bar.value = player.health / 100.0
+	if _nitro_bar != null:
+		_nitro_bar.value = player.nitro_fuel
 
-	var remaining := maxf(track.length - player.distance, 0.0)
-	_distance_label.text = "%.1f KM" % (remaining / 1000.0)
+	var remaining := TrackCatalog.to_miles(maxf(track.length - player.distance, 0.0))
+	var traveled := TrackCatalog.to_miles(player.distance)
+	_distance_label.text = "ODO %.1f  ·  %.1f LEFT" % [traveled, remaining]
 
 	var nearest: Rider = _nearest_rival(manager, player)
 	if nearest != null:

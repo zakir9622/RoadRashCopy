@@ -18,9 +18,9 @@ func _ready() -> void:
 
 	_list = VBoxContainer.new()
 	_list.add_theme_constant_override("separation", 10)
-	_list.custom_minimum_size = Vector2(560, 0)
+	_list.custom_minimum_size = Vector2(420, 0)
 	panel.add_child(_list)
-
+	_add_bike_preview()
 	_rebuild()
 
 
@@ -29,8 +29,8 @@ func _rebuild() -> void:
 		child.queue_free()
 
 	var title := Label.new()
-	title.text = "GARAGE"
-	title.add_theme_font_size_override("font_size", 36)
+	title.text = Story.SHOP
+	title.add_theme_font_size_override("font_size", 28)
 	title.add_theme_color_override("font_color", ThemeColors.ACCENT)
 	_list.add_child(title)
 
@@ -49,7 +49,7 @@ func _rebuild() -> void:
 		_list.add_child(row)
 
 		var name_label := Label.new()
-		name_label.text = "%s  ·  %d km/h" % [String(bike["name"]), int(float(bike["top_speed"]) * 3.6)]
+		name_label.text = "%s  ·  %d mph" % [String(bike["name"]), int(TrackCatalog.to_mph(float(bike["top_speed"])))]
 		name_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		name_label.add_theme_font_size_override("font_size", 20)
 		name_label.add_theme_color_override("font_color",
@@ -90,6 +90,33 @@ func _rebuild() -> void:
 	back.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
 	back.pressed.connect(func(): get_tree().change_scene_to_file("res://src/ui/MainMenu.tscn"))
 	_list.add_child(back)
+
+
+func _add_bike_preview() -> void:
+	if not ResourceLoader.exists("res://assets/models/bike.glb"):
+		return
+	var host := SubViewportContainer.new()
+	host.custom_minimum_size = Vector2(420, 160)
+	host.stretch = true
+	add_child(host)
+	host.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	host.offset_top = 12
+	host.offset_bottom = 172
+	var vp := SubViewport.new()
+	vp.transparent_bg = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	host.add_child(vp)
+	var world := Node3D.new()
+	vp.add_child(world)
+	var model := (load("res://assets/models/bike.glb") as PackedScene).instantiate()
+	world.add_child(model)
+	var cam := Camera3D.new()
+	cam.position = Vector3(2.4, 1.4, 2.2)
+	world.add_child(cam)
+	cam.look_at(Vector3(0, 0.8, 0), Vector3.UP)
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-40, 30, 0)
+	world.add_child(light)
 
 
 func _upgrade_row(label_text: String, key: String) -> void:

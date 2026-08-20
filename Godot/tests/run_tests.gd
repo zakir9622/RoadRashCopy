@@ -12,15 +12,17 @@ func _init() -> void:
 	_test_combat()
 	_test_catalog()
 	_test_campaign_ledger()
+	_test_story()
 	_test_bike_specs()
 	_test_track_geometry()
 	_test_heat()
+	_test_classic_rules()
 	_test_race_simulation()
 	_test_rider_rig()
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 70
+	const EXPECTED_CHECKS := 98
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -70,7 +72,10 @@ func _test_catalog() -> void:
 	for track in tracks:
 		check(float(track["length"]) > 500.0, "%s has real length" % track["id"])
 		check(int(track["rivals"]) > 0, "%s has opponents" % track["id"])
-	check(TrackCatalog.find("downtown")["name"] == "Downtown", "find by id")
+	check(TrackCatalog.find("downtown")["name"] == "The City", "find by id")
+	check(TrackCatalog.find("coast_run")["name"] == "Pacific Coast", "pacific coast named")
+	check(TrackCatalog.find("sierra_pass")["name"] == "Sierra Nevada", "sierra named")
+	check(TrackCatalog.to_miles(1609.34) > 0.99 and TrackCatalog.to_miles(1609.34) < 1.01, "metres to miles")
 	check(TrackCatalog.at(99)["id"] == "night_city", "index clamps to last")
 	check(TrackCatalog.at(-5)["id"] == "coast_run", "index clamps to first")
 
@@ -102,6 +107,29 @@ func _test_campaign_ledger() -> void:
 	check(int(save4["chapter"]) == 0, "loss does not advance")
 
 
+func _test_story() -> void:
+	var busted := Story.vignette({"player_name": "Ace", "chapter": 0, "grudges": {}},
+		{"busted": true, "won": false, "game_over": false, "champion": false})
+	check(String(busted["speaker"]).find("OFFICER") >= 0 or String(busted["title"]) == "BUSTED",
+		"bust vignette is a cop")
+	var pre := Story.pre_race_copy({"chapter": 0, "grudges": {}, "player_name": "Ace"})
+	check(String(pre["body"]).length() > 20, "pre-race has story copy")
+	check(not Story.is_hostile({"grudges": {}}, "natasha"), "Natasha starts friendly")
+	check(Story.is_hostile({"grudges": {"natasha": 2}}, "natasha"), "hitting Natasha is a grudge")
+	check(Story.PROLOGUE.length() > 40, "prologue exists")
+
+	var broke := {"cash": 50, "chapter": 0}
+	var collapsed := Campaign.apply_result(broke, 8, 0, 800, true, 200)
+	check(bool(collapsed["game_over"]), "broke after bust is game over")
+	var last := {"cash": 2000, "chapter": 24}
+	var crown := Campaign.apply_result(last, 1, 0, 4000, false, 0)
+	check(bool(crown["champion"]), "winning event 25 is the championship")
+	check(Campaign.ROSTER.size() == 15, "fifteen named rashers including player pack")
+	check(Campaign.RIVAL_COUNT == 14, "fourteen other rashers on the grid")
+	check(Story.CLUB.find("PANZER") >= 0, "club is Der Panzer Klub")
+	check(Story.SHOP.find("OLLEY") >= 0, "shop is Olley's")
+
+
 func _test_bike_specs() -> void:
 	var rat := BikeSpecs.find("rat")
 	var tuned := BikeSpecs.effective(rat, 5, 5)
@@ -109,6 +137,11 @@ func _test_bike_specs() -> void:
 	check(float(tuned["handling"]) > float(rat["handling"]), "tire stages add handling")
 	check(BikeSpecs.find("nonsense")["id"] == "rat", "unknown bike falls back")
 	check(BikeSpecs.upgrade_cost(4) > BikeSpecs.upgrade_cost(0), "stages get pricier")
+	check(String(BikeSpecs.find("rat")["name"]) == "Panda 250", "starter is Panda 250")
+	check(String(BikeSpecs.find("sport")["name"]) == "Shuriken 600", "mid bike is Shuriken")
+	check(String(BikeSpecs.find("kami")["name"]) == "Kamikaze 750", "Kamikaze 750 in shop")
+	check(String(BikeSpecs.find("super")["name"]) == "Diablo 1000", "Diablo 1000 in shop")
+	check(BikeSpecs.all().size() == 4, "four shop bikes")
 
 
 func _test_track_geometry() -> void:
@@ -122,6 +155,13 @@ func _test_track_geometry() -> void:
 	var left := track.sample(50.0, -5.0)
 	var right := track.sample(50.0, 5.0)
 	check(left.origin.distance_to(right.origin) > 8.0, "lateral offset separates")
+	var kinds := {}
+	for hz in track.hazards:
+		kinds[String(hz["kind"])] = true
+	check(bool(kinds.get("oil", false)), "oil slick on track")
+	check(bool(kinds.get("deer", false)), "deer on track")
+	check(bool(kinds.get("cow", false)), "cow on track")
+	check(track.get_node_or_null("FinishBanner") != null, "chequered finish banner")
 	track.queue_free()
 
 
@@ -134,6 +174,52 @@ func _test_heat() -> void:
 	check(heat.should_spawn_cop(0, 2), "enough heat spawns a cop")
 	heat.tick(100.0)
 	check(heat.heat == 0.0, "heat decays to zero")
+	heat.on_idle()
+	check(heat.heat >= HeatDirector.IDLE_HEAT * 0.9, "sitting still raises heat")
+
+
+func _test_classic_rules() -> void:
+	var track := Track.new()
+	root.add_child(track)
+	track.build(TrackCatalog.find("coast_run"))
+
+	var player := Rider.new()
+	player.is_player = true
+	root.add_child(player)
+	player.setup(track, 40.0, 0.0)
+	player.stamina = StaminaRules.MAX
+	player.weapon = CombatMath.Weapon.BAT
+
+	var cop := Rider.new()
+	cop.is_police = true
+	root.add_child(cop)
+	cop.setup(track, 40.0, 1.2)
+	cop.health = 100.0
+	cop.stamina = StaminaRules.MAX
+	cop.state = Rider.State.RIDING
+	var cop_health := cop.health
+	var landed := player.try_attack(1.0, false, [player, cop])
+	check(not landed, "motor officers are immune to punches")
+	check(is_equal_approx(cop.health, cop_health), "cop health unchanged")
+
+	player.speed = 40.0
+	player.launch(8.0)
+	player.step(0.08)
+	check(player.is_airborne(), "cow ramp launches the rider")
+
+	player.air_height = 0.0
+	player.air_v = 0.0
+	player.crash()
+	player.state = Rider.State.RUNNING
+	player.set_dropped_bike(player.distance + 20.0, player.lateral)
+	player.in_brake = 1.0
+	var held := player.distance
+	player.step(0.25)
+	check(is_equal_approx(player.distance, held), "brake holds still while running back")
+
+	player.queue_free()
+	cop.queue_free()
+	track.queue_free()
 
 
 func _test_race_simulation() -> void:

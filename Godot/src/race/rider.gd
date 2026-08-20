@@ -45,6 +45,9 @@ var _pose_kind: int = 0  # 0 none, 1 punch L, 2 punch R, 3 kick
 var _crash_phase: float = 0.0
 var _windup_side: float = 0.0
 var _windup_active: bool = false
+var airborne: float = 0.0
+var air_height: float = 0.0
+var air_v: float = 0.0
 
 var _bike_distance: float = 0.0
 var _bike_lateral: float = 0.0
@@ -127,6 +130,10 @@ func _step_crashed(delta: float) -> void:
 
 func _step_running(delta: float) -> void:
 	_run_phase += delta
+	# Classic: hold brake to stand still and let traffic / cops pass.
+	if in_brake > 0.4:
+		lean = lerpf(lean, 0.0, 8.0 * delta)
+		return
 	var to_bike := Vector2(_bike_lateral - lateral, _bike_distance - distance)
 	var dist := to_bike.length()
 	if dist < 1.2:
@@ -142,6 +149,10 @@ func _step_running(delta: float) -> void:
 func _ride(delta: float) -> void:
 	if stamina <= 0.0:
 		crash()
+		return
+
+	if air_height > 0.0 or air_v > 0.0:
+		_step_air(delta)
 		return
 
 	var target_top := top_speed
@@ -173,6 +184,35 @@ func _ride(delta: float) -> void:
 		speed *= 1.0 - 1.8 * delta
 
 	lean = lerpf(lean, -in_steer * 0.55 - curvature * signf(_curve_direction()) * 0.18, 8.0 * delta)
+
+
+func launch(impulse: float) -> void:
+	# Cow / crest ramp: stay on the bike, lose steering, land further down the road.
+	air_v = maxf(impulse, 2.0)
+	airborne = 0.01
+	if air_height < 0.05:
+		air_height = 0.05
+
+
+func is_airborne() -> bool:
+	return air_height > 0.08
+
+
+func _step_air(delta: float) -> void:
+	air_v -= 28.0 * delta
+	air_height += air_v * delta
+	distance += speed * delta
+	lateral += in_steer * 3.2 * delta
+	var limit := track.half_width - 0.6
+	lateral = clampf(lateral, -limit, limit)
+	lean = lerpf(lean, 0.0, 4.0 * delta)
+	if air_height <= 0.0:
+		air_height = 0.0
+		air_v = 0.0
+		airborne = 0.0
+		speed *= 0.92
+	else:
+		airborne += delta
 
 
 func _local_curvature() -> float:
@@ -225,6 +265,8 @@ func try_attack(side: float, kick: bool, opponents: Array, windup: bool = false)
 		var other := opponent as Rider
 		if other == self or other.state != Rider.State.RIDING or not other.alive():
 			continue
+		if other.is_police:
+			continue
 		var gap_s: float = absf(other.distance - distance)
 		var gap_x: float = other.lateral - lateral
 		if gap_s > reach or absf(gap_x) > reach or signf(gap_x) != signf(side):
@@ -246,6 +288,12 @@ func try_attack(side: float, kick: bool, opponents: Array, windup: bool = false)
 				weapon_stolen.emit(other.rider_name)
 				Sfx.play("pickup", -4.0, 1.1)
 		hit_any = true
+		if is_player and other.rider_id != "":
+			var loop := Engine.get_main_loop()
+			if loop is SceneTree:
+				var gs := (loop as SceneTree).root.get_node_or_null("GameState")
+				if gs != null and gs.has_method("note_grudge"):
+					gs.note_grudge(other.rider_id)
 	return hit_any
 
 
@@ -291,6 +339,9 @@ func crash() -> void:
 	_state_timer = 1.05
 	_crash_phase = 0.0
 	speed *= 0.35
+	air_height = 0.0
+	air_v = 0.0
+	airborne = 0.0
 	crashed.emit(self)
 	if is_player:
 		Sfx.play("crash", -2.0)
@@ -298,6 +349,11 @@ func crash() -> void:
 
 func is_vulnerable_to_police() -> bool:
 	return state == State.CRASHED or state == State.RUNNING
+
+
+func set_dropped_bike(s: float, x: float) -> void:
+	_bike_distance = s
+	_bike_lateral = x
 
 
 func is_winding_up() -> bool:
@@ -315,6 +371,9 @@ func heal_for_new_race(reset_weapon: bool = false) -> void:
 		weapon = CombatMath.Weapon.FISTS
 	_crash_phase = 0.0
 	_windup_active = false
+	air_height = 0.0
+	air_v = 0.0
+	airborne = 0.0
 
 
 func _apply_pose() -> void:
@@ -328,7 +387,7 @@ func _apply_pose() -> void:
 func _apply_transform() -> void:
 	if track == null:
 		return
-	var height := 0.0
+	var height := air_height
 	if state == State.RUNNING:
 		height = -0.35
 	transform = track.sample(distance, lateral, height)

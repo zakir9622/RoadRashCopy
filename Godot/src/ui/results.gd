@@ -1,5 +1,5 @@
 extends CanvasLayer
-## Road Rash rank sheet: big gold placement number, payout breakdown, balance.
+## Road Rash rank sheet plus post-race vignette (rival / cop / championship).
 
 
 func present(summary: Dictionary) -> void:
@@ -14,27 +14,33 @@ func present(summary: Dictionary) -> void:
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
-	box.custom_minimum_size = Vector2(460, 0)
+	box.custom_minimum_size = Vector2(420, 0)
 	panel.add_child(box)
 
 	var rank := Label.new()
 	rank.text = str(int(summary["position"])) if int(summary["position"]) > 0 else "-"
-	rank.add_theme_font_size_override("font_size", 96)
+	rank.add_theme_font_size_override("font_size", 84)
 	rank.add_theme_color_override("font_color", ThemeColors.ACCENT)
 	rank.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(rank)
 
 	var headline := Label.new()
-	if bool(summary["busted"]):
+	if bool(summary.get("game_over", false)):
+		headline.text = "GAME OVER"
+		headline.add_theme_color_override("font_color", ThemeColors.DANGER)
+	elif bool(summary.get("champion", false)):
+		headline.text = "CHAMPION"
+		headline.add_theme_color_override("font_color", ThemeColors.ACCENT)
+	elif bool(summary["busted"]):
 		headline.text = "BUSTED"
 		headline.add_theme_color_override("font_color", ThemeColors.POLICE_BLUE)
 	elif bool(summary["won"]):
 		headline.text = "EVENT WON"
 		headline.add_theme_color_override("font_color", ThemeColors.INK)
 	else:
-		headline.text = "RACE OVER — TOP %d TO ADVANCE" % Campaign.REQUIRED_POSITION
+		headline.text = "OUTSIDE THE MONEY"
 		headline.add_theme_color_override("font_color", ThemeColors.INK_MUTED)
-	headline.add_theme_font_size_override("font_size", 28)
+	headline.add_theme_font_size_override("font_size", 24)
 	headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(headline)
 
@@ -44,16 +50,38 @@ func present(summary: Dictionary) -> void:
 	_row(box, "REPAIRS", "-$%d" % int(summary["repair_bill"]), ThemeColors.DANGER)
 	if int(summary["fine"]) > 0:
 		_row(box, "POLICE FINE", "-$%d" % int(summary["fine"]), ThemeColors.POLICE_BLUE)
-	_row(box, "BALANCE", "$%d" % int(summary["balance"]), ThemeColors.ACCENT, 26)
+	_row(box, "BALANCE", "$%d" % int(summary["balance"]), ThemeColors.ACCENT, 24)
+
+	var state := get_node("/root/GameState")
+	var beat: Dictionary = Story.vignette(state.save, summary)
+	var speaker := Label.new()
+	speaker.text = String(beat.get("speaker", "")).to_upper()
+	speaker.add_theme_font_size_override("font_size", 13)
+	speaker.add_theme_color_override("font_color", ThemeColors.ACCENT)
+	box.add_child(speaker)
+	var body := Label.new()
+	body.text = String(beat.get("body", ""))
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.custom_minimum_size = Vector2(380, 0)
+	body.add_theme_font_size_override("font_size", 16)
+	body.add_theme_color_override("font_color", ThemeColors.INK)
+	box.add_child(body)
 
 	var button := Button.new()
-	button.text = "CONTINUE"
+	if bool(summary.get("game_over", false)):
+		button.text = "NEW CAREER"
+		button.pressed.connect(func():
+			state.reset_career()
+			AudioDirector.play("click", -8.0)
+			get_tree().change_scene_to_file("res://src/ui/MainMenu.tscn"))
+	else:
+		button.text = "CONTINUE"
+		button.pressed.connect(func():
+			AudioDirector.play("click", -8.0)
+			get_tree().change_scene_to_file("res://src/ui/MainMenu.tscn"))
 	button.add_theme_font_size_override("font_size", 22)
 	button.add_theme_stylebox_override("normal", ThemeColors.button_style())
 	button.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
-	button.pressed.connect(func():
-		AudioDirector.play("click", -8.0)
-		get_tree().change_scene_to_file("res://src/ui/MainMenu.tscn"))
 	box.add_child(button)
 
 	get_tree().paused = false

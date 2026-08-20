@@ -40,9 +40,13 @@ func launch_time_trial(id: String) -> void:
 	division_scale = 1.0
 
 
+func is_time_trial() -> bool:
+	return mode == Mode.TIME_TRIAL
+
+
 func track() -> Dictionary:
 	var def := TrackCatalog.find(track_id)
 	if division_scale > 1.0:
 		def = def.duplicate(true)
-		def["rivals"] = mini(int(def["rivals"]) + int((division_scale - 1.0) * 4.0), 14)
+		def["rivals"] = mini(int(def["rivals"]) + int((division_scale - 1.0) * 4.0), Campaign.RIVAL_COUNT)
 	return def

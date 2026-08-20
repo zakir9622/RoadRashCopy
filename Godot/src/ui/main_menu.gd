@@ -80,29 +80,49 @@ func _build_menu() -> void:
 	panel.add_child(_menu_box)
 
 	var title := Label.new()
-	title.text = "HIGHWAY RENEGADE"
+	title.text = "ROAD RASH"
 	title.add_theme_font_size_override("font_size", 42)
-	title.add_theme_color_override("font_color", ThemeColors.INK)
+	title.add_theme_color_override("font_color", ThemeColors.ACCENT)
 	_menu_box.add_child(title)
 
 	var tagline := Label.new()
-	tagline.text = "ROAD RASH EDITION"
-	tagline.add_theme_font_size_override("font_size", 18)
-	tagline.add_theme_color_override("font_color", ThemeColors.ACCENT)
+	tagline.text = "CALIFORNIA CIRCUIT  ·  BIG GAME"
+	tagline.add_theme_font_size_override("font_size", 15)
+	tagline.add_theme_color_override("font_color", ThemeColors.INK)
 	_menu_box.add_child(tagline)
 
+	var rasher := Label.new()
+	rasher.text = GameState.player_display_name()
+	rasher.add_theme_font_size_override("font_size", 16)
+	rasher.add_theme_color_override("font_color", ThemeColors.INK_MUTED)
+	_menu_box.add_child(rasher)
+
 	var cash := Label.new()
-	cash.text = "$%d   ·   EVENT %d/%d" % [int(GameState.save.get("cash", 0)),
-		int(GameState.save.get("chapter", 0)) + 1, Campaign.total_events()]
+	if bool(GameState.save.get("game_over", false)):
+		cash.text = "BROKE — NEW CAREER TO RIDE"
+	elif bool(GameState.save.get("champion", false)):
+		cash.text = "CHAMPION  ·  $%d" % int(GameState.save.get("cash", 0))
+	else:
+		cash.text = "$%d   ·   EVENT %d/%d" % [int(GameState.save.get("cash", 0)),
+			mini(int(GameState.save.get("chapter", 0)) + 1, Campaign.total_events()),
+			Campaign.total_events()]
 	cash.add_theme_font_size_override("font_size", 16)
 	cash.add_theme_color_override("font_color", ThemeColors.INK_MUTED)
 	_menu_box.add_child(cash)
 
-	_menu_button("CAMPAIGN", _on_campaign)
+	_menu_button("BIG GAME", _on_campaign)
 	_menu_button("THRASH", _on_thrash)
+	_menu_button("TIME TRIAL", _on_time_trial)
 	_menu_button("QUICK RACE", _on_quick_race)
 	_menu_button("GARAGE", _on_garage)
+	if bool(GameState.save.get("game_over", false)) or bool(GameState.save.get("champion", false)):
+		_menu_button("NEW CAREER", func(): GameState.reset_career(); get_tree().reload_current_scene())
 	_menu_button("QUIT", _on_quit)
+
+	if String(GameState.save.get("player_name", "")).strip_edges() == "":
+		call_deferred("_prompt_name")
+	elif not bool(GameState.save.get("seen_prologue", false)):
+		call_deferred("_show_prologue")
 
 
 func _menu_button(text: String, handler: Callable) -> void:
@@ -121,6 +141,8 @@ func _menu_button(text: String, handler: Callable) -> void:
 
 
 func _on_campaign() -> void:
+	if bool(GameState.save.get("game_over", false)):
+		return
 	var chapter := int(GameState.save.get("chapter", 0))
 	if chapter >= Campaign.total_events():
 		chapter = Campaign.total_events() - 1
@@ -168,7 +190,7 @@ func _on_thrash() -> void:
 
 
 func _show_chapter_intro(chapter_index: int) -> void:
-	var info: Dictionary = Campaign.event_at(chapter_index)
+	var info: Dictionary = Story.pre_race_copy(GameState.save)
 	var scrim := ColorRect.new()
 	scrim.color = Color(0, 0, 0, 0.8)
 	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -182,6 +204,12 @@ func _show_chapter_intro(chapter_index: int) -> void:
 	box.add_theme_constant_override("separation", 14)
 	panel.add_child(box)
 
+	var club := Label.new()
+	club.text = Story.CLUB
+	club.add_theme_font_size_override("font_size", 14)
+	club.add_theme_color_override("font_color", ThemeColors.INK_MUTED)
+	box.add_child(club)
+
 	var title := Label.new()
 	title.text = String(info["title"])
 	title.add_theme_font_size_override("font_size", 32)
@@ -189,15 +217,39 @@ func _show_chapter_intro(chapter_index: int) -> void:
 	box.add_child(title)
 
 	var intro := Label.new()
-	intro.text = String(info["intro"])
+	intro.text = String(info.get("body", info.get("intro", "")))
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.custom_minimum_size = Vector2(340, 0)
-	intro.add_theme_font_size_override("font_size", 19)
+	intro.add_theme_font_size_override("font_size", 17)
 	intro.add_theme_color_override("font_color", ThemeColors.INK)
 	box.add_child(intro)
 
+	if String(info.get("tip", "")) != "":
+		var tip := Label.new()
+		tip.text = String(info["tip"])
+		tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		tip.custom_minimum_size = Vector2(340, 0)
+		tip.add_theme_font_size_override("font_size", 14)
+		tip.add_theme_color_override("font_color", ThemeColors.INK_MUTED)
+		box.add_child(tip)
+
+	var event := Campaign.event_at(chapter_index)
+	var track := TrackCatalog.find(String(event.get("track", "coast_run")))
+	var postcard := Label.new()
+	postcard.text = "%s  ·  %.1f MI  ·  PURSE $%d  ·  TOP %d QUALIFIES" % [
+		String(track["name"]).to_upper(),
+		TrackCatalog.to_miles(float(track["length"])),
+		int(track["purse"]),
+		Campaign.REQUIRED_POSITION,
+	]
+	postcard.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	postcard.custom_minimum_size = Vector2(340, 0)
+	postcard.add_theme_font_size_override("font_size", 14)
+	postcard.add_theme_color_override("font_color", ThemeColors.ACCENT)
+	box.add_child(postcard)
+
 	var rule := Label.new()
-	rule.text = "FINISH TOP %d TO ADVANCE" % Campaign.REQUIRED_POSITION
+	rule.text = "START LAST. FINISH TOP %d. DON'T GET BUSTED." % Campaign.REQUIRED_POSITION
 	rule.add_theme_font_size_override("font_size", 15)
 	rule.add_theme_color_override("font_color", ThemeColors.POLICE_BLUE)
 	box.add_child(rule)
@@ -209,6 +261,77 @@ func _show_chapter_intro(chapter_index: int) -> void:
 	ride.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
 	ride.pressed.connect(func(): get_tree().change_scene_to_file("res://src/race/Race.tscn"))
 	box.add_child(ride)
+
+
+func _prompt_name() -> void:
+	var scrim := ColorRect.new()
+	scrim.color = Color(0, 0, 0, 0.85)
+	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(scrim)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", ThemeColors.styled_panel())
+	ThemeColors.center_wrap(scrim).add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	var title := Label.new()
+	title.text = "NAME YOUR RASHER"
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", ThemeColors.ACCENT)
+	box.add_child(title)
+	var edit := LineEdit.new()
+	edit.placeholder_text = "RASHER"
+	edit.max_length = 12
+	edit.custom_minimum_size = Vector2(280, 40)
+	box.add_child(edit)
+	var go := Button.new()
+	go.text = "HIT THE ROAD"
+	go.add_theme_stylebox_override("normal", ThemeColors.button_style())
+	go.pressed.connect(func():
+		var n := edit.text.strip_edges()
+		GameState.save["player_name"] = n if n != "" else "Rasher"
+		GameState.persist()
+		scrim.queue_free()
+		_show_prologue())
+	box.add_child(go)
+
+
+func _show_prologue() -> void:
+	var scrim := ColorRect.new()
+	scrim.color = Color(0, 0, 0, 0.85)
+	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(scrim)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", ThemeColors.styled_panel())
+	ThemeColors.center_wrap(scrim).add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	panel.add_child(box)
+	var title := Label.new()
+	title.text = "THE CIRCUIT"
+	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", ThemeColors.ACCENT)
+	box.add_child(title)
+	var body := Label.new()
+	body.text = Story.PROLOGUE
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body.custom_minimum_size = Vector2(340, 0)
+	body.add_theme_font_size_override("font_size", 16)
+	body.add_theme_color_override("font_color", ThemeColors.INK)
+	box.add_child(body)
+	var go := Button.new()
+	go.text = "OK"
+	go.add_theme_stylebox_override("normal", ThemeColors.button_style())
+	go.pressed.connect(func():
+		GameState.save["seen_prologue"] = true
+		GameState.persist()
+		scrim.queue_free())
+	box.add_child(go)
+
+
+func _on_time_trial() -> void:
+	RaceContext.launch_time_trial("coast_run")
+	get_tree().change_scene_to_file("res://src/race/Race.tscn")
 
 
 func _on_quick_race() -> void:
@@ -238,9 +361,9 @@ func _on_quick_race() -> void:
 		var track: Dictionary = tracks[i]
 		var button := Button.new()
 		var locked := i >= unlocked
-		button.text = "%s%s  ·  %.1f km  ·  $%d" % [
+		button.text = "%s%s  ·  %.1f mi  ·  $%d" % [
 			"LOCKED — " if locked else "", String(track["name"]),
-			float(track["length"]) / 1000.0, int(track["purse"])]
+			TrackCatalog.to_miles(float(track["length"])), int(track["purse"])]
 		button.disabled = locked
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		button.add_theme_font_size_override("font_size", 20)

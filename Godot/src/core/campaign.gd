@@ -5,6 +5,9 @@ class_name Campaign
 const REQUIRED_POSITION := 4
 const EVENTS_PER_DIVISION := 5
 const DIVISION_COUNT := 5
+## Player + 14 named rashers = the classic 15-bike pack.
+const RIVAL_COUNT := 14
+const PACK_SIZE := 15
 
 const GANGS := ["Desades", "Dewleys", "Kaffe Boys", "Techgeists"]
 
@@ -44,6 +47,10 @@ const ROSTER := [
 		"banter": "Spike's gonna stick it to you."},
 	{"id": "crow", "name": "Crow", "skill": 0.91, "aggression": 1.2, "weapon": CombatMath.Weapon.FISTS, "gang": "Desades",
 		"banter": "Crow picks the bones clean."},
+	{"id": "snake", "name": "Snake", "skill": 0.87, "aggression": 1.4, "weapon": CombatMath.Weapon.CHAIN, "gang": "Dewleys",
+		"banter": "Low and mean."},
+	{"id": "public", "name": "Public Enemy", "skill": 0.96, "aggression": 1.8, "weapon": CombatMath.Weapon.BAT, "gang": "Kaffe Boys",
+		"banter": "I hunt you. That's the job."},
 ]
 
 
@@ -58,7 +65,7 @@ static func event_at(chapter_index: int) -> Dictionary:
 	var track := TrackCatalog.at(event)
 	var gang: String = GANGS[division % GANGS.size()]
 	return {
-		"title": "Division %d — %s  ·  Event %d" % [division + 1, DIVISION_NAMES[division], event + 1],
+		"title": "%s  ·  %s %d" % [String(track["name"]), DIVISION_NAMES[division].to_upper(), event + 1],
 		"track": String(track["id"]),
 		"division": division,
 		"event": event,
@@ -108,10 +115,17 @@ static func apply_result(save: Dictionary, position: int, knockouts: int,
 	if won:
 		save["chapter"] = mini(int(save.get("chapter", 0)) + 1, total_events())
 	save["races"] = int(save.get("races", 0)) + 1
+	var game_over := int(save["cash"]) < 0
+	if game_over:
+		save["game_over"] = true
+	var champion := won and int(save["chapter"]) >= total_events()
+	if champion:
+		save["champion"] = true
 
 	return {
 		"won": won, "position": position, "prize": prize,
 		"knockouts": knockouts, "combat_bonus": combat_bonus,
 		"repair_bill": repair_bill, "fine": fine, "net": net,
 		"balance": save["cash"], "busted": busted,
+		"game_over": game_over, "champion": champion,
 	}
