@@ -131,7 +131,7 @@ func _make_rider(rider_name: String, start_s: float, start_x: float,
 	rider.setup(track, start_s, start_x)
 	rider.visual = _make_bike_visual(colour, cop, rider)
 	rider.add_child(rider.visual)
-	rider.bind_pose_nodes(rider.visual)
+	rider.bind_visual(rider.visual)
 	return rider
 
 

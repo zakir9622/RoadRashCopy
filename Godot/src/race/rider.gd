@@ -51,9 +51,8 @@ var in_steer: float = 0.0
 var in_nitro: bool = false
 
 var visual: Node3D
-var _arm_l: Node3D
-var _arm_r: Node3D
-var _leg_r: Node3D
+var _visual_anim: Node3D
+var _run_phase: float = 0.0
 
 
 func setup(p_track: Track, start_distance: float, start_lateral: float) -> void:
@@ -63,10 +62,13 @@ func setup(p_track: Track, start_distance: float, start_lateral: float) -> void:
 	_apply_transform()
 
 
-func bind_pose_nodes(root: Node3D) -> void:
-	_arm_l = root.find_child("arm_l", true, false)
-	_arm_r = root.find_child("arm_r", true, false)
-	_leg_r = root.find_child("leg_r", true, false)
+func bind_visual(root: Node3D) -> void:
+	visual = root
+	if root.get_script() == null:
+		root.set_script(load("res://src/race/rider_visual.gd"))
+	_visual_anim = root
+	if _visual_anim.has_method("initialize"):
+		_visual_anim.initialize(self)
 
 
 func alive() -> bool:
@@ -112,6 +114,7 @@ func _step_crashed(delta: float) -> void:
 
 
 func _step_running(delta: float) -> void:
+	_run_phase += delta
 	var to_bike := Vector2(_bike_lateral - lateral, _bike_distance - distance)
 	var dist := to_bike.length()
 	if dist < 1.2:
@@ -267,28 +270,11 @@ func heal_for_new_race() -> void:
 
 
 func _apply_pose() -> void:
-	if visual == null:
+	if _visual_anim == null or not _visual_anim.has_method("apply"):
 		return
-	if _arm_l != null:
-		_arm_l.rotation.x = 0.0
-	if _arm_r != null:
-		_arm_r.rotation.x = 0.0
-	if _leg_r != null:
-		_leg_r.rotation.x = 0.0
-	if _pose_timer <= 0.0:
-		return
-	var t := _pose_timer / 0.32
-	var swing := sin((1.0 - t) * PI) * 1.1
-	match _pose_kind:
-		1:
-			if _arm_l != null:
-				_arm_l.rotation.x = -swing
-		2:
-			if _arm_r != null:
-				_arm_r.rotation.x = -swing
-		3:
-			if _leg_r != null:
-				_leg_r.rotation.x = swing * 0.9
+	var pose_t := clampf(_pose_timer / 0.32, 0.0, 1.0) if _pose_timer > 0.0 else 0.0
+	_visual_anim.apply(state, speed, lean, _pose_kind, pose_t,
+			state == State.RUNNING, _run_phase)
 
 
 func _apply_transform() -> void:
@@ -297,10 +283,4 @@ func _apply_transform() -> void:
 	var height := 0.0
 	if state == State.RUNNING:
 		height = -0.35
-	var t := track.sample(distance, lateral, height)
-	transform = t
-	if visual != null:
-		visual.visible = state != State.RUNNING
-		visual.rotation.z = lean
-		if state == State.CRASHED:
-			visual.rotation.z = lerpf(visual.rotation.z, PI * 0.42, 0.35)
+	transform = track.sample(distance, lateral, height)
