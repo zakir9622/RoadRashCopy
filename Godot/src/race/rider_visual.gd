@@ -19,6 +19,7 @@ var _wheel_spin: float = 0.0
 var _suit_color: Color = Color(0.14, 0.14, 0.16)
 var _current: String = ""
 var _clip_map: Dictionary = {}
+var _flame: MeshInstance3D
 
 
 func initialize(rider: Node3D) -> void:
@@ -41,6 +42,7 @@ func initialize(rider: Node3D) -> void:
 			continue
 		_bike_meshes.append(mesh)
 	_attach_weapons()
+	_ensure_flame()
 	if _runner != null:
 		return
 	if ResourceLoader.exists("res://assets/models/runner.glb"):
@@ -252,8 +254,11 @@ func _try_loose_weapon(side: String, full: String) -> void:
 
 func apply(state: int, speed: float, lean: float, pose_kind: int, pose_t: float,
 		running: bool, _run_phase: float, weapon: int, _crash_phase: float,
-		windup: bool, windup_side: float) -> void:
+		windup: bool, windup_side: float, nitro_on: bool = false) -> void:
 	visible = not running
+	_ensure_flame()
+	if _flame != null:
+		_flame.visible = nitro_on and not running
 	if _runner != null:
 		_runner.visible = running
 		if running:
@@ -346,3 +351,24 @@ func _hide_weapons() -> void:
 		_weapon_l.visible = false
 	if _weapon_r != null:
 		_weapon_r.visible = false
+
+
+func _ensure_flame() -> void:
+	if _flame != null:
+		return
+	_flame = MeshInstance3D.new()
+	_flame.name = "NitroFlame"
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.11
+	mesh.height = 0.42
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(1.0, 0.42, 0.08, 0.8)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.45, 0.1)
+	mat.emission_energy_multiplier = 5.2
+	mesh.material = mat
+	_flame.mesh = mesh
+	_flame.visible = false
+	_flame.position = Vector3(0.0, 0.28, 0.92)
+	add_child(_flame)

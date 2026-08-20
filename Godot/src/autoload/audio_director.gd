@@ -39,7 +39,7 @@ func _ready() -> void:
 
 	for key in [
 		"hit", "kick", "crash", "siren", "horn", "click", "engine", "music",
-		"pickup", "go", "wind", "ambience_coast", "ambience_desert",
+		"pickup", "go", "sting", "cheer", "wind", "ambience_coast", "ambience_desert",
 		"ambience_city", "ambience_mountain",
 	]:
 		var path := "res://assets/audio/%s.wav" % key
@@ -158,6 +158,18 @@ func set_world(biome: String, speed01: float, riding: bool) -> void:
 			_wind.stop()
 		_wind.volume_db = -20.0 + clampf(speed01, 0.0, 1.0) * 12.0
 		_wind.pitch_scale = 0.82 + clampf(speed01, 0.0, 1.0) * 0.45
+	if _music.playing:
+		var music_pitch := 1.0
+		match biome:
+			"night":
+				music_pitch = 0.92
+			"desert":
+				music_pitch = 1.06
+			"mountain":
+				music_pitch = 0.96
+			_:
+				music_pitch = 1.0
+		_music.pitch_scale = music_pitch
 
 
 func _on_ambience_finished() -> void:
