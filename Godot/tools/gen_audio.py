@@ -66,12 +66,15 @@ def crash():
 
 
 def siren():
-    n = int(RATE * 1.6)
+    # Two-tone cop yelp, loops cleanly on the bar.
+    n = int(RATE * 1.8)
     out = []
     for i in range(n):
         t = i / RATE
-        f = 700 + 250 * math.sin(2 * math.pi * 1.4 * t)
-        out.append(math.sin(2 * math.pi * f * t) * 0.5 * env(i, n, 0.05, 0.25))
+        f = 880.0 if (t % 0.9) < 0.45 else 620.0
+        tone = math.sin(2 * math.pi * f * t)
+        odd = math.sin(2 * math.pi * f * 1.5 * t) * 0.22
+        out.append((tone + odd) * 0.48)
     return out
 
 
@@ -106,17 +109,91 @@ def go():
 
 
 def engine():
-    # Seamless loop: integer number of cycles of a rough twin-cylinder pulse.
-    cycles = 40
-    freq = 60.0
+    # Seamless loop: 250cc twin rumble + exhaust rasp.
+    cycles = 48
+    freq = 58.0
     n = int(RATE * cycles / freq)
     out = []
+    lp = 0.0
     for i in range(n):
         t = i / RATE
         phase = 2 * math.pi * freq * t
-        pulse = math.sin(phase) + 0.55 * math.sin(2 * phase + 0.7) + 0.3 * math.sin(0.5 * phase)
-        grit = noise() * 0.12
-        out.append((pulse * 0.35 + grit) * 0.8)
+        pulse = math.sin(phase) + 0.62 * math.sin(2 * phase + 0.55)
+        pulse += 0.28 * math.sin(0.5 * phase) + 0.12 * math.sin(4 * phase + 1.1)
+        lp += (noise() - lp) * 0.35
+        rasp = lp * 0.18
+        out.append((pulse * 0.32 + rasp) * 0.85)
+    return out
+
+
+def wind():
+    n = int(RATE * 4.0)
+    out = []
+    lp = 0.0
+    hp = 0.0
+    for i in range(n):
+        nse = noise()
+        lp += (nse - lp) * 0.07
+        hp += (nse - hp) * 0.45
+        gust = 0.55 + 0.45 * math.sin(2 * math.pi * i / n)
+        out.append((lp * 0.7 + (hp - lp) * 0.25) * 0.55 * gust)
+    return out
+
+
+def ambience_coast():
+    n = int(RATE * 6.0)
+    out = []
+    lp = 0.0
+    for i in range(n):
+        lp += (noise() - lp) * 0.04
+        swell = 0.45 + 0.55 * math.sin(2 * math.pi * i / n)
+        hiss = noise() * 0.04 * swell
+        out.append(lp * 0.55 * swell + hiss)
+    return out
+
+
+def ambience_desert():
+    n = int(RATE * 5.0)
+    out = []
+    lp = 0.0
+    for i in range(n):
+        lp += (noise() - lp) * 0.03
+        shimmer = math.sin(2 * math.pi * 0.35 * i / RATE) * 0.04
+        cricket = 0.0
+        if (i % int(RATE * 0.9)) < 40:
+            cricket = math.sin(2 * math.pi * 4200 * i / RATE) * 0.03
+        out.append(lp * 0.38 + shimmer + cricket)
+    return out
+
+
+def ambience_city():
+    n = int(RATE * 5.0)
+    out = []
+    lp = 0.0
+    rumble = 0.0
+    for i in range(n):
+        lp += (noise() - lp) * 0.05
+        rumble += (noise() - rumble) * 0.012
+        hornish = 0.0
+        cycle = i % int(RATE * 2.4)
+        if 200 < cycle < 520:
+            f = 310 + (cycle % 17)
+            hornish = math.sin(2 * math.pi * f * i / RATE) * 0.03 * env(cycle - 200, 320, 0.1, 0.4)
+        out.append(rumble * 0.5 + lp * 0.18 + hornish)
+    return out
+
+
+def ambience_mountain():
+    n = int(RATE * 5.5)
+    out = []
+    lp = 0.0
+    for i in range(n):
+        lp += (noise() - lp) * 0.025
+        gust = 0.4 + 0.6 * math.sin(2 * math.pi * 2.0 * i / n)
+        bird = 0.0
+        if (i % int(RATE * 1.7)) < 90:
+            bird = math.sin(2 * math.pi * (1800 + (i % 40) * 8) * i / RATE) * 0.025
+        out.append(lp * 0.42 * gust + bird)
     return out
 
 
@@ -165,4 +242,9 @@ if __name__ == "__main__":
     write("go", go())
     write("engine", engine())
     write("music", music())
+    write("wind", wind())
+    write("ambience_coast", ambience_coast())
+    write("ambience_desert", ambience_desert())
+    write("ambience_city", ambience_city())
+    write("ambience_mountain", ambience_mountain())
     print("ALL AUDIO DONE")

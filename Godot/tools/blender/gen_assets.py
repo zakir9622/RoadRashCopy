@@ -90,6 +90,34 @@ def export(filename, animations=False):
     print("WROTE", path, "anims" if animations else "")
 
 
+def join_meshes():
+    """Collapse every mesh into one object so Godot MultiMesh can instance it."""
+    meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    if not meshes:
+        return
+    bpy.context.view_layer.objects.active = meshes[0]
+    try:
+        bpy.ops.object.mode_set(mode="OBJECT")
+    except Exception:
+        pass
+    for o in meshes:
+        bpy.ops.object.select_all(action="DESELECT")
+        o.select_set(True)
+        bpy.context.view_layer.objects.active = o
+        for mod in list(o.modifiers):
+            try:
+                bpy.ops.object.modifier_apply(modifier=mod.name)
+            except Exception:
+                pass
+    if len(meshes) < 2:
+        return
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in meshes:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = meshes[0]
+    bpy.ops.object.join()
+
+
 def build_humanoid_rider(root, suit_mat, skin_mat, helm_mat, visor_mat, scale=1.0):
     """Seated humanoid with hierarchical arms/legs for punch/kick/tuck poses."""
     s = scale
@@ -218,6 +246,7 @@ def build_tree():
     cyl("trunk", 0.22, 2.6, (0, 0, 1.3), trunk, verts=10)
     bpy.ops.mesh.primitive_uv_sphere_add(radius=1.5, location=(0, 0, 3.4))
     bpy.context.active_object.data.materials.append(leaf)
+    join_meshes()
     export("tree.glb")
 
 
@@ -229,38 +258,95 @@ def build_rock():
     export("rock.glb")
 
 
+def build_palm():
+    reset()
+    trunk_m = mat("palm_trunk", (0.45, 0.32, 0.16), roughness=0.95)
+    leaf_m = mat("frond", (0.16, 0.42, 0.12), roughness=0.9)
+    cyl("trunk", 0.14, 5.4, (0, 0, 2.7), trunk_m, verts=8)
+    for i in range(8):
+        ang = i * (2 * math.pi / 8)
+        box(f"frond{i}", (0.18, 3.1, 0.07),
+            (math.cos(ang) * 0.7, math.sin(ang) * 0.7, 5.55),
+            leaf_m,
+            rot=(math.radians(28), 0, ang + math.pi / 2), bevel=0.01)
+    join_meshes()
+    export("palm.glb")
+
+
+def build_cactus():
+    reset()
+    green = mat("cactus", (0.22, 0.44, 0.18), roughness=0.88)
+    cyl("stem", 0.26, 2.5, (0, 0, 1.25), green, verts=10)
+    cyl("arm", 0.14, 1.15, (0.55, 0, 1.7), green, rot=(0, math.pi / 2, 0), verts=8)
+    cyl("arm_up", 0.12, 0.7, (0.95, 0, 2.15), green, verts=8)
+    join_meshes()
+    export("cactus.glb")
+
+
+def _window_grid(glass, width, depth, height, rows, cols, face_y):
+    cell_w = width * 0.78 / cols
+    cell_h = height * 0.72 / rows
+    start_x = -width * 0.35
+    start_z = height * 0.14
+    for row in range(rows):
+        for col in range(cols):
+            box(f"win_{row}_{col}", (cell_w * 0.72, 0.08, cell_h * 0.7),
+                (start_x + col * cell_w, face_y, start_z + row * cell_h),
+                glass, bevel=0.0)
+
+
 def build_building():
     reset()
-    concrete = mat("concrete", (0.35, 0.36, 0.4), roughness=0.9)
-    glass = mat("windows", (0.4, 0.55, 0.7), metallic=0.7, roughness=0.15, emission=(0.9, 0.8, 0.5))
-    box("tower", (8, 8, 18), (0, 0, 9), concrete)
-    for level in range(4):
-        box(f"band{level}", (8.3, 8.3, 1.2), (0, 0, 4 + level * 4), glass)
+    concrete = mat("concrete", (0.38, 0.39, 0.44), roughness=0.9)
+    glass = mat("windows", (0.35, 0.52, 0.68), metallic=0.72, roughness=0.14, emission=(0.9, 0.8, 0.5))
+    trim = mat("trim", (0.22, 0.22, 0.25), roughness=0.7)
+    box("tower", (8, 8, 20), (0, 0, 10), concrete, bevel=0.04)
+    box("crown", (8.6, 8.6, 0.7), (0, 0, 20.2), trim, bevel=0.02)
+    _window_grid(glass, 8, 8, 20, 7, 4, 4.05)
+    join_meshes()
     export("building.glb")
 
 
 def build_building_shop():
     reset()
-    brick = mat("brick", (0.42, 0.28, 0.22), roughness=0.92)
-    glass = mat("shop_glass", (0.55, 0.7, 0.85), metallic=0.5, roughness=0.12, emission=(0.7, 0.85, 1.0))
-    awning = mat("awning", (0.85, 0.15, 0.12), roughness=0.8)
-    box("shop_base", (7, 6, 5), (0, 0, 2.5), brick, bevel=0.06)
-    box("shop_window", (6, 0.4, 3.2), (0, 3.1, 2.2), glass, bevel=0.02)
-    box("shop_awning", (7.2, 1.2, 0.3), (0, 3.4, 3.8), awning, bevel=0.02)
-    box("shop_roof", (7.5, 7.5, 1.2), (0, 0, 5.6), brick, bevel=0.04)
+    brick = mat("brick", (0.46, 0.30, 0.22), roughness=0.92)
+    glass = mat("shop_glass", (0.55, 0.72, 0.88), metallic=0.5, roughness=0.12, emission=(0.75, 0.88, 1.0))
+    awning = mat("awning", (0.85, 0.14, 0.12), roughness=0.8)
+    sign = mat("sign", (0.95, 0.85, 0.15), roughness=0.55, emission=(0.95, 0.8, 0.2))
+    box("shop_base", (7.2, 6.4, 5.2), (0, 0, 2.6), brick, bevel=0.05)
+    box("shop_window", (5.8, 0.18, 2.8), (0, 3.22, 2.15), glass, bevel=0.01)
+    box("shop_door", (1.4, 0.12, 2.4), (2.2, 3.22, 1.3), glass, bevel=0.01)
+    box("shop_awning", (7.4, 1.4, 0.22), (0, 3.55, 3.7), awning, bevel=0.02)
+    box("shop_sign", (3.2, 0.12, 0.7), (0, 3.3, 4.55), sign, bevel=0.01)
+    box("shop_roof", (7.6, 6.8, 0.9), (0, 0, 5.7), brick, bevel=0.03)
+    join_meshes()
     export("building_shop.glb")
 
 
 def build_building_apartment():
     reset()
-    concrete = mat("concrete", (0.32, 0.34, 0.38), roughness=0.88)
-    glass = mat("apt_glass", (0.35, 0.5, 0.65), metallic=0.65, roughness=0.18, emission=(0.85, 0.75, 0.45))
-    box("apt_base", (6, 6, 14), (0, 0, 7), concrete, bevel=0.05)
-    for row in range(5):
-        for col in range(2):
-            box(f"win_{row}_{col}", (1.4, 0.08, 1.6),
-                (-1.4 + col * 2.8, 3.05, 2.5 + row * 2.4), glass, bevel=0.01)
+    concrete = mat("concrete", (0.34, 0.36, 0.40), roughness=0.88)
+    glass = mat("apt_glass", (0.32, 0.48, 0.62), metallic=0.65, roughness=0.18, emission=(0.85, 0.75, 0.45))
+    rail = mat("rail", (0.55, 0.55, 0.58), metallic=0.4, roughness=0.5)
+    box("apt_base", (7, 7, 16), (0, 0, 8), concrete, bevel=0.04)
+    _window_grid(glass, 7, 7, 16, 6, 3, 3.54)
+    for row in range(4):
+        box(f"balc_{row}", (4.2, 0.9, 0.12), (0, 3.85, 3.6 + row * 2.8), rail, bevel=0.01)
+    join_meshes()
     export("building_apartment.glb")
+
+
+def build_building_office():
+    reset()
+    concrete = mat("office", (0.28, 0.32, 0.38), roughness=0.72, metallic=0.15)
+    glass = mat("curtain", (0.25, 0.42, 0.58), metallic=0.8, roughness=0.08, emission=(0.55, 0.7, 0.95))
+    crown = mat("crown", (0.18, 0.2, 0.24), roughness=0.5)
+    box("tower", (10, 10, 28), (0, 0, 14), concrete, bevel=0.03)
+    _window_grid(glass, 10, 10, 28, 10, 5, 5.05)
+    box("crown", (10.6, 10.6, 1.1), (0, 0, 28.4), crown, bevel=0.02)
+    box("mast", (0.35, 0.35, 3.2), (0, 0, 30.4), crown, bevel=0.0)
+    join_meshes()
+    export("building_office.glb")
 
 
 def build_weapon_club():
@@ -296,21 +382,31 @@ def build_barrier():
 
 
 if __name__ == "__main__":
-    build_bike("sport", cop=False)
-    build_bike("rat", cop=False)
-    build_bike("kami", cop=False)
-    build_bike("super", cop=False)
-    build_bike("sport", cop=True)
-    build_runner()
-    build_car()
-    build_tree()
-    build_rock()
-    build_building()
-    build_building_shop()
-    build_building_apartment()
-    build_weapon_club()
-    build_weapon_bat()
-    build_sign()
-    build_barrier()
+    extra = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    world_only = extra and extra[0] == "world"
+
+    def world_props():
+        build_car()
+        build_tree()
+        build_rock()
+        build_palm()
+        build_cactus()
+        build_building()
+        build_building_shop()
+        build_building_apartment()
+        build_building_office()
+        build_weapon_club()
+        build_weapon_bat()
+        build_sign()
+        build_barrier()
+
+    if not world_only:
+        build_bike("sport", cop=False)
+        build_bike("rat", cop=False)
+        build_bike("kami", cop=False)
+        build_bike("super", cop=False)
+        build_bike("sport", cop=True)
+        build_runner()
+    world_props()
     print("ALL ASSETS DONE")
     sys.exit(0)

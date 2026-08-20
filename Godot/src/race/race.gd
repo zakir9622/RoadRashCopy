@@ -14,6 +14,7 @@ var track: Track
 var player: Rider
 var camera: Camera3D
 var hud: CanvasLayer
+var _biome := "coast"
 
 var _fov_base := 62.0
 var _cam_back := 2.4
@@ -38,6 +39,7 @@ func _ready() -> void:
 		push_error("Race: RaceContext and GameState autoloads are required")
 		return
 	var definition: Dictionary = _context().track()
+	_biome = String(definition.get("biome", "coast"))
 
 	track = Track.new()
 	track.name = "Track"
@@ -276,9 +278,24 @@ func _build_environment(definition: Dictionary) -> void:
 	env.glow_intensity = 0.5
 	env.glow_bloom = 0.1
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.05, 0.07, 0.12) if night else Color(0.75, 0.8, 0.88)
-	env.fog_density = 0.0035 if night else 0.0012
 	env.fog_sky_affect = 0.0
+	var biome := String(definition.get("biome", "coast"))
+	match biome:
+		"desert":
+			env.fog_light_color = Color(0.92, 0.78, 0.52)
+			env.fog_density = 0.0024
+		"coast":
+			env.fog_light_color = Color(0.70, 0.82, 0.90)
+			env.fog_density = 0.0018
+		"city":
+			env.fog_light_color = Color(0.62, 0.66, 0.72)
+			env.fog_density = 0.0017
+		"mountain":
+			env.fog_light_color = Color(0.68, 0.76, 0.82)
+			env.fog_density = 0.0026
+		_:
+			env.fog_light_color = Color(0.05, 0.07, 0.12) if night else Color(0.75, 0.8, 0.88)
+			env.fog_density = 0.0035 if night else 0.0012
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
@@ -288,8 +305,24 @@ func _build_environment(definition: Dictionary) -> void:
 	sun.rotation_degrees = Vector3(-38.0, 40.0, 0.0)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 220.0
-	sun.light_energy = 0.15 if night else 1.2
-	sun.light_color = Color(0.7, 0.75, 1.0) if night else Color(1.0, 0.95, 0.85)
+	match biome:
+		"desert":
+			sun.light_energy = 1.45
+			sun.light_color = Color(1.0, 0.88, 0.62)
+			sun.rotation_degrees = Vector3(-52.0, 28.0, 0.0)
+		"coast":
+			sun.light_energy = 1.15
+			sun.light_color = Color(0.95, 0.97, 1.0)
+		"city":
+			sun.light_energy = 1.05
+			sun.light_color = Color(0.96, 0.96, 1.0)
+		"mountain":
+			sun.light_energy = 1.1
+			sun.light_color = Color(0.92, 0.95, 1.0)
+			sun.rotation_degrees = Vector3(-28.0, 50.0, 0.0)
+		_:
+			sun.light_energy = 0.15 if night else 1.2
+			sun.light_color = Color(0.7, 0.75, 1.0) if night else Color(1.0, 0.95, 0.85)
 	add_child(sun)
 
 
@@ -368,8 +401,10 @@ func _process(delta: float) -> void:
 	if player == null or manager == null or camera == null:
 		return
 	_update_camera(delta)
-	Sfx.set_engine(player.speed / maxf(player.top_speed, 1.0),
-		manager.phase == RaceManager.Phase.RACING and player.state == Rider.State.RIDING)
+	var riding := manager.phase == RaceManager.Phase.RACING and player.state == Rider.State.RIDING
+	var speed01 := player.speed / maxf(player.top_speed, 1.0)
+	Sfx.set_engine(speed01, riding)
+	Sfx.set_world(_biome, speed01, riding)
 
 
 func _unhandled_input(event: InputEvent) -> void:

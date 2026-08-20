@@ -27,3 +27,9 @@ static func play_music() -> void:
 	var director := _director()
 	if director != null:
 		director.play_music()
+
+
+static func set_world(biome: String, speed01: float, riding: bool) -> void:
+	var director := _director()
+	if director != null and director.has_method("set_world"):
+		director.set_world(biome, speed01, riding)

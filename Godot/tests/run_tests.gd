@@ -15,6 +15,7 @@ func _init() -> void:
 	_test_story()
 	_test_bike_specs()
 	_test_track_geometry()
+	_test_world_biomes()
 	_test_heat()
 	_test_classic_rules()
 	_test_view()
@@ -23,7 +24,7 @@ func _init() -> void:
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 105
+	const EXPECTED_CHECKS := 122
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -164,6 +165,43 @@ func _test_track_geometry() -> void:
 	check(bool(kinds.get("cow", false)), "cow on track")
 	check(track.get_node_or_null("FinishBanner") != null, "chequered finish banner")
 	track.queue_free()
+
+
+func _test_world_biomes() -> void:
+	var coast := Track.new()
+	root.add_child(coast)
+	coast.build(TrackCatalog.find("coast_run"))
+	check(coast.get_node_or_null("Ocean") != null, "coast has ocean")
+	check(coast.get_node_or_null("Ground") != null, "coast has ground")
+	check(coast.get_node_or_null("TerrainBank_R") != null, "coast has inland bank")
+	coast.queue_free()
+
+	var city := Track.new()
+	root.add_child(city)
+	city.build(TrackCatalog.find("downtown"))
+	check(city.get_node_or_null("Sidewalk_L") != null, "city sidewalk L")
+	check(city.get_node_or_null("Sidewalk_R") != null, "city sidewalk R")
+	check(city.find_child("City_Shops_0", true, false) != null, "city shops")
+	city.queue_free()
+
+	var desert := Track.new()
+	root.add_child(desert)
+	desert.build(TrackCatalog.find("palm_desert"))
+	check(desert.get_node_or_null("Ground") != null, "desert ground")
+	check(desert.get_node_or_null("TerrainBank_L") != null, "desert dunes")
+	desert.queue_free()
+
+	var mountain := Track.new()
+	root.add_child(mountain)
+	mountain.build(TrackCatalog.find("sierra_pass"))
+	check(mountain.get_node_or_null("TerrainBank_L") != null, "mountain canyon L")
+	check(mountain.get_node_or_null("TerrainBank_R") != null, "mountain canyon R")
+	mountain.queue_free()
+
+	for wav in ["wind", "ambience_coast", "ambience_desert", "ambience_city", "ambience_mountain"]:
+		check(ResourceLoader.exists("res://assets/audio/%s.wav" % wav), "%s audio exists" % wav)
+	check(ResourceLoader.exists("res://assets/models/palm.glb"), "palm model")
+	check(ResourceLoader.exists("res://assets/models/building_office.glb"), "office tower")
 
 
 func _test_heat() -> void:

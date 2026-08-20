@@ -7,7 +7,10 @@ const POOL_SIZE := 12
 var _pool: Array[AudioStreamPlayer] = []
 var _music: AudioStreamPlayer
 var _engine: AudioStreamPlayer
+var _wind: AudioStreamPlayer
+var _ambience: AudioStreamPlayer
 var _streams: Dictionary = {}
+var _ambience_key := ""
 
 
 func _ready() -> void:
@@ -23,12 +26,22 @@ func _ready() -> void:
 	_engine = AudioStreamPlayer.new()
 	add_child(_engine)
 
+	_wind = AudioStreamPlayer.new()
+	add_child(_wind)
+
+	_ambience = AudioStreamPlayer.new()
+	add_child(_ambience)
+
 	# Headless runs (tests, CI) get silence: the dummy audio driver never reaps
 	# its playback list, so any started stream reports as a leak at exit.
 	if DisplayServer.get_name() == "headless":
 		return
 
-	for key in ["hit", "kick", "crash", "siren", "horn", "click", "engine", "music", "pickup", "go"]:
+	for key in [
+		"hit", "kick", "crash", "siren", "horn", "click", "engine", "music",
+		"pickup", "go", "wind", "ambience_coast", "ambience_desert",
+		"ambience_city", "ambience_mountain",
+	]:
 		var path := "res://assets/audio/%s.wav" % key
 		if ResourceLoader.exists(path):
 			_streams[key] = load(path)
@@ -50,10 +63,12 @@ func stop_all() -> void:
 	for player in _pool:
 		player.stop()
 		player.stream = null
-	_music.stop()
-	_music.stream = null
-	_engine.stop()
-	_engine.stream = null
+	for looped in [_music, _engine, _wind, _ambience]:
+		if looped == null:
+			continue
+		looped.stop()
+		looped.stream = null
+	_ambience_key = ""
 	_streams.clear()
 
 
@@ -98,14 +113,56 @@ func set_engine(speed01: float, active: bool) -> void:
 		return
 	if active and not _engine.playing:
 		_engine.stream = _streams["engine"]
-		_engine.volume_db = -5.0
 		_engine.play()
 		if not _engine.finished.is_connected(_on_engine_finished):
 			_engine.finished.connect(_on_engine_finished)
 	elif not active and _engine.playing:
 		_engine.stop()
-	_engine.pitch_scale = 0.7 + clampf(speed01, 0.0, 1.0) * 1.1
+	_engine.pitch_scale = 0.65 + clampf(speed01, 0.0, 1.0) * 1.25
+	_engine.volume_db = -7.0 + clampf(speed01, 0.0, 1.0) * 4.0
 
 
 func _on_engine_finished() -> void:
 	_engine.play()
+
+
+## Wind rush + biome bed. Night city shares the downtown rumble.
+func set_world(biome: String, speed01: float, riding: bool) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var bed := "ambience_city"
+	match biome:
+		"coast":
+			bed = "ambience_coast"
+		"desert":
+			bed = "ambience_desert"
+		"mountain":
+			bed = "ambience_mountain"
+		"city", "night":
+			bed = "ambience_city"
+	if _streams.has(bed) and _ambience_key != bed:
+		_ambience_key = bed
+		_ambience.stream = _streams[bed]
+		_ambience.volume_db = -14.0
+		_ambience.play()
+		if not _ambience.finished.is_connected(_on_ambience_finished):
+			_ambience.finished.connect(_on_ambience_finished)
+	var want_wind := riding and speed01 > 0.04
+	if _streams.has("wind"):
+		if want_wind and not _wind.playing:
+			_wind.stream = _streams["wind"]
+			_wind.play()
+			if not _wind.finished.is_connected(_on_wind_finished):
+				_wind.finished.connect(_on_wind_finished)
+		elif not want_wind and _wind.playing:
+			_wind.stop()
+		_wind.volume_db = -20.0 + clampf(speed01, 0.0, 1.0) * 12.0
+		_wind.pitch_scale = 0.82 + clampf(speed01, 0.0, 1.0) * 0.45
+
+
+func _on_ambience_finished() -> void:
+	_ambience.play()
+
+
+func _on_wind_finished() -> void:
+	_wind.play()
