@@ -61,9 +61,9 @@ func _build_curve(rng_seed: int) -> void:
 	var traveled := 0.0
 	curve.add_point(pos)
 
-	# Opening straight so the start grid is fair, then the first corner arrives
-	# within a few seconds of racing — Road Rash 3D, not a drag strip.
-	var opening := 70.0
+	# Opening straight so the start grid is fair, then the first corner is
+	# already in the chase camera's look-ahead — Road Rash 3D, not a drag strip.
+	var opening := 52.0
 	pos += Vector3(sin(heading), 0.0, cos(heading)) * opening
 	traveled += opening
 	curve.add_point(_elevated(pos, traveled, hills))

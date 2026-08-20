@@ -17,9 +17,9 @@ var hud: CanvasLayer
 var _biome := "coast"
 
 var _fov_base := 68.0
-var _cam_back := 5.6
-var _cam_up := 1.72
-var _cam_look := 18.0
+var _cam_back := 6.2
+var _cam_up := 2.05
+var _cam_look := 55.0
 var _cockpit: Node3D
 
 
@@ -117,7 +117,7 @@ func _spawn_grid(definition: Dictionary) -> void:
 		rival.rider_id = String(profile["id"])
 		rival.gang = gang
 		rival.suit_color = suit
-		rival.body_color = suit.lightened(0.15)
+		# Keep factory tank/fairing paint. Gang colour is the leathers, not the whole machine.
 		rival.top_speed = (44.0 + float(profile["skill"]) * 18.0) * scale
 		rival.accel = (10.0 + float(profile["skill"]) * 6.0) * scale
 		rival.weapon = int(profile["weapon"])
@@ -199,7 +199,10 @@ func _make_bike_visual(colour: Color, cop: bool, rider: Rider) -> Node3D:
 			var model := scene.instantiate() as Node3D
 			if model != null:
 				model.scale = Vector3(1.0, 1.0, 1.0)
-				_tint_model(model, colour)
+				# Factory paint stays on rival bikes; only the player/cop get a body tint.
+				# Gang colour lives on the leathers (suit), not the chrome and tyres.
+				if cop or (rider != null and rider.is_player):
+					_tint_model(model, colour)
 				if rider != null and rider.is_player:
 					_hide_helmet_from_cockpit(model)
 				return model
@@ -251,7 +254,9 @@ static func _tint_model(model: Node3D, colour: Color) -> void:
 				or mesh_name.begins_with("side_") or mesh_name.begins_with("fender")
 			if painted:
 				var tinted := std.duplicate() as StandardMaterial3D
-				tinted.albedo_color = colour
+				tinted.albedo_color = std.albedo_color.lerp(colour, 0.55)
+				tinted.metallic = maxf(std.metallic, 0.4)
+				tinted.roughness = minf(std.roughness, 0.28)
 				mesh_child.set_surface_override_material(surface, tinted)
 
 
