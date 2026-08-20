@@ -89,7 +89,7 @@ func _spawn_grid(definition: Dictionary) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
 	var rival_count: int = mini(int(definition["rivals"]) + 3, Campaign.ROSTER.size())
-	var scale := _context().division_scale
+	var scale: float = float(_context().division_scale)
 	for i in rival_count:
 		var profile: Dictionary = Campaign.ROSTER[i]
 		var lateral := lerpf(-track.half_width * 0.72, track.half_width * 0.72,

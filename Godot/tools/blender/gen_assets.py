@@ -12,6 +12,8 @@ import sys
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets", "models")
 os.makedirs(OUT, exist_ok=True)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from rider_rig import build_rigged_rider
 
 
 def reset():
@@ -71,11 +73,20 @@ def sphere(name, radius, loc, material, parent=None):
     return o
 
 
-def export(filename):
+def export(filename, animations=False):
     path = os.path.join(OUT, filename)
     bpy.ops.object.select_all(action="SELECT")
-    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True)
-    print("WROTE", path)
+    kwargs = {
+        "filepath": path,
+        "export_format": "GLB",
+        "use_selection": True,
+        "export_animations": True,
+        "export_nla_strips": True,
+        "export_force_sampling": True,
+        "export_apply": False,
+    }
+    bpy.ops.export_scene.gltf(**kwargs)
+    print("WROTE", path, "anims" if animations else "")
 
 
 def build_humanoid_rider(root, suit_mat, skin_mat, helm_mat, visor_mat, scale=1.0):
@@ -204,30 +215,26 @@ def build_bike(style="sport", cop=False):
     sphere("headlight", 0.09 * sc, (0, wb * 0.46, 1.02 * sc),
            mat("light", (1, 0.98, 0.9), emission=(1, 0.95, 0.82)), parent=root)
 
-    build_humanoid_rider(root, suit, skin, helm, glass, sc)
+    build_rigged_rider(root, suit, skin, helm, glass, sc)
 
     if cop:
         box("beacon", (0.12 * sc, 0.1 * sc, 0.08 * sc), (0, -0.04 * sc, 0.98 * sc),
             mat("beacon", (0.95, 0.1, 0.1), emission=(1, 0.1, 0.1)), bevel=0.02, parent=root)
 
-    export("cop_bike.glb" if cop else ("bike_rat.glb" if style == "rat" else "bike.glb"))
+    export("cop_bike.glb" if cop else ("bike_rat.glb" if style == "rat" else "bike.glb"), animations=True)
 
 
 def build_runner():
-    """Off-bike runner — visible when sprinting back to the machine."""
+    """Standalone skinned runner with the same armature clips as the bike rider."""
     reset()
     root = bpy.data.objects.new("runner_root", None)
     bpy.context.collection.objects.link(root)
     suit = mat("suit", (0.14, 0.14, 0.16), roughness=0.85)
     skin = mat("skin", (0.72, 0.52, 0.4), roughness=0.85)
     helm = mat("helmet", (0.9, 0.35, 0.1), metallic=0.3, roughness=0.3)
-    box("torso", (0.42, 0.28, 0.22), (0, 0, 1.05), suit, rot=(math.radians(8), 0, 0), bevel=0.04, parent=root)
-    sphere("helmet", 0.16, (0, 0, 1.42), helm, parent=root)
-    for side, sx in [("l", -1), ("r", 1)]:
-        box(f"arm_{side}", (0.1, 0.38, 0.1), (sx * 0.28, 0, 1.0), suit,
-            rot=(math.radians(-30), 0, sx * math.radians(20)), bevel=0.02, parent=root)
-        box(f"leg_{side}", (0.12, 0.42, 0.12), (sx * 0.12, 0, 0.48), suit, bevel=0.02, parent=root)
-    export("runner.glb")
+    visor = mat("visor", (0.02, 0.02, 0.05), metallic=0.75, roughness=0.06)
+    build_rigged_rider(root, suit, skin, helm, visor, 1.0)
+    export("runner.glb", animations=True)
 
 
 def build_car():

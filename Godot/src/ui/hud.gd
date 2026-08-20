@@ -28,6 +28,7 @@ var _flash_level: float = 0.0
 var _rival_portrait: PanelContainer
 var _banter_label: Label
 var _banter_timer: float = 0.0
+var _touch_root: Control
 
 
 func bind(race: Node3D) -> void:

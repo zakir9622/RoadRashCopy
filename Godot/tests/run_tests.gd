@@ -16,10 +16,11 @@ func _init() -> void:
 	_test_track_geometry()
 	_test_heat()
 	_test_race_simulation()
+	_test_rider_rig()
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 61
+	const EXPECTED_CHECKS := 70
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -217,3 +218,27 @@ func _test_race_simulation() -> void:
 		(rider_obj as Rider).queue_free()
 	cop.queue_free()
 	track.queue_free()
+
+
+func _test_rider_rig() -> void:
+	check(ResourceLoader.exists("res://assets/models/bike.glb"), "sportbike glb exists")
+	var scene: PackedScene = load("res://assets/models/bike.glb")
+	check(scene != null, "sportbike glb loads")
+	if scene == null:
+		return
+	var model := scene.instantiate() as Node3D
+	root.add_child(model)
+	var ap := model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	check(ap != null, "bike.glb has AnimationPlayer")
+	var skel := model.find_child("Skeleton3D", true, false)
+	check(skel != null, "bike.glb has Skeleton3D")
+	var names := PackedStringArray()
+	if ap != null:
+		names = ap.get_animation_list()
+	var joined := " ".join(names).to_lower()
+	check("ride" in joined, "ride clip exported")
+	check("punch_l" in joined or "punch" in joined, "punch clip exported")
+	check("kick" in joined, "kick clip exported")
+	check("crash" in joined, "crash clip exported")
+	check("run" in joined, "run clip exported")
+	model.queue_free()
