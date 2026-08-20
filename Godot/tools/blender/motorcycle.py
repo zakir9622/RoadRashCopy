@@ -53,7 +53,7 @@ def _sphere(name, radius, loc, material, segs=16, parent=None):
 def _torus(name, major, minor, loc, material, rot=(0, math.pi / 2, 0), parent=None):
     bpy.ops.mesh.primitive_torus_add(
         major_radius=major, minor_radius=minor, location=loc, rotation=rot,
-        major_segments=40, minor_segments=16)
+        major_segments=48, minor_segments=18)
     o = bpy.context.active_object
     o.name = name
     o.data.materials.append(material)

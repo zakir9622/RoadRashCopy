@@ -56,6 +56,19 @@ func set_colors(_body: Color, suit: Color) -> void:
 	_tint_suit_meshes()
 
 
+func _leather_tex() -> NoiseTexture2D:
+	var tex := NoiseTexture2D.new()
+	var n := FastNoiseLite.new()
+	n.noise_type = FastNoiseLite.TYPE_CELLULAR
+	n.frequency = 0.11
+	n.cellular_jitter = 0.35
+	tex.noise = n
+	tex.seamless = true
+	tex.width = 256
+	tex.height = 256
+	return tex
+
+
 func _clip_leaf(n: String) -> String:
 	var leaf := n.to_lower()
 	var parts := leaf.split("|")
@@ -91,6 +104,10 @@ func _tint_suit_meshes() -> void:
 			if std.resource_name.to_lower().begins_with("suit"):
 				var tinted := std.duplicate() as StandardMaterial3D
 				tinted.albedo_color = _suit_color
+				tinted.albedo_texture = _leather_tex()
+				tinted.uv1_scale = Vector3(5.5, 5.5, 5.5)
+				tinted.roughness = 0.74
+				tinted.metallic = 0.04
 				mesh.set_surface_override_material(i, tinted)
 
 

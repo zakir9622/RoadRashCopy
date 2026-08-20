@@ -5,6 +5,7 @@ extends SceneTree
 
 const AUTOLOADS := {
 	"GameState": "res://src/autoload/game_state.gd",
+	"GraphicsSettings": "res://src/autoload/graphics_settings.gd",
 	"RaceContext": "res://src/autoload/race_context.gd",
 	"AudioDirector": "res://src/autoload/audio_director.gd",
 }
@@ -36,6 +37,7 @@ func _run() -> void:
 	await _shoot("res://src/race/Race.tscn", out.path_join("race_sierra.png"), 8, "sierra_pass")
 	await _shoot("res://src/race/Race.tscn", out.path_join("race_night.png"), 8, "night_city")
 	await _shoot("res://src/ui/Garage.tscn", out.path_join("garage.png"), 12, "")
+	await _shoot("res://src/ui/Settings.tscn", out.path_join("settings.png"), 8, "")
 
 	print("SCREENSHOTS DONE")
 	quit(0)

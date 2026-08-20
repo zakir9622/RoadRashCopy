@@ -12,8 +12,13 @@ var length: float = 0.0
 var half_width: float = 10.0
 var hazards: Array = []
 var roadblocks: Array = []
+var light_anchors: Array[Vector3] = []
 
 const SEGMENT := 6.0  # metres of road per mesh cross-section
+var _road_mat: ShaderMaterial
+var _window_nodes: Array[Node3D] = []
+var _ocean_mat: StandardMaterial3D
+var _stream_mms: Array = []
 
 
 func build(track_def: Dictionary, rng_seed: int = 1337) -> void:
@@ -32,8 +37,11 @@ func build(track_def: Dictionary, rng_seed: int = 1337) -> void:
 	if biome == "city" or biome == "night":
 		_build_overpasses()
 		_build_streetlights()
+		_build_landmarks()
 	if biome == "mountain" or biome == "coast" or biome == "desert":
 		_build_horizon_peaks()
+		if biome != "city":
+			_build_landmarks()
 	_build_hazards(rng_seed)
 	_build_roadblocks(rng_seed)
 	_build_finish()
@@ -149,7 +157,32 @@ func _road_material() -> Material:
 			mat.set_shader_parameter("asphalt_tint", Vector3(1.0, 1.0, 1.0))
 			mat.set_shader_parameter("wetness", 0.05)
 			mat.set_shader_parameter("extra_lanes", 0.0)
+	_road_mat = mat
 	return mat
+
+
+func set_wetness(amount: float) -> void:
+	if _road_mat != null:
+		_road_mat.set_shader_parameter("wetness", clampf(amount, 0.0, 1.0))
+
+
+func set_detail_window(distance: float, radius: float = 320.0) -> void:
+	for node in _window_nodes:
+		if node == null or not is_instance_valid(node):
+			continue
+		var d := float(node.get_meta("track_distance", distance))
+		node.visible = absf(d - distance) < radius
+	for entry in _stream_mms:
+		var mm: MultiMesh = entry.get("mm")
+		var xforms: Array = entry.get("xforms", [])
+		var origins: PackedFloat32Array = entry.get("s", PackedFloat32Array())
+		if mm == null:
+			continue
+		for i in mini(mm.instance_count, xforms.size()):
+			var xf: Transform3D = xforms[i]
+			if i < origins.size() and absf(origins[i] - distance) > radius * 1.6:
+				xf.basis = xf.basis.scaled(Vector3(0.001, 0.001, 0.001))
+			mm.set_instance_transform(i, xf)
 
 
 static func _set_tex(mat: ShaderMaterial, pname: String, path: String) -> void:
@@ -225,9 +258,10 @@ func _build_ground() -> void:
 	var mat := StandardMaterial3D.new()
 	if ResourceLoader.exists(ground_tex):
 		mat.albedo_texture = load(ground_tex)
-		mat.uv1_scale = Vector3(28, 28, 1)
+		mat.uv1_scale = Vector3(18, 18, 1)
 	mat.albedo_color = tint
 	mat.roughness = 1.0
+	_apply_pbr_maps(mat, ground_tex)
 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -285,15 +319,16 @@ static func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector
 ## Canyon walls, desert dunes, or a coastal bluff on the inland shoulder.
 func _build_terrain_banks() -> void:
 	var biome := String(definition.get("biome", "coast"))
-	var step := 10.0
+	var step := 6.0
 	var samples := int(length / step) + 1
 	var mat := StandardMaterial3D.new()
 	var tex := "res://assets/textures/aerial_grass_rock_Diffuse.jpg"
 	if ResourceLoader.exists(tex):
 		mat.albedo_texture = load(tex)
-	mat.uv1_scale = Vector3(0.05, 0.05, 0.05)
+	mat.uv1_scale = Vector3(0.08, 0.08, 0.08)
 	mat.roughness = 0.97
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_apply_pbr_maps(mat, tex)
 	match biome:
 		"desert":
 			mat.albedo_color = Color(0.95, 0.74, 0.44)
@@ -333,14 +368,17 @@ func _bank_span(st: SurfaceTool, d: float, next_d: float, side: float, rise: flo
 	var up := xf.basis.y.normalized()
 	var nup := nxf.basis.y.normalized()
 	var inner := xf.origin + lat * (half_width + 2.0)
+	var shelf := xf.origin + lat * (half_width + 7.0) + up * (rise * 0.28)
 	var outer := xf.origin + lat * (half_width + 16.0)
 	var crest := outer + up * rise
 	var ninner := nxf.origin + nlat * (half_width + 2.0)
+	var nshelf := nxf.origin + nlat * (half_width + 7.0) + nup * (rise * 0.28)
 	var nouter := nxf.origin + nlat * (half_width + 16.0)
 	var ncrest := nouter + nup * rise
 	var u0 := d * 0.04
 	var u1 := next_d * 0.04
-	_quad(st, inner, outer, nouter, ninner, Vector2(0, u0), Vector2(1, u0), Vector2(1, u1), Vector2(0, u1))
+	_quad(st, inner, shelf, nshelf, ninner, Vector2(0, u0), Vector2(0.45, u0), Vector2(0.45, u1), Vector2(0, u1))
+	_quad(st, shelf, outer, nouter, nshelf, Vector2(0.45, u0), Vector2(1, u0), Vector2(1, u1), Vector2(0.45, u1))
 	_quad(st, outer, crest, ncrest, nouter, Vector2(1, u0), Vector2(1.4, u0), Vector2(1.4, u1), Vector2(1, u1))
 
 
@@ -479,6 +517,8 @@ func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 	mm.mesh = mesh
 	mm.instance_count = count * side_count
 	var idx := 0
+	var distances := PackedFloat32Array()
+	distances.resize(mm.instance_count)
 	for i in count:
 		for side in sides:
 			var sside := float(side)
@@ -497,11 +537,17 @@ func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 			var aabb := mesh.get_aabb()
 			t.origin += t.basis.y.normalized() * (-aabb.position.y * s)
 			mm.set_instance_transform(idx, t)
+			distances[idx] = d
 			idx += 1
 	var inst := MultiMeshInstance3D.new()
 	inst.name = node_name
 	inst.multimesh = mm
 	add_child(inst)
+	if node_name == "ParkedCars" or node_name == "StreetTrees":
+		var xforms: Array = []
+		for i in mm.instance_count:
+			xforms.append(mm.get_instance_transform(i))
+		_stream_mms.append({"mm": mm, "xforms": xforms, "s": distances})
 
 
 func _build_city_skyline(rng: RandomNumberGenerator) -> void:
@@ -616,21 +662,46 @@ func _build_billboards(rng: RandomNumberGenerator) -> void:
 	mat.emission = Color(0.95, 0.45, 0.12) if rng.randf() < 0.5 else Color(0.2, 0.55, 0.95)
 	mat.emission_energy_multiplier = 1.6
 	board.material = mat
+	var pole := CylinderMesh.new()
+	pole.top_radius = 0.09
+	pole.bottom_radius = 0.12
+	pole.height = 4.2
+	var pmat := StandardMaterial3D.new()
+	pmat.albedo_color = Color(0.18, 0.18, 0.2)
+	pole.material = pmat
 	var d := 90.0
+	var n := 0
 	while d < length - 80.0:
-		var side := -1.0 if int(d / 90.0) % 2 == 0 else 1.0
-		var mi := MeshInstance3D.new()
-		mi.mesh = board
-		mi.name = "Billboard"
-		add_child(mi)
-		var xf := sample(d, (half_width + 5.8) * side, 4.4)
-		var inward := -xf.basis.x * side
-		inward.y = 0.0
-		if inward.length() < 0.001:
-			inward = Vector3.FORWARD
-		xf.basis = Basis.looking_at(inward.normalized(), Vector3.UP)
-		mi.global_transform = xf
+		n += 1
 		d += 140.0
+	if n <= 0:
+		return
+	var boards := MultiMesh.new()
+	boards.transform_format = MultiMesh.TRANSFORM_3D
+	boards.mesh = board
+	boards.instance_count = n
+	var poles := MultiMesh.new()
+	poles.transform_format = MultiMesh.TRANSFORM_3D
+	poles.mesh = pole
+	poles.instance_count = n
+	d = 90.0
+	var idx := 0
+	while d < length - 80.0 and idx < n:
+		var side := -1.0 if int(d / 90.0) % 2 == 0 else 1.0
+		var xf := _facing_road(d, (half_width + 5.8) * side, 4.0, side)
+		boards.set_instance_transform(idx, xf)
+		var pole_xf := sample(d, (half_width + 5.8) * side, 2.1)
+		poles.set_instance_transform(idx, pole_xf)
+		d += 140.0
+		idx += 1
+	var board_inst := MultiMeshInstance3D.new()
+	board_inst.name = "Billboard"
+	board_inst.multimesh = boards
+	add_child(board_inst)
+	var pole_inst := MultiMeshInstance3D.new()
+	pole_inst.name = "BillboardPoles"
+	pole_inst.multimesh = poles
+	add_child(pole_inst)
 
 
 func _build_streetlights() -> void:
@@ -654,10 +725,12 @@ func _build_streetlights() -> void:
 	mm.mesh = pole
 	mm.instance_count = steps * 2
 	var idx := 0
+	light_anchors.clear()
 	for i in steps:
 		for side: float in [-1.0, 1.0]:
 			var t := sample(i * spacing, (half_width + 0.85) * side, 3.6)
 			mm.set_instance_transform(idx, t)
+			light_anchors.append(t.origin)
 			idx += 1
 	var inst := MultiMeshInstance3D.new()
 	inst.name = "Streetlights"
@@ -709,6 +782,8 @@ func _build_overpasses() -> void:
 		deck.name = "Overpass"
 		add_child(deck)
 		deck.global_transform = sample(d, 0.0, 6.4)
+		deck.set_meta("track_distance", d)
+		_window_nodes.append(deck)
 		for side in [-1.0, 1.0]:
 			var pillar := MeshInstance3D.new()
 			var cyl := CylinderMesh.new()
@@ -790,6 +865,26 @@ func _build_tunnel() -> void:
 	roof.name = "Tunnel"
 	add_child(roof)
 	roof.global_transform = sample(start, 0.0, wall_h + 0.4)
+	roof.set_meta("track_distance", start)
+	_window_nodes.append(roof)
+	# Emissive tunnel interior lights — cheap mood, not one OmniLight per fixture.
+	var lamp := BoxMesh.new()
+	lamp.size = Vector3(0.35, 0.08, 1.8)
+	var lamp_mat := StandardMaterial3D.new()
+	lamp_mat.albedo_color = Color(0.9, 0.85, 0.6)
+	lamp_mat.emission_enabled = true
+	lamp_mat.emission = Color(1.0, 0.82, 0.45)
+	lamp_mat.emission_energy_multiplier = 3.4
+	lamp.material = lamp_mat
+	for i in 5:
+		var li := MeshInstance3D.new()
+		li.mesh = lamp
+		li.name = "TunnelLamp"
+		add_child(li)
+		var ld := start - 14.0 + i * 7.0
+		li.global_transform = sample(ld, 0.0, wall_h - 0.2)
+		li.set_meta("track_distance", start)
+		_window_nodes.append(li)
 
 
 static func _extract_mesh(path: String) -> Mesh:
@@ -913,13 +1008,40 @@ func _build_water() -> void:
 	mat.roughness = 0.18
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.albedo_color.a = 0.88
+	mat.uv1_scale = Vector3(6, 6, 1)
+	if ResourceLoader.exists("res://assets/textures/asphalt_02_nor_gl.jpg"):
+		mat.normal_enabled = true
+		mat.normal_texture = load("res://assets/textures/asphalt_02_nor_gl.jpg")
+		mat.normal_scale = 0.45
 	mesh.material = mat
+	_ocean_mat = mat
 	plane.mesh = mesh
 	plane.name = "Ocean"
 	add_child(plane)
 	var t := sample(length * 0.25, -half_width - 38.0, -1.2)
 	plane.global_transform = t
 	plane.rotate_object_local(Vector3.RIGHT, -PI * 0.5)
+	# Foam strip at the verge so the water reads as a shoreline, not a slab.
+	var foam := MeshInstance3D.new()
+	var foam_mesh := PlaneMesh.new()
+	foam_mesh.size = Vector2(length * 0.32, 8.0)
+	var foam_mat := StandardMaterial3D.new()
+	foam_mat.albedo_color = Color(0.82, 0.9, 0.95, 0.55)
+	foam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	foam_mat.roughness = 0.35
+	foam_mesh.material = foam_mat
+	foam.mesh = foam_mesh
+	foam.name = "OceanFoam"
+	add_child(foam)
+	foam.global_transform = sample(length * 0.25, -half_width - 14.0, -0.4)
+	foam.rotate_object_local(Vector3.RIGHT, -PI * 0.5)
+	set_process(true)
+
+
+func _process(delta: float) -> void:
+	if _ocean_mat != null:
+		_ocean_mat.uv1_offset.x = fmod(_ocean_mat.uv1_offset.x + delta * 0.03, 1.0)
+		_ocean_mat.uv1_offset.y = fmod(_ocean_mat.uv1_offset.y + delta * 0.012, 1.0)
 
 
 func _place_animal(d: float, lateral: float, cow: bool) -> Node3D:
@@ -1011,4 +1133,106 @@ func _build_finish_crowd() -> void:
 		var side := -1.0 if i < 6 else 1.0
 		var lat := (half_width + 1.6 + (i % 6) * 0.45) * side
 		person.global_transform = sample(finish_d + (i % 3) * 1.1, lat, 0.85)
+
+
+func _facing_road(d: float, lateral: float, height: float, side: float) -> Transform3D:
+	var xf := sample(d, lateral, height)
+	var inward := -xf.basis.x * side
+	inward.y = 0.0
+	if inward.length_squared() < 0.0001:
+		inward = Vector3.FORWARD
+	return Transform3D(Basis.looking_at(inward.normalized(), Vector3.UP), xf.origin)
+
+
+static func _apply_pbr_maps(mat: StandardMaterial3D, diffuse_path: String) -> void:
+	var nor := diffuse_path.replace("_Diffuse.jpg", "_nor_gl.jpg")
+	var arm := diffuse_path.replace("_Diffuse.jpg", "_arm.jpg")
+	if ResourceLoader.exists(nor):
+		mat.normal_enabled = true
+		mat.normal_texture = load(nor)
+		mat.normal_scale = 0.7
+	if ResourceLoader.exists(arm):
+		mat.ao_enabled = true
+		mat.ao_texture = load(arm)
+		mat.ao_light_affect = 0.6
+
+
+func _build_landmarks() -> void:
+	var d := 220.0
+	var kind := 0
+	while d < length - 160.0:
+		var side := 1.0 if kind % 2 == 0 else -1.0
+		var node := _make_landmark(kind % 3)
+		node.name = "Landmark"
+		node.set_meta("track_distance", d)
+		add_child(node)
+		var xf := _facing_road(d, (half_width + 9.5) * side, 0.0, side)
+		node.global_transform = xf
+		_window_nodes.append(node)
+		d += 400.0
+		kind += 1
+
+
+func _make_landmark(kind: int) -> Node3D:
+	var root := Node3D.new()
+	match kind:
+		0:
+			# Gas station canopy + pumps.
+			var canopy := MeshInstance3D.new()
+			var roof := BoxMesh.new()
+			roof.size = Vector3(8.0, 0.22, 6.0)
+			var rmat := StandardMaterial3D.new()
+			rmat.albedo_color = Color(0.85, 0.12, 0.1)
+			rmat.emission_enabled = true
+			rmat.emission = Color(0.9, 0.25, 0.12)
+			rmat.emission_energy_multiplier = 0.4
+			roof.material = rmat
+			canopy.mesh = roof
+			canopy.position = Vector3(0, 4.2, 0)
+			root.add_child(canopy)
+			for i in 3:
+				var pump := MeshInstance3D.new()
+				var box := BoxMesh.new()
+				box.size = Vector3(0.6, 1.4, 0.45)
+				var pmat := StandardMaterial3D.new()
+				pmat.albedo_color = Color(0.85, 0.85, 0.82)
+				box.material = pmat
+				pump.mesh = box
+				pump.position = Vector3(-2.0 + i * 2.0, 0.7, 0.0)
+				root.add_child(pump)
+		1:
+			# Plaza kiosk.
+			var slab := MeshInstance3D.new()
+			var slab_mesh := BoxMesh.new()
+			slab_mesh.size = Vector3(10.0, 0.18, 8.0)
+			var smat := StandardMaterial3D.new()
+			smat.albedo_color = Color(0.55, 0.56, 0.58)
+			slab_mesh.material = smat
+			slab.mesh = slab_mesh
+			slab.position = Vector3(0, 0.1, 0)
+			root.add_child(slab)
+			var kiosk := MeshInstance3D.new()
+			var kmesh := BoxMesh.new()
+			kmesh.size = Vector3(3.2, 3.4, 3.2)
+			var kmat := StandardMaterial3D.new()
+			kmat.albedo_color = Color(0.18, 0.22, 0.28)
+			kmat.emission_enabled = true
+			kmat.emission = Color(0.4, 0.7, 1.0)
+			kmat.emission_energy_multiplier = 0.6
+			kmesh.material = kmat
+			kiosk.mesh = kmesh
+			kiosk.position = Vector3(0, 1.8, 0)
+			root.add_child(kiosk)
+		_:
+			# Rest-stop shed.
+			var shed := MeshInstance3D.new()
+			var shed_mesh := BoxMesh.new()
+			shed_mesh.size = Vector3(5.5, 3.2, 4.0)
+			var shed_mat := StandardMaterial3D.new()
+			shed_mat.albedo_color = Color(0.42, 0.36, 0.28)
+			shed_mesh.material = shed_mat
+			shed.mesh = shed_mesh
+			shed.position = Vector3(0, 1.6, 0)
+			root.add_child(shed)
+	return root
 

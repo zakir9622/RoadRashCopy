@@ -15,6 +15,11 @@ var player: Rider
 var camera: Camera3D
 var hud: CanvasLayer
 var _biome := "coast"
+var _night := false
+var _environment: Environment
+var _sun: DirectionalLight3D
+var _weather: WeatherDirector
+var _street_lights: StreetLightPool
 
 var _fov_base := 68.0
 var _cam_back := 6.2
@@ -34,12 +39,55 @@ func _state() -> Node:
 	return get_node_or_null("/root/GameState")
 
 
+func _gfx() -> Node:
+	return get_node_or_null("/root/GraphicsSettings")
+
+
+func apply_graphics() -> void:
+	var gfx := _gfx()
+	if gfx == null:
+		return
+	_cam_back = gfx.cam_back()
+	_cam_up = gfx.cam_up()
+	_cam_look = gfx.cam_look()
+	gfx.apply_to_environment(_environment, _sun, _night)
+	if _weather != null:
+		_weather.configure(track, player, camera, _biome)
+	if _street_lights != null:
+		_street_lights.configure(track.light_anchors, player, gfx.street_omni_count())
+	if hud != null and hud.has_method("refresh_quality"):
+		hud.refresh_quality()
+
+
+func update_detail_window() -> void:
+	if track != null and player != null:
+		track.set_detail_window(player.distance)
+
+
+func _spawn_weather() -> void:
+	_weather = WeatherDirector.new()
+	_weather.name = "Weather"
+	add_child(_weather)
+	_weather.configure(track, player, camera, _biome)
+
+
+func _spawn_street_lights() -> void:
+	_street_lights = StreetLightPool.new()
+	_street_lights.name = "StreetLights"
+	add_child(_street_lights)
+	var gfx := _gfx()
+	var count := 0 if gfx == null else gfx.street_omni_count()
+	if track != null:
+		_street_lights.configure(track.light_anchors, player, count)
+
+
 func _ready() -> void:
 	if _context() == null or _state() == null:
 		push_error("Race: RaceContext and GameState autoloads are required")
 		return
 	var definition: Dictionary = _context().track()
 	_biome = String(definition.get("biome", "coast"))
+	_night = bool(definition.get("night", false)) or _biome == "night"
 
 	track = Track.new()
 	track.name = "Track"
@@ -65,12 +113,20 @@ func _ready() -> void:
 	var traffic := Traffic.new()
 	traffic.name = "Traffic"
 	add_child(traffic)
-	traffic.build(track, int(definition["traffic"]), player)
+	var traffic_count := int(definition["traffic"])
+	var gfx := _gfx()
+	if gfx != null and gfx.is_high() and (_biome == "city" or _biome == "night"):
+		traffic_count = mini(traffic_count + 8, 36)
+	traffic.build(track, traffic_count, player)
 
 	manager.configure(track, player, rival_ais, police_ais, traffic, int(definition["police"]))
 	manager.spawn_police_behind = _spawn_police_unit
 	manager.finished.connect(_on_finished)
 	manager.start()
+
+	_spawn_weather()
+	_spawn_street_lights()
+	apply_graphics()
 
 	Sfx.play_music()
 
@@ -199,6 +255,7 @@ func _make_bike_visual(colour: Color, cop: bool, rider: Rider) -> Node3D:
 			var model := scene.instantiate() as Node3D
 			if model != null:
 				model.scale = Vector3(1.0, 1.0, 1.0)
+				_apply_hero_materials(model)
 				# Factory paint stays on rival bikes; only the player/cop get a body tint.
 				# Gang colour lives on the leathers (suit), not the chrome and tyres.
 				if cop or (rider != null and rider.is_player):
@@ -258,6 +315,38 @@ static func _tint_model(model: Node3D, colour: Color) -> void:
 				tinted.metallic = maxf(std.metallic, 0.4)
 				tinted.roughness = minf(std.roughness, 0.28)
 				mesh_child.set_surface_override_material(surface, tinted)
+
+
+static func _apply_hero_materials(model: Node3D) -> void:
+	for child in model.find_children("*", "MeshInstance3D", true, false):
+		var mesh_child := child as MeshInstance3D
+		if mesh_child.mesh == null:
+			continue
+		for surface in mesh_child.mesh.get_surface_count():
+			var mat := mesh_child.get_surface_override_material(surface)
+			if mat == null:
+				mat = mesh_child.mesh.surface_get_material(surface)
+			var std := mat as StandardMaterial3D
+			if std == null:
+				continue
+			var mat_name := std.resource_name.to_lower()
+			var tuned := std.duplicate() as StandardMaterial3D
+			if mat_name.begins_with("rubber"):
+				tuned.metallic = 0.0
+				tuned.roughness = 0.96
+				tuned.albedo_color = Color(0.03, 0.03, 0.03)
+			elif mat_name.begins_with("chrome"):
+				tuned.metallic = 1.0
+				tuned.roughness = 0.08
+			elif mat_name.begins_with("body"):
+				tuned.metallic = maxf(tuned.metallic, 0.48)
+				tuned.roughness = minf(tuned.roughness, 0.2)
+			elif mat_name.begins_with("boot"):
+				tuned.roughness = 0.9
+				tuned.metallic = 0.05
+			else:
+				continue
+			mesh_child.set_surface_override_material(surface, tuned)
 
 
 func _build_environment(definition: Dictionary) -> void:
@@ -322,6 +411,7 @@ func _build_environment(definition: Dictionary) -> void:
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
+	_environment = env
 
 	var sun := DirectionalLight3D.new()
 	sun.shadow_enabled = true
@@ -344,6 +434,7 @@ func _build_environment(definition: Dictionary) -> void:
 			sun.light_energy = 1.05
 			sun.light_color = Color(1.0, 0.42, 0.22)
 	add_child(sun)
+	_sun = sun
 
 
 func _hide_helmet_from_cockpit(_visual: Node3D) -> void:
@@ -457,6 +548,31 @@ func _toggle_pause() -> void:
 	resume.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
 	resume.pressed.connect(_toggle_pause)
 	box.add_child(resume)
+
+	var restart := Button.new()
+	restart.text = "RESTART"
+	restart.add_theme_font_size_override("font_size", 24)
+	restart.add_theme_stylebox_override("normal", ThemeColors.button_style())
+	restart.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
+	restart.pressed.connect(func():
+		get_tree().paused = false
+		get_tree().reload_current_scene())
+	box.add_child(restart)
+
+	var settings_btn := Button.new()
+	settings_btn.text = "SETTINGS"
+	settings_btn.add_theme_font_size_override("font_size", 24)
+	settings_btn.add_theme_stylebox_override("normal", ThemeColors.button_style())
+	settings_btn.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
+	settings_btn.pressed.connect(func():
+		var packed: PackedScene = load("res://src/ui/Settings.tscn")
+		if packed == null:
+			return
+		var panel := packed.instantiate()
+		_pause_layer.add_child(panel)
+		if panel.has_signal("closed"):
+			panel.closed.connect(apply_graphics))
+	box.add_child(settings_btn)
 
 	var quit_button := Button.new()
 	quit_button.text = "QUIT TO MENU"

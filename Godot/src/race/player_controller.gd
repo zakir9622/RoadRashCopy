@@ -79,3 +79,45 @@ func _physics_process(_delta: float) -> void:
 			and not touch_windup_left and not touch_windup_right:
 		if rider.is_winding_up() and not Input.is_action_pressed("throttle"):
 			rider.cancel_windup()
+
+
+func begin_touch_punch() -> void:
+	if _punch_side() < 0.0:
+		touch_windup_left = true
+		touch_windup_right = false
+	else:
+		touch_windup_right = true
+		touch_windup_left = false
+
+
+func end_touch_punch() -> void:
+	var opponents: Array = get_opponents.call() if get_opponents.is_valid() else []
+	var winding := rider != null and rider.is_winding_up()
+	var left := touch_windup_left
+	touch_windup_left = false
+	touch_windup_right = false
+	if winding:
+		rider.release_windup(opponents)
+	elif left:
+		touch_attack_left = true
+	else:
+		touch_attack_right = true
+
+
+func _punch_side() -> float:
+	if rider == null:
+		return 1.0
+	var opponents: Array = get_opponents.call() if get_opponents.is_valid() else []
+	var nearest_lat := 0.0
+	var nearest_d := 80.0
+	for opponent in opponents:
+		var other := opponent as Rider
+		if other == null or other == rider or not other.alive():
+			continue
+		var d := absf(other.distance - rider.distance)
+		if d < nearest_d:
+			nearest_d = d
+			nearest_lat = other.lateral - rider.lateral
+	if absf(nearest_lat) < 0.15:
+		return 1.0 if rider.in_steer >= 0.0 else -1.0
+	return 1.0 if nearest_lat >= 0.0 else -1.0

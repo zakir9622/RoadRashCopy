@@ -56,8 +56,8 @@ static func styled_panel() -> StyleBoxFlat:
 	style.border_color = ACCENT
 	style.content_margin_left = 24.0
 	style.content_margin_right = 24.0
-	style.content_margin_top = 18.0
-	style.content_margin_bottom = 18.0
+	style.content_margin_top = 16.0
+	style.content_margin_bottom = 16.0
 	return style
 
 

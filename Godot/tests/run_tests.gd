@@ -21,10 +21,11 @@ func _init() -> void:
 	_test_view()
 	_test_race_simulation()
 	_test_rider_rig()
+	_test_cinematic_hud()
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 131
+	const EXPECTED_CHECKS := 155
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -414,3 +415,85 @@ func _test_rider_rig() -> void:
 	check("crash" in joined, "crash clip exported")
 	check("run" in joined, "run clip exported")
 	model.queue_free()
+
+
+func _test_cinematic_hud() -> void:
+	var gs := load("res://src/autoload/game_state.gd")
+	check(int(gs.SCHEMA) == 3, "save schema is 3")
+	var defaults: Dictionary = gs._default_save()
+	check(String(defaults.get("graphics_quality", "")) == "high", "default quality is high")
+	check(not bool(defaults.get("mirrors", true)), "mirrors off by default")
+
+	var gfx := (load("res://src/autoload/graphics_settings.gd") as GDScript).new()
+	root.add_child(gfx)
+	check(gfx.is_high(), "GraphicsSettings defaults to high")
+	check(not gfx.mirrors_enabled(), "GraphicsSettings mirrors default off")
+	check(is_equal_approx(gfx.shadow_distance(), 180.0), "high shadow distance")
+	gfx.set_high(false)
+	check(is_equal_approx(gfx.shadow_distance(), 80.0), "low shadow distance")
+	gfx.queue_free()
+
+	check(ResourceLoader.exists("res://src/ui/Settings.tscn"), "settings scene exists")
+	var packed: PackedScene = load("res://src/ui/Settings.tscn")
+	var settings := packed.instantiate() as Control
+	root.add_child(settings)
+	check(settings.get_child_count() > 0, "settings builds a panel")
+	settings.queue_free()
+
+	var pc := PlayerController.new()
+	check(pc.has_method("begin_touch_punch"), "touch punch windup API")
+	check(pc.has_method("end_touch_punch"), "touch punch release API")
+	pc.free()
+
+	var city := Track.new()
+	root.add_child(city)
+	city.build(TrackCatalog.find("downtown"))
+	check(city.find_child("Landmark", true, false) != null, "city landmarks")
+	check(city.find_child("Billboard", true, false) != null, "city billboards")
+	check(city.light_anchors.size() > 0, "streetlight anchors for the omni pool")
+	var road := city.get_node_or_null("Road") as MeshInstance3D
+	check(road != null and road.material_override is ShaderMaterial, "road shader material")
+	city.set_wetness(0.9)
+	var wet := 0.0
+	if road != null:
+		wet = float((road.material_override as ShaderMaterial).get_shader_parameter("wetness"))
+	check(wet > 0.8, "set_wetness updates the road")
+	var landmark := city.find_child("Landmark", true, false) as Node3D
+	if landmark != null:
+		landmark.set_meta("track_distance", 0.0)
+		city.set_detail_window(2000.0, 80.0)
+		check(not landmark.visible, "far landmark hidden by detail window")
+		city.set_detail_window(0.0, 400.0)
+		check(landmark.visible, "near landmark shown by detail window")
+	else:
+		check(false, "far landmark hidden by detail window")
+		check(false, "near landmark shown by detail window")
+	city.queue_free()
+
+	var night := Track.new()
+	root.add_child(night)
+	night.build(TrackCatalog.find("night_city"))
+	var weather := WeatherDirector.new()
+	root.add_child(weather)
+	weather.configure(night, null, null, "night")
+	check(weather.raining, "night city rains on high")
+	weather.configure(night, null, null, "desert")
+	check(not weather.raining, "desert stays dry")
+	weather.queue_free()
+	night.queue_free()
+
+	var coast := Track.new()
+	root.add_child(coast)
+	coast.build(TrackCatalog.find("coast_run"))
+	check(coast.get_node_or_null("OceanFoam") != null, "coast foam strip")
+	var traffic := Traffic.new()
+	root.add_child(traffic)
+	traffic.build(coast, 8, null)
+	check(traffic.cars.size() == 8, "traffic pool size")
+	check(traffic.get_child_count() >= 2, "several traffic mesh kits")
+	var vary := traffic.cars.size() >= 2 and not is_equal_approx(
+		float(traffic.cars[0]["speed"]), float(traffic.cars[1]["speed"]))
+	check(vary, "traffic speed variance")
+	traffic.queue_free()
+	coast.queue_free()
+
