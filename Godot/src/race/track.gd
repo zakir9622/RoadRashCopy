@@ -12,8 +12,13 @@ var length: float = 0.0
 var half_width: float = 10.0
 var hazards: Array = []
 var roadblocks: Array = []
+var light_anchors: Array[Vector3] = []
 
 const SEGMENT := 6.0  # metres of road per mesh cross-section
+var _road_mat: ShaderMaterial
+var _window_nodes: Array[Node3D] = []
+var _ocean_mat: StandardMaterial3D
+var _stream_mms: Array = []
 
 
 func build(track_def: Dictionary, rng_seed: int = 1337) -> void:
@@ -32,8 +37,11 @@ func build(track_def: Dictionary, rng_seed: int = 1337) -> void:
 	if biome == "city" or biome == "night":
 		_build_overpasses()
 		_build_streetlights()
+		_build_landmarks()
 	if biome == "mountain" or biome == "coast" or biome == "desert":
 		_build_horizon_peaks()
+		if biome != "city":
+			_build_landmarks()
 	_build_hazards(rng_seed)
 	_build_roadblocks(rng_seed)
 	_build_finish()
@@ -41,29 +49,69 @@ func build(track_def: Dictionary, rng_seed: int = 1337) -> void:
 		_build_water()
 
 
-## Deterministic spine: sweeping sine curves + hills, seeded so the same track
-## is identical every run (replays, tests, fair racing lines).
+## Piecewise corners, not a kilometre-scale sine. The old generator used
+## `sin(z * 0.004)` (period ~1.57 km) so Coast (curviness 0.5) only drifted
+## ~30 m sideways — the camera read as a ruler. This spine: short opening
+## straight for the grid, then alternating corners and straights at radii
+## a 250 cc bike can actually take. Seeded so replays stay identical.
 func _build_curve(rng_seed: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed + String(definition["id"]).hash()
 
 	curve = Curve3D.new()
-	curve.bake_interval = 2.0
+	curve.bake_interval = 1.2
 	var track_length := float(definition["length"])
 	var curviness := float(definition["curviness"])
 	var hills := float(definition["hills"])
 
-	var phase1 := rng.randf_range(0.0, TAU)
-	var phase2 := rng.randf_range(0.0, TAU)
-	var step := 40.0
-	var count := int(track_length / step) + 2
-	for i in count:
-		var z := i * step
-		var x := sin(z * 0.004 + phase1) * 60.0 * curviness \
-			+ sin(z * 0.0013 + phase2) * 110.0 * curviness
-		var y := (sin(z * 0.002 + phase2) * 9.0 + sin(z * 0.0007 + phase1) * 14.0) * hills
-		curve.add_point(Vector3(x, y, z))
+	var pos := Vector3.ZERO
+	var heading := 0.0
+	var traveled := 0.0
+	curve.add_point(pos)
+
+	# Opening straight so the start grid is fair, then the first corner is
+	# already in the chase camera's look-ahead — Road Rash 3D, not a drag strip.
+	var opening := 52.0
+	pos += Vector3(sin(heading), 0.0, cos(heading)) * opening
+	traveled += opening
+	curve.add_point(_elevated(pos, traveled, hills))
+
+	var turn_sign := 1.0
+	var guard := 0
+	while traveled < track_length and guard < 500:
+		guard += 1
+		var turn := (0.62 + rng.randf() * 0.78 + curviness * 0.48) * turn_sign
+		var radius := clampf(52.0 / maxf(curviness, 0.45), 20.0, 86.0)
+		radius *= rng.randf_range(0.78, 1.12)
+		var arc := absf(turn) * radius
+		var steps := maxi(5, int(ceil(arc / 8.0)))
+		for _i in range(1, steps + 1):
+			heading += turn / float(steps)
+			var ds := arc / float(steps)
+			pos += Vector3(sin(heading), 0.0, cos(heading)) * ds
+			traveled += ds
+			curve.add_point(_elevated(pos, traveled, hills))
+			if traveled >= track_length:
+				break
+		turn_sign *= -1.0
+		if traveled >= track_length:
+			break
+		var straight := rng.randf_range(48.0, 90.0) / clampf(curviness, 0.7, 1.8)
+		straight = clampf(straight, 36.0, 100.0)
+		var s_steps := maxi(2, int(ceil(straight / 16.0)))
+		for _i in range(1, s_steps + 1):
+			var ds := straight / float(s_steps)
+			pos += Vector3(sin(heading), 0.0, cos(heading)) * ds
+			traveled += ds
+			curve.add_point(_elevated(pos, traveled, hills))
+			if traveled >= track_length:
+				break
 	length = curve.get_baked_length()
+
+
+func _elevated(xz: Vector3, s: float, hills: float) -> Vector3:
+	xz.y = (sin(s * 0.007) * 8.0 + sin(s * 0.018) * 3.5) * hills
+	return xz
 
 
 func sample(distance: float, lateral: float, height: float = 0.0) -> Transform3D:
@@ -109,7 +157,32 @@ func _road_material() -> Material:
 			mat.set_shader_parameter("asphalt_tint", Vector3(1.0, 1.0, 1.0))
 			mat.set_shader_parameter("wetness", 0.05)
 			mat.set_shader_parameter("extra_lanes", 0.0)
+	_road_mat = mat
 	return mat
+
+
+func set_wetness(amount: float) -> void:
+	if _road_mat != null:
+		_road_mat.set_shader_parameter("wetness", clampf(amount, 0.0, 1.0))
+
+
+func set_detail_window(distance: float, radius: float = 320.0) -> void:
+	for node in _window_nodes:
+		if node == null or not is_instance_valid(node):
+			continue
+		var d := float(node.get_meta("track_distance", distance))
+		node.visible = absf(d - distance) < radius
+	for entry in _stream_mms:
+		var mm: MultiMesh = entry.get("mm")
+		var xforms: Array = entry.get("xforms", [])
+		var origins: PackedFloat32Array = entry.get("s", PackedFloat32Array())
+		if mm == null:
+			continue
+		for i in mini(mm.instance_count, xforms.size()):
+			var xf: Transform3D = xforms[i]
+			if i < origins.size() and absf(origins[i] - distance) > radius * 1.6:
+				xf.basis = xf.basis.scaled(Vector3(0.001, 0.001, 0.001))
+			mm.set_instance_transform(i, xf)
 
 
 static func _set_tex(mat: ShaderMaterial, pname: String, path: String) -> void:
@@ -165,7 +238,8 @@ func _build_ground() -> void:
 	var verge := 90.0
 	match biome:
 		"desert":
-			tint = Color(1.28, 1.08, 0.68)
+			ground_tex = "res://assets/textures/sand_01_Diffuse.jpg"
+			tint = Color(1.08, 0.96, 0.72)
 			drop = 0.6
 			verge = 120.0
 		"city", "night":
@@ -174,20 +248,20 @@ func _build_ground() -> void:
 			drop = 0.08
 			verge = 28.0
 		"mountain":
-			ground_tex = "res://assets/textures/aerial_grass_rock_Diffuse.jpg"
-			tint = Color(0.55, 0.68, 0.48)
+			ground_tex = "res://assets/textures/rock_face_Diffuse.jpg"
+			tint = Color(0.78, 0.8, 0.76)
 			drop = 4.5
 			verge = 70.0
 		"coast":
-			tint = Color(0.62, 0.88, 0.55)
+			ground_tex = "res://assets/textures/coast_sand_04_Diffuse.jpg"
+			tint = Color(0.92, 0.88, 0.72)
 			drop = 1.4
 
 	var mat := StandardMaterial3D.new()
-	if ResourceLoader.exists(ground_tex):
-		mat.albedo_texture = load(ground_tex)
-		mat.uv1_scale = Vector3(28, 28, 1)
+	mat.uv1_scale = Vector3(18, 18, 1)
 	mat.albedo_color = tint
 	mat.roughness = 1.0
+	_apply_pbr_maps(mat, ground_tex)
 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -245,22 +319,28 @@ static func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector
 ## Canyon walls, desert dunes, or a coastal bluff on the inland shoulder.
 func _build_terrain_banks() -> void:
 	var biome := String(definition.get("biome", "coast"))
-	var step := 10.0
+	var step := 6.0
 	var samples := int(length / step) + 1
 	var mat := StandardMaterial3D.new()
 	var tex := "res://assets/textures/aerial_grass_rock_Diffuse.jpg"
-	if ResourceLoader.exists(tex):
-		mat.albedo_texture = load(tex)
-	mat.uv1_scale = Vector3(0.05, 0.05, 0.05)
-	mat.roughness = 0.97
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	match biome:
 		"desert":
-			mat.albedo_color = Color(0.95, 0.74, 0.44)
+			tex = "res://assets/textures/sand_01_Diffuse.jpg"
 		"mountain":
-			mat.albedo_color = Color(0.48, 0.52, 0.42)
+			tex = "res://assets/textures/rock_face_Diffuse.jpg"
+		"coast":
+			tex = "res://assets/textures/coast_sand_04_Diffuse.jpg"
+	mat.uv1_scale = Vector3(0.08, 0.08, 0.08)
+	mat.roughness = 0.97
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_apply_pbr_maps(mat, tex)
+	match biome:
+		"desert":
+			mat.albedo_color = Color(1.0, 0.92, 0.74)
+		"mountain":
+			mat.albedo_color = Color(0.82, 0.82, 0.8)
 		_:
-			mat.albedo_color = Color(0.38, 0.52, 0.30)
+			mat.albedo_color = Color(0.95, 0.9, 0.78)
 	for side in [-1.0, 1.0]:
 		if biome == "coast" and side < 0.0:
 			continue
@@ -293,14 +373,17 @@ func _bank_span(st: SurfaceTool, d: float, next_d: float, side: float, rise: flo
 	var up := xf.basis.y.normalized()
 	var nup := nxf.basis.y.normalized()
 	var inner := xf.origin + lat * (half_width + 2.0)
+	var shelf := xf.origin + lat * (half_width + 7.0) + up * (rise * 0.28)
 	var outer := xf.origin + lat * (half_width + 16.0)
 	var crest := outer + up * rise
 	var ninner := nxf.origin + nlat * (half_width + 2.0)
+	var nshelf := nxf.origin + nlat * (half_width + 7.0) + nup * (rise * 0.28)
 	var nouter := nxf.origin + nlat * (half_width + 16.0)
 	var ncrest := nouter + nup * rise
 	var u0 := d * 0.04
 	var u1 := next_d * 0.04
-	_quad(st, inner, outer, nouter, ninner, Vector2(0, u0), Vector2(1, u0), Vector2(1, u1), Vector2(0, u1))
+	_quad(st, inner, shelf, nshelf, ninner, Vector2(0, u0), Vector2(0.45, u0), Vector2(0.45, u1), Vector2(0, u1))
+	_quad(st, shelf, outer, nouter, nshelf, Vector2(0.45, u0), Vector2(1, u0), Vector2(1, u1), Vector2(0.45, u1))
 	_quad(st, outer, crest, ncrest, nouter, Vector2(1, u0), Vector2(1.4, u0), Vector2(1.4, u1), Vector2(1, u1))
 
 
@@ -308,13 +391,14 @@ func _build_sidewalks() -> void:
 	var step := 4.0
 	var samples := int(length / step) + 1
 	var mat := StandardMaterial3D.new()
-	var tex := "res://assets/textures/concrete_wall_008_Diffuse.jpg"
-	if ResourceLoader.exists(tex):
-		mat.albedo_texture = load(tex)
+	var tex := "res://assets/textures/painted_worn_brick_Diffuse.jpg"
+	if not ResourceLoader.exists(tex):
+		tex = "res://assets/textures/concrete_wall_008_Diffuse.jpg"
 	mat.albedo_color = Color(0.78, 0.78, 0.80) if String(definition.get("biome", "")) == "city" \
 		else Color(0.28, 0.28, 0.32)
 	mat.roughness = 0.84
 	mat.uv1_scale = Vector3(0.35, 0.35, 0.35)
+	_apply_pbr_maps(mat, tex)
 	for side in [-1.0, 1.0]:
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -374,10 +458,9 @@ func _build_guardrails() -> void:
 	rail_mesh.size = Vector3(0.08, 0.35, SEGMENT + 0.3)
 	var mat := StandardMaterial3D.new()
 	var metal := "res://assets/textures/rusty_metal_02_Diffuse.jpg"
-	if ResourceLoader.exists(metal):
-		mat.albedo_texture = load(metal)
 	mat.metallic = 0.6
 	mat.roughness = 0.5
+	_apply_pbr_maps(mat, metal)
 	rail_mesh.material = mat
 
 	var steps := int(length / SEGMENT)
@@ -405,33 +488,58 @@ func _build_props(rng_seed: int) -> void:
 	if biome == "city" or biome == "night":
 		_build_city_skyline(rng)
 		_build_city_furniture(rng)
-		_scatter_prop("res://assets/models/tree.glb", "StreetTrees", rng, 18.0, Vector2(1.5, 2.4), Vector2(0.55, 0.85), 0.0, [-1.0, 1.0])
-		_scatter_prop("res://assets/models/car.glb", "ParkedCars", rng, 34.0, Vector2(2.0, 2.6), Vector2(0.95, 1.05), 0.0, [-1.0, 1.0], true)
+		_scatter_prop(_first_model(["res://assets/models/kenney_tree.glb", "res://assets/models/tree.glb"]),
+			"StreetTrees", rng, 18.0, Vector2(1.5, 2.4), Vector2(6.0, 10.0), 0.0, [-1.0, 1.0])
+		_scatter_prop(_first_model([
+			"res://assets/models/kenney/car/car_sedan.glb", "res://assets/models/car.glb"
+		]), "ParkedCars", rng, 34.0, Vector2(2.4, 3.2), Vector2(4.3, 4.8), 0.0, [-1.0, 1.0], true, true)
+		_scatter_prop(_first_model([
+			"res://assets/models/kenney/car/car_van.glb", "res://assets/models/car.glb"
+		]), "ParkedVans", rng, 52.0, Vector2(2.6, 3.4), Vector2(4.6, 5.2), 0.0, [-1.0, 1.0], true, true)
 		return
 
 	match biome:
 		"coast":
-			_scatter_prop("res://assets/models/palm.glb", "Palms", rng, 10.0, Vector2(4.2, 9.0), Vector2(0.9, 1.4), -0.05, [1.0])
-			_scatter_prop("res://assets/models/palm.glb", "PalmsOcean", rng, 16.0, Vector2(6.0, 11.0), Vector2(0.8, 1.2), -0.8, [-1.0])
-			_scatter_prop("res://assets/models/tree.glb", "Trees", rng, 28.0, Vector2(12.0, 32.0), Vector2(0.9, 1.7), -0.3, [1.0])
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney_tree_palmTall.glb", "res://assets/models/palm.glb"
+			]), "Palms", rng, 10.0, Vector2(4.2, 9.0), Vector2(10.0, 16.0), -0.05, [1.0])
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney_tree_palm.glb", "res://assets/models/palm.glb"
+			]), "PalmsOcean", rng, 16.0, Vector2(6.0, 11.0), Vector2(8.0, 13.0), -0.8, [-1.0])
+			_scatter_prop(_first_model(["res://assets/models/kenney_tree.glb", "res://assets/models/tree.glb"]),
+				"Trees", rng, 28.0, Vector2(12.0, 32.0), Vector2(12.0, 20.0), -0.3, [1.0])
 		"desert":
-			_scatter_prop("res://assets/models/rock.glb", "Rocks", rng, 16.0, Vector2(4.5, 28.0), Vector2(0.7, 2.1), -0.2)
-			_scatter_prop("res://assets/models/cactus.glb", "Cactus", rng, 22.0, Vector2(6.0, 20.0), Vector2(0.8, 1.6), 0.0)
+			_scatter_prop(_first_model(["res://assets/models/kenney_rock.glb", "res://assets/models/rock.glb"]),
+				"Rocks", rng, 16.0, Vector2(4.5, 28.0), Vector2(2.5, 8.0), -0.2)
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney_cactus_tall.glb", "res://assets/models/cactus.glb"
+			]), "Cactus", rng, 22.0, Vector2(6.0, 20.0), Vector2(3.2, 6.0), 0.0)
+			_scatter_prop(_first_model([
+				"res://assets/models/kenney_cactus_short.glb", "res://assets/models/cactus.glb"
+			]), "CactusLow", rng, 14.0, Vector2(5.0, 16.0), Vector2(1.2, 2.4), 0.0)
 		"mountain":
-			_scatter_prop("res://assets/models/pine.glb", "Pines", rng, 8.0, Vector2(3.6, 14.0), Vector2(1.0, 1.9), -0.15)
-			_scatter_prop("res://assets/models/pine.glb", "PineWall", rng, 12.0, Vector2(14.0, 28.0), Vector2(1.2, 2.2), -0.2)
-			_scatter_prop("res://assets/models/rock.glb", "Boulders", rng, 16.0, Vector2(4.0, 12.0), Vector2(0.8, 2.0), -0.15)
+			_scatter_prop(_first_model(["res://assets/models/kenney_pine.glb", "res://assets/models/pine.glb"]),
+				"Pines", rng, 8.0, Vector2(3.6, 14.0), Vector2(14.0, 22.0), -0.15)
+			_scatter_prop(_first_model(["res://assets/models/kenney_pine.glb", "res://assets/models/pine.glb"]),
+				"PineWall", rng, 12.0, Vector2(14.0, 28.0), Vector2(18.0, 30.0), -0.2)
+			_scatter_prop(_first_model(["res://assets/models/kenney_rock.glb", "res://assets/models/rock.glb"]),
+				"Boulders", rng, 16.0, Vector2(4.0, 12.0), Vector2(2.0, 6.0), -0.15)
 			_build_tunnel()
 		_:
-			_scatter_prop("res://assets/models/tree.glb", "Props", rng, 26.0, Vector2(6.0, 34.0), Vector2(0.8, 1.6), -0.4)
+			_scatter_prop("res://assets/models/tree.glb", "Props", rng, 26.0, Vector2(6.0, 34.0), Vector2(8.0, 14.0), -0.4)
 
 
 func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 		spacing: float, clearance: Vector2, scale_range: Vector2, y_bias: float,
-		sides: Array = [-1.0, 1.0], face_road: bool = false) -> void:
+		sides: Array = [-1.0, 1.0], face_road: bool = false, fit_length: bool = false) -> void:
 	var mesh := _extract_mesh(path)
 	if mesh == null:
 		mesh = _fallback_prop_mesh(String(definition.get("biome", "coast")))
+	var aabb := mesh.get_aabb()
+	var base := aabb.size.y
+	if fit_length:
+		base = maxf(aabb.size.x, aabb.size.z)
+	base = maxf(base, 0.05)
 	var count := maxi(int(length / spacing), 1)
 	var side_count := maxi(sides.size(), 1)
 	var mm := MultiMesh.new()
@@ -439,39 +547,55 @@ func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 	mm.mesh = mesh
 	mm.instance_count = count * side_count
 	var idx := 0
+	var distances := PackedFloat32Array()
+	distances.resize(mm.instance_count)
 	for i in count:
 		for side in sides:
 			var sside := float(side)
 			var d := i * spacing + rng.randf_range(-spacing * 0.28, spacing * 0.28)
 			var lateral := (half_width + rng.randf_range(clearance.x, clearance.y)) * sside
 			var t := sample(clampf(d, 0.0, length), lateral, y_bias)
-			var s := rng.randf_range(scale_range.x, scale_range.y)
+			var s := rng.randf_range(scale_range.x, scale_range.y) / base
 			if face_road:
-				t.basis = Basis(Vector3.UP, sside * PI * 0.5).scaled(Vector3(s, s, s))
+				var inward := (-t.basis.x * sside)
+				inward.y = 0.0
+				if inward.length() < 0.001:
+					inward = Vector3.FORWARD
+				t.basis = Basis.looking_at(inward.normalized(), Vector3.UP).scaled(Vector3(s, s, s))
 			else:
 				t.basis = Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3(s, s, s))
-			var aabb := mesh.get_aabb()
 			t.origin += t.basis.y.normalized() * (-aabb.position.y * s)
 			mm.set_instance_transform(idx, t)
+			distances[idx] = d
 			idx += 1
 	var inst := MultiMeshInstance3D.new()
 	inst.name = node_name
 	inst.multimesh = mm
 	add_child(inst)
+	if node_name == "ParkedCars" or node_name == "ParkedVans" or node_name == "StreetTrees":
+		var xforms: Array = []
+		for i in mm.instance_count:
+			xforms.append(mm.get_instance_transform(i))
+		_stream_mms.append({"mm": mm, "xforms": xforms, "s": distances})
 
 
 func _build_city_skyline(rng: RandomNumberGenerator) -> void:
 	# RR3D city: shop fronts hard against the curb, then a wall of towers, then a far skyline.
-	_city_row(rng, ["res://assets/models/building_shop.glb"], 8.2, 3.6, Vector2(0.95, 1.15), Vector2(0.9, 1.15), "City_Shops")
+	# width/height ranges are target metres; Kenney kits are ~1 m tall so they get scaled up.
 	_city_row(rng, [
-		"res://assets/models/building.glb",
-		"res://assets/models/building_apartment.glb",
-		"res://assets/models/building_office.glb",
-	], 11.0, 10.5, Vector2(0.95, 1.35), Vector2(0.85, 1.7), "City_Towers")
+		"res://assets/models/kenney/city/kenney_shop_a.glb",
+		"res://assets/models/kenney/city/kenney_shop_b.glb",
+		"res://assets/models/kenney/city/kenney_shop_c.glb",
+	], 9.0, 0.6, Vector2(8.0, 12.0), Vector2(8.0, 13.0), "City_Shops")
 	_city_row(rng, [
-		"res://assets/models/building_office.glb",
-		"res://assets/models/building.glb",
-	], 22.0, 24.0, Vector2(1.6, 2.4), Vector2(1.8, 2.6), "City_Horizon")
+		"res://assets/models/kenney/city/kenney_tower_a.glb",
+		"res://assets/models/kenney/city/kenney_tower_b.glb",
+		"res://assets/models/kenney/city/kenney_tower_c.glb",
+	], 12.0, 8.0, Vector2(10.0, 16.0), Vector2(22.0, 38.0), "City_Towers")
+	_city_row(rng, [
+		"res://assets/models/kenney/city/kenney_horizon_a.glb",
+		"res://assets/models/kenney/city/kenney_horizon_b.glb",
+	], 24.0, 22.0, Vector2(16.0, 28.0), Vector2(40.0, 70.0), "City_Horizon")
 
 
 func _city_row(rng: RandomNumberGenerator, kits: Array, spacing: float, shoulder: float,
@@ -506,13 +630,15 @@ func _city_row(rng: RandomNumberGenerator, kits: Array, spacing: float, shoulder
 				if idx >= mm.instance_count:
 					break
 				var d := i * spacing + rng.randf_range(-3.0, 3.0)
-				var lateral := (half_width + shoulder + rng.randf_range(0.0, 0.8)) * side
-				var t := sample(clampf(d, 0.0, length), lateral, 0.0)
-				var w := rng.randf_range(width_range.x, width_range.y)
-				var h := rng.randf_range(height_range.x, height_range.y)
-				t.basis = Basis(Vector3.UP, -side * PI * 0.5).scaled(Vector3(w, h, w))
 				var aabb := mesh.get_aabb()
-				t.origin += Vector3.UP * (-aabb.position.y * h)
+				var foot := maxf(aabb.size.x, aabb.size.z)
+				var sx := rng.randf_range(width_range.x, width_range.y) / maxf(foot, 0.05)
+				var sy := rng.randf_range(height_range.x, height_range.y) / maxf(aabb.size.y, 0.05)
+				var half_depth := aabb.size.z * sx * 0.5
+				var lateral := (half_width + 4.5 + shoulder + half_depth) * side
+				var t := _facing_road(clampf(d, 0.0, length), lateral, 0.0, side)
+				t.basis = t.basis.scaled(Vector3(sx, sy, sx))
+				t.origin += t.basis.y.normalized() * (-aabb.position.y * sy)
 				mm.set_instance_transform(idx, t)
 				idx += 1
 		var inst := MultiMeshInstance3D.new()
@@ -566,18 +692,48 @@ func _build_billboards(rng: RandomNumberGenerator) -> void:
 	mat.emission_enabled = true
 	mat.emission = Color(0.95, 0.45, 0.12) if rng.randf() < 0.5 else Color(0.2, 0.55, 0.95)
 	mat.emission_energy_multiplier = 1.6
+	_apply_pbr_maps(mat, "res://assets/textures/rectangular_facade_tiles_02_Diffuse.jpg")
 	board.material = mat
+	var pole := CylinderMesh.new()
+	pole.top_radius = 0.09
+	pole.bottom_radius = 0.12
+	pole.height = 4.2
+	var pmat := StandardMaterial3D.new()
+	pmat.albedo_color = Color(0.18, 0.18, 0.2)
+	pole.material = pmat
 	var d := 90.0
+	var n := 0
 	while d < length - 80.0:
-		var side := -1.0 if int(d / 90.0) % 2 == 0 else 1.0
-		var mi := MeshInstance3D.new()
-		mi.mesh = board
-		mi.name = "Billboard"
-		add_child(mi)
-		var xf := sample(d, (half_width + 5.8) * side, 4.4)
-		xf.basis = Basis(Vector3.UP, side * PI * 0.5)
-		mi.global_transform = xf
+		n += 1
 		d += 140.0
+	if n <= 0:
+		return
+	var boards := MultiMesh.new()
+	boards.transform_format = MultiMesh.TRANSFORM_3D
+	boards.mesh = board
+	boards.instance_count = n
+	var poles := MultiMesh.new()
+	poles.transform_format = MultiMesh.TRANSFORM_3D
+	poles.mesh = pole
+	poles.instance_count = n
+	d = 90.0
+	var idx := 0
+	while d < length - 80.0 and idx < n:
+		var side := -1.0 if int(d / 90.0) % 2 == 0 else 1.0
+		var xf := _facing_road(d, (half_width + 5.8) * side, 4.0, side)
+		boards.set_instance_transform(idx, xf)
+		var pole_xf := sample(d, (half_width + 5.8) * side, 2.1)
+		poles.set_instance_transform(idx, pole_xf)
+		d += 140.0
+		idx += 1
+	var board_inst := MultiMeshInstance3D.new()
+	board_inst.name = "Billboard"
+	board_inst.multimesh = boards
+	add_child(board_inst)
+	var pole_inst := MultiMeshInstance3D.new()
+	pole_inst.name = "BillboardPoles"
+	pole_inst.multimesh = poles
+	add_child(pole_inst)
 
 
 func _build_streetlights() -> void:
@@ -601,10 +757,12 @@ func _build_streetlights() -> void:
 	mm.mesh = pole
 	mm.instance_count = steps * 2
 	var idx := 0
+	light_anchors.clear()
 	for i in steps:
 		for side: float in [-1.0, 1.0]:
 			var t := sample(i * spacing, (half_width + 0.85) * side, 3.6)
 			mm.set_instance_transform(idx, t)
+			light_anchors.append(t.origin)
 			idx += 1
 	var inst := MultiMeshInstance3D.new()
 	inst.name = "Streetlights"
@@ -656,6 +814,8 @@ func _build_overpasses() -> void:
 		deck.name = "Overpass"
 		add_child(deck)
 		deck.global_transform = sample(d, 0.0, 6.4)
+		deck.set_meta("track_distance", d)
+		_window_nodes.append(deck)
 		for side in [-1.0, 1.0]:
 			var pillar := MeshInstance3D.new()
 			var cyl := CylinderMesh.new()
@@ -676,13 +836,19 @@ func _build_horizon_peaks() -> void:
 	var biome := String(definition.get("biome", "coast"))
 	var mat := StandardMaterial3D.new()
 	mat.roughness = 1.0
+	var peak_tex := "res://assets/textures/aerial_grass_rock_Diffuse.jpg"
 	match biome:
 		"desert":
-			mat.albedo_color = Color(0.72, 0.52, 0.32)
+			mat.albedo_color = Color(0.92, 0.78, 0.52)
+			peak_tex = "res://assets/textures/sand_01_Diffuse.jpg"
 		"coast":
-			mat.albedo_color = Color(0.28, 0.38, 0.26)
+			mat.albedo_color = Color(0.55, 0.62, 0.48)
+		"mountain":
+			mat.albedo_color = Color(0.62, 0.64, 0.6)
+			peak_tex = "res://assets/textures/rock_face_Diffuse.jpg"
 		_:
 			mat.albedo_color = Color(0.32, 0.38, 0.34)
+	_apply_pbr_maps(mat, peak_tex)
 	var mesh: Mesh
 	if biome == "mountain":
 		var prism := PrismMesh.new()
@@ -715,8 +881,9 @@ func _build_horizon_peaks() -> void:
 
 func _build_tunnel() -> void:
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.28, 0.28, 0.3)
+	mat.albedo_color = Color(0.55, 0.54, 0.52)
 	mat.roughness = 0.95
+	_apply_pbr_maps(mat, "res://assets/textures/rock_face_Diffuse.jpg")
 	var start := length * 0.42
 	var wall_h := 6.4
 	var wall_z := 38.0
@@ -737,18 +904,81 @@ func _build_tunnel() -> void:
 	roof.name = "Tunnel"
 	add_child(roof)
 	roof.global_transform = sample(start, 0.0, wall_h + 0.4)
+	roof.set_meta("track_distance", start)
+	_window_nodes.append(roof)
+	# Emissive tunnel interior lights — cheap mood, not one OmniLight per fixture.
+	var lamp := BoxMesh.new()
+	lamp.size = Vector3(0.35, 0.08, 1.8)
+	var lamp_mat := StandardMaterial3D.new()
+	lamp_mat.albedo_color = Color(0.9, 0.85, 0.6)
+	lamp_mat.emission_enabled = true
+	lamp_mat.emission = Color(1.0, 0.82, 0.45)
+	lamp_mat.emission_energy_multiplier = 3.4
+	lamp.material = lamp_mat
+	for i in 5:
+		var li := MeshInstance3D.new()
+		li.mesh = lamp
+		li.name = "TunnelLamp"
+		add_child(li)
+		var ld := start - 14.0 + i * 7.0
+		li.global_transform = sample(ld, 0.0, wall_h - 0.2)
+		li.set_meta("track_distance", start)
+		_window_nodes.append(li)
 
 
 static func _extract_mesh(path: String) -> Mesh:
 	if not ResourceLoader.exists(path):
 		return null
-	var scene: PackedScene = load(path)
-	if scene == null:
+	var packed: Resource = load(path)
+	if packed is PackedScene:
+		var node: Node = packed.instantiate()
+		var mesh := _combine_scene_meshes(node)
+		node.queue_free()
+		return mesh
+	if packed is Mesh:
+		return packed
+	return null
+
+
+static func _combine_scene_meshes(root: Node) -> Mesh:
+	var instances: Array[MeshInstance3D] = []
+	if root is MeshInstance3D and (root as MeshInstance3D).mesh != null:
+		instances.append(root as MeshInstance3D)
+	for child in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := child as MeshInstance3D
+		if mi != null and mi.mesh != null:
+			instances.append(mi)
+	if instances.is_empty():
 		return null
-	var node := scene.instantiate()
-	var mesh := _find_mesh(node)
-	node.queue_free()
-	return mesh
+	var out := ArrayMesh.new()
+	for inst in instances:
+		var xf := _xform_to_root(inst, root)
+		for s in inst.mesh.get_surface_count():
+			var st := SurfaceTool.new()
+			st.append_from(inst.mesh, s, xf)
+			st.commit(out)
+			var mat := inst.get_active_material(s)
+			if mat != null:
+				out.surface_set_material(out.get_surface_count() - 1, mat)
+	return out if out.get_surface_count() > 0 else null
+
+
+static func _xform_to_root(node: Node3D, root: Node) -> Transform3D:
+	var xf := Transform3D.IDENTITY
+	var cur: Node = node
+	while cur != null and cur != root:
+		if cur is Node3D:
+			xf = (cur as Node3D).transform * xf
+		cur = cur.get_parent()
+	return xf
+
+
+static func _first_model(paths: Array) -> String:
+	for p in paths:
+		var s := String(p)
+		if ResourceLoader.exists(s):
+			return s
+	return String(paths[0]) if not paths.is_empty() else ""
 
 
 static func _find_mesh(node: Node) -> Mesh:
@@ -767,7 +997,9 @@ static func _fallback_prop_mesh(biome: String) -> Mesh:
 		var box := BoxMesh.new()
 		box.size = Vector3(8, 18, 8)
 		var m := StandardMaterial3D.new()
-		m.albedo_color = Color(0.16, 0.17, 0.2)
+		m.albedo_color = Color(0.82, 0.84, 0.86)
+		m.roughness = 0.86
+		_apply_pbr_maps(m, "res://assets/textures/painted_plaster_wall_Diffuse.jpg")
 		box.material = m
 		return box
 	var capsule := CapsuleMesh.new()
@@ -860,13 +1092,40 @@ func _build_water() -> void:
 	mat.roughness = 0.18
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.albedo_color.a = 0.88
+	mat.uv1_scale = Vector3(6, 6, 1)
+	if ResourceLoader.exists("res://assets/textures/asphalt_02_nor_gl.jpg"):
+		mat.normal_enabled = true
+		mat.normal_texture = load("res://assets/textures/asphalt_02_nor_gl.jpg")
+		mat.normal_scale = 0.45
 	mesh.material = mat
+	_ocean_mat = mat
 	plane.mesh = mesh
 	plane.name = "Ocean"
 	add_child(plane)
 	var t := sample(length * 0.25, -half_width - 38.0, -1.2)
 	plane.global_transform = t
 	plane.rotate_object_local(Vector3.RIGHT, -PI * 0.5)
+	# Foam strip at the verge so the water reads as a shoreline, not a slab.
+	var foam := MeshInstance3D.new()
+	var foam_mesh := PlaneMesh.new()
+	foam_mesh.size = Vector2(length * 0.32, 8.0)
+	var foam_mat := StandardMaterial3D.new()
+	foam_mat.albedo_color = Color(0.82, 0.9, 0.95, 0.55)
+	foam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	foam_mat.roughness = 0.35
+	foam_mesh.material = foam_mat
+	foam.mesh = foam_mesh
+	foam.name = "OceanFoam"
+	add_child(foam)
+	foam.global_transform = sample(length * 0.25, -half_width - 14.0, -0.4)
+	foam.rotate_object_local(Vector3.RIGHT, -PI * 0.5)
+	set_process(true)
+
+
+func _process(delta: float) -> void:
+	if _ocean_mat != null:
+		_ocean_mat.uv1_offset.x = fmod(_ocean_mat.uv1_offset.x + delta * 0.03, 1.0)
+		_ocean_mat.uv1_offset.y = fmod(_ocean_mat.uv1_offset.y + delta * 0.012, 1.0)
 
 
 func _place_animal(d: float, lateral: float, cow: bool) -> Node3D:
@@ -958,4 +1217,141 @@ func _build_finish_crowd() -> void:
 		var side := -1.0 if i < 6 else 1.0
 		var lat := (half_width + 1.6 + (i % 6) * 0.45) * side
 		person.global_transform = sample(finish_d + (i % 3) * 1.1, lat, 0.85)
+
+
+func _facing_road(d: float, lateral: float, height: float, side: float) -> Transform3D:
+	var xf := sample(d, lateral, height)
+	var up := xf.basis.y.normalized()
+	var inward := -xf.basis.x * side
+	inward.y = 0.0
+	if inward.length_squared() < 0.0001:
+		inward = Vector3.FORWARD
+	inward = inward.normalized()
+	var along := up.cross(inward)
+	if along.length_squared() < 0.0001:
+		along = -xf.basis.z
+	along = along.normalized()
+	inward = along.cross(up).normalized()
+	return Transform3D(Basis(along, up, inward), xf.origin)
+
+
+static func _apply_pbr_maps(mat: StandardMaterial3D, diffuse_path: String) -> void:
+	if ResourceLoader.exists(diffuse_path):
+		mat.albedo_texture = load(diffuse_path)
+	var nor := diffuse_path.replace("_Diffuse.jpg", "_nor_gl.jpg")
+	var arm := diffuse_path.replace("_Diffuse.jpg", "_arm.jpg")
+	if ResourceLoader.exists(nor):
+		mat.normal_enabled = true
+		mat.normal_texture = load(nor)
+		mat.normal_scale = 0.7
+	if ResourceLoader.exists(arm):
+		mat.ao_enabled = true
+		mat.ao_texture = load(arm)
+		mat.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		mat.ao_light_affect = 0.6
+		mat.roughness_texture = load(arm)
+		mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+		mat.metallic_texture = load(arm)
+		mat.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
+
+
+func _build_landmarks() -> void:
+	var d := 220.0
+	var kind := 0
+	while d < length - 160.0:
+		var side := 1.0 if kind % 2 == 0 else -1.0
+		var node := _make_landmark(kind % 3)
+		node.name = "Landmark"
+		node.set_meta("track_distance", d)
+		add_child(node)
+		var xf := _facing_road(d, (half_width + 9.5) * side, 0.0, side)
+		node.global_transform = xf
+		_window_nodes.append(node)
+		d += 400.0
+		kind += 1
+
+
+func _make_landmark(kind: int) -> Node3D:
+	var shops := [
+		"res://assets/models/kenney/city/kenney_shop_a.glb",
+		"res://assets/models/kenney/city/kenney_shop_b.glb",
+		"res://assets/models/kenney/city/kenney_shop_c.glb",
+	]
+	if kind != 0:
+		var path := _first_model([shops[kind % shops.size()], shops[0]])
+		if ResourceLoader.exists(path):
+			var packed: PackedScene = load(path)
+			var shop := packed.instantiate() as Node3D
+			if shop != null:
+				var kit := _extract_mesh(path)
+				var h := 11.0
+				if kit != null:
+					h = 11.0 / maxf(kit.get_aabb().size.y, 0.2)
+				shop.scale = Vector3(h, h, h)
+				return shop
+	var root := Node3D.new()
+	match kind:
+		0:
+			# Gas station canopy + pumps.
+			var canopy := MeshInstance3D.new()
+			var roof := BoxMesh.new()
+			roof.size = Vector3(8.0, 0.22, 6.0)
+			var rmat := StandardMaterial3D.new()
+			rmat.albedo_color = Color(0.85, 0.12, 0.1)
+			rmat.emission_enabled = true
+			rmat.emission = Color(0.9, 0.25, 0.12)
+			rmat.emission_energy_multiplier = 0.4
+			roof.material = rmat
+			canopy.mesh = roof
+			canopy.position = Vector3(0, 4.2, 0)
+			root.add_child(canopy)
+			for i in 3:
+				var pump := MeshInstance3D.new()
+				var box := BoxMesh.new()
+				box.size = Vector3(0.6, 1.4, 0.45)
+				var pmat := StandardMaterial3D.new()
+				pmat.albedo_color = Color(0.85, 0.85, 0.82)
+				_apply_pbr_maps(pmat, "res://assets/textures/metal_plate_Diffuse.jpg")
+				box.material = pmat
+				pump.mesh = box
+				pump.position = Vector3(-2.0 + i * 2.0, 0.7, 0.0)
+				root.add_child(pump)
+		1:
+			# Plaza kiosk.
+			var slab := MeshInstance3D.new()
+			var slab_mesh := BoxMesh.new()
+			slab_mesh.size = Vector3(10.0, 0.18, 8.0)
+			var smat := StandardMaterial3D.new()
+			smat.albedo_color = Color(0.78, 0.78, 0.76)
+			_apply_pbr_maps(smat, "res://assets/textures/painted_worn_brick_Diffuse.jpg")
+			slab_mesh.material = smat
+			slab.mesh = slab_mesh
+			slab.position = Vector3(0, 0.1, 0)
+			root.add_child(slab)
+			var kiosk := MeshInstance3D.new()
+			var kmesh := BoxMesh.new()
+			kmesh.size = Vector3(3.2, 3.4, 3.2)
+			var kmat := StandardMaterial3D.new()
+			kmat.albedo_color = Color(0.85, 0.86, 0.88)
+			kmat.emission_enabled = true
+			kmat.emission = Color(0.4, 0.7, 1.0)
+			kmat.emission_energy_multiplier = 0.6
+			_apply_pbr_maps(kmat, "res://assets/textures/painted_plaster_wall_Diffuse.jpg")
+			kmesh.material = kmat
+			kiosk.mesh = kmesh
+			kiosk.position = Vector3(0, 1.8, 0)
+			root.add_child(kiosk)
+		_:
+			# Rest-stop shed.
+			var shed := MeshInstance3D.new()
+			var shed_mesh := BoxMesh.new()
+			shed_mesh.size = Vector3(5.5, 3.2, 4.0)
+			var shed_mat := StandardMaterial3D.new()
+			shed_mat.albedo_color = Color(0.78, 0.74, 0.68)
+			_apply_pbr_maps(shed_mat, "res://assets/textures/painted_plaster_wall_Diffuse.jpg")
+			shed_mesh.material = shed_mat
+			shed.mesh = shed_mesh
+			shed.position = Vector3(0, 1.6, 0)
+			root.add_child(shed)
+	return root
 

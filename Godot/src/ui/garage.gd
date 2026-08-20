@@ -4,6 +4,8 @@ extends Control
 
 var _cash_label: Label
 var _list: VBoxContainer
+var _preview_world: Node3D
+var _preview_model: Node3D
 
 
 func _ready() -> void:
@@ -65,7 +67,8 @@ func _rebuild() -> void:
 			button.pressed.connect(func():
 				GameState.save["bike"] = id
 				GameState.persist()
-				_rebuild())
+				_rebuild()
+				_refresh_preview())
 		else:
 			button.text = "BUY $%d" % int(bike["price"])
 			button.disabled = int(GameState.save.get("cash", 0)) < int(bike["price"])
@@ -75,7 +78,8 @@ func _rebuild() -> void:
 				GameState.save["bike"] = id
 				GameState.persist()
 				AudioDirector.play("pickup", -6.0)
-				_rebuild())
+				_rebuild()
+				_refresh_preview())
 		button.add_theme_stylebox_override("normal", ThemeColors.button_style())
 		button.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
 		row.add_child(button)
@@ -93,30 +97,59 @@ func _rebuild() -> void:
 
 
 func _add_bike_preview() -> void:
-	if not ResourceLoader.exists("res://assets/models/bike.glb"):
-		return
 	var host := SubViewportContainer.new()
-	host.custom_minimum_size = Vector2(420, 160)
+	host.custom_minimum_size = Vector2(420, 200)
 	host.stretch = true
 	add_child(host)
 	host.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	host.offset_top = 12
-	host.offset_bottom = 172
+	host.offset_top = 8
+	host.offset_bottom = 208
 	var vp := SubViewport.new()
 	vp.transparent_bg = true
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	host.add_child(vp)
-	var world := Node3D.new()
-	vp.add_child(world)
-	var model := (load("res://assets/models/bike.glb") as PackedScene).instantiate()
-	world.add_child(model)
+	_preview_world = Node3D.new()
+	vp.add_child(_preview_world)
 	var cam := Camera3D.new()
-	cam.position = Vector3(2.8, 1.5, 3.2)
-	world.add_child(cam)
-	View.look_at(cam, Vector3(0, 0.8, 0))
+	cam.position = Vector3(1.15, 0.72, 1.45)
+	_preview_world.add_child(cam)
+	View.look_at(cam, Vector3(0, 0.55, 0))
 	var light := DirectionalLight3D.new()
 	light.rotation_degrees = Vector3(-40, 30, 0)
-	world.add_child(light)
+	_preview_world.add_child(light)
+	_refresh_preview()
+
+
+func _bike_preview_path(bike_id: String) -> String:
+	match bike_id:
+		"sport":
+			return "res://assets/models/bike.glb"
+		"kami":
+			return "res://assets/models/bike_kami.glb"
+		"super":
+			return "res://assets/models/bike_super.glb"
+		_:
+			return "res://assets/models/bike_rat.glb"
+
+
+func _refresh_preview() -> void:
+	if _preview_world == null:
+		return
+	if _preview_model != null:
+		_preview_model.queue_free()
+		_preview_model = null
+	var path := _bike_preview_path(String(GameState.save.get("bike", "rat")))
+	if not ResourceLoader.exists(path):
+		path = "res://assets/models/bike.glb"
+	if not ResourceLoader.exists(path):
+		return
+	var scene: PackedScene = load(path)
+	if scene == null:
+		return
+	_preview_model = scene.instantiate() as Node3D
+	if _preview_model == null:
+		return
+	_preview_world.add_child(_preview_model)
 
 
 func _upgrade_row(label_text: String, key: String) -> void:

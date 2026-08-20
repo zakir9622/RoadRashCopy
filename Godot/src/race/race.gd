@@ -15,11 +15,16 @@ var player: Rider
 var camera: Camera3D
 var hud: CanvasLayer
 var _biome := "coast"
+var _night := false
+var _environment: Environment
+var _sun: DirectionalLight3D
+var _weather
+var _street_lights
 
-var _fov_base := 62.0
-var _cam_back := 2.4
-var _cam_up := 1.35
-var _cam_look := 8.0
+var _fov_base := 68.0
+var _cam_back := 6.2
+var _cam_up := 2.05
+var _cam_look := 55.0
 var _cockpit: Node3D
 
 
@@ -34,12 +39,57 @@ func _state() -> Node:
 	return get_node_or_null("/root/GameState")
 
 
+func _gfx():
+	return get_node_or_null("/root/GraphicsSettings")
+
+
+func apply_graphics() -> void:
+	var gfx =  _gfx()
+	if gfx == null:
+		return
+	_cam_back = float(gfx.call("cam_back"))
+	_cam_up = float(gfx.call("cam_up"))
+	_cam_look = float(gfx.call("cam_look"))
+	gfx.call("apply_to_environment", _environment, _sun, _night)
+	if _weather != null:
+		_weather.call("configure", track, player, camera, _biome)
+	if _street_lights != null:
+		_street_lights.call("configure", track.light_anchors, player, int(gfx.call("street_omni_count")))
+	if hud != null and hud.has_method("refresh_quality"):
+		hud.refresh_quality()
+
+
+func update_detail_window() -> void:
+	if track != null and player != null:
+		track.set_detail_window(player.distance)
+
+
+func _spawn_weather() -> void:
+	_weather = (load("res://src/race/weather_director.gd") as GDScript).new()
+	_weather.name = "Weather"
+	add_child(_weather)
+	_weather.call("configure", track, player, camera, _biome)
+
+
+func _spawn_street_lights() -> void:
+	_street_lights = (load("res://src/race/street_light_pool.gd") as GDScript).new()
+	_street_lights.name = "StreetLights"
+	add_child(_street_lights)
+	var gfx = _gfx()
+	var count := 0
+	if gfx != null:
+		count = int(gfx.call("street_omni_count"))
+	if track != null:
+		_street_lights.call("configure", track.light_anchors, player, count)
+
+
 func _ready() -> void:
 	if _context() == null or _state() == null:
 		push_error("Race: RaceContext and GameState autoloads are required")
 		return
 	var definition: Dictionary = _context().track()
 	_biome = String(definition.get("biome", "coast"))
+	_night = bool(definition.get("night", false)) or _biome == "night"
 
 	track = Track.new()
 	track.name = "Track"
@@ -65,12 +115,20 @@ func _ready() -> void:
 	var traffic := Traffic.new()
 	traffic.name = "Traffic"
 	add_child(traffic)
-	traffic.build(track, int(definition["traffic"]), player)
+	var traffic_count := int(definition["traffic"])
+	var gfx =  _gfx()
+	if gfx != null and gfx.is_high() and (_biome == "city" or _biome == "night"):
+		traffic_count = mini(traffic_count + 8, 36)
+	traffic.build(track, traffic_count, player)
 
 	manager.configure(track, player, rival_ais, police_ais, traffic, int(definition["police"]))
 	manager.spawn_police_behind = _spawn_police_unit
 	manager.finished.connect(_on_finished)
 	manager.start()
+
+	_spawn_weather()
+	_spawn_street_lights()
+	apply_graphics()
 
 	Sfx.play_music()
 
@@ -84,8 +142,9 @@ func _spawn_grid(definition: Dictionary) -> void:
 	var rasher := "Rasher"
 	if _state().has_method("player_display_name"):
 		rasher = String(_state().call("player_display_name"))
-	# Classic Road Rash: you start at the BACK of a tight 15-bike pack.
-	player = _make_rider(rasher, 14.0, 0.0, Color(0.9, 0.35, 0.1))
+	# Classic Road Rash: you start at the BACK of a tight 15-bike pack and
+	# have to fight through it before the first corner.
+	player = _make_rider(rasher, 8.0, 0.0, Color(0.9, 0.35, 0.1))
 	player.is_player = true
 	player.rider_id = "player"
 	player.top_speed = float(spec["top_speed"])
@@ -106,7 +165,7 @@ func _spawn_grid(definition: Dictionary) -> void:
 		var profile: Dictionary = Campaign.ROSTER[i]
 		var lateral := lerpf(-track.half_width * 0.72, track.half_width * 0.72,
 			float(i) / maxf(float(rival_count - 1), 1.0))
-		var stagger := 18.0 + (i % 7) * 2.6 + (i / 7) * 1.8
+		var stagger := 12.0 + (i % 5) * 2.0 + int(i / 5) * 1.15
 		var gang := String(profile.get("gang", "Desades"))
 		var suit: Color = Campaign.GANG_COLORS.get(gang, Color(0.5, 0.5, 0.5))
 		if Story.is_hostile(_state().save, String(profile["id"])) and String(profile["id"]) == "natasha":
@@ -116,7 +175,7 @@ func _spawn_grid(definition: Dictionary) -> void:
 		rival.rider_id = String(profile["id"])
 		rival.gang = gang
 		rival.suit_color = suit
-		rival.body_color = suit.lightened(0.15)
+		# Keep factory tank/fairing paint. Gang colour is the leathers, not the whole machine.
 		rival.top_speed = (44.0 + float(profile["skill"]) * 18.0) * scale
 		rival.accel = (10.0 + float(profile["skill"]) * 6.0) * scale
 		rival.weapon = int(profile["weapon"])
@@ -198,7 +257,11 @@ func _make_bike_visual(colour: Color, cop: bool, rider: Rider) -> Node3D:
 			var model := scene.instantiate() as Node3D
 			if model != null:
 				model.scale = Vector3(1.0, 1.0, 1.0)
-				_tint_model(model, colour)
+				_apply_hero_materials(model)
+				# Factory paint stays on rival bikes; only the player/cop get a body tint.
+				# Gang colour lives on the leathers (suit), not the chrome and tyres.
+				if cop or (rider != null and rider.is_player):
+					_tint_model(model, colour)
 				if rider != null and rider.is_player:
 					_hide_helmet_from_cockpit(model)
 				return model
@@ -241,14 +304,73 @@ static func _tint_model(model: Node3D, colour: Color) -> void:
 			var std := mat as StandardMaterial3D
 			if std == null:
 				continue
-			# Tintable panels are the generator's "body" material, marked
-			# bright red as a fallback signature.
-			var by_name := std.resource_name.begins_with("body")
-			var by_color := std.albedo_color.r > 0.85 and std.albedo_color.g < 0.3
-			if by_name or by_color:
+			# Only painted body panels (tank / fairing). Never tyres, chrome, or engine.
+			var mat_name := std.resource_name.to_lower()
+			var mesh_name := String(mesh_child.name).to_lower()
+			var painted := mat_name.begins_with("body") \
+				or mesh_name.begins_with("tank") or mesh_name.begins_with("nose") \
+				or mesh_name.begins_with("fairing") or mesh_name.begins_with("tail") \
+				or mesh_name.begins_with("side_") or mesh_name.begins_with("fender")
+			if painted:
 				var tinted := std.duplicate() as StandardMaterial3D
-				tinted.albedo_color = colour
+				tinted.albedo_color = std.albedo_color.lerp(colour, 0.55)
+				tinted.metallic = maxf(std.metallic, 0.4)
+				tinted.roughness = minf(std.roughness, 0.28)
 				mesh_child.set_surface_override_material(surface, tinted)
+
+
+static func _apply_hero_materials(model: Node3D) -> void:
+	for child in model.find_children("*", "MeshInstance3D", true, false):
+		var mesh_child := child as MeshInstance3D
+		if mesh_child.mesh == null:
+			continue
+		for surface in mesh_child.mesh.get_surface_count():
+			var mat := mesh_child.get_surface_override_material(surface)
+			if mat == null:
+				mat = mesh_child.mesh.surface_get_material(surface)
+			var std := mat as StandardMaterial3D
+			if std == null:
+				continue
+			var mat_name := std.resource_name.to_lower()
+			var tuned := std.duplicate() as StandardMaterial3D
+			if mat_name.begins_with("rubber"):
+				tuned.metallic = 0.0
+				tuned.roughness = 0.96
+				tuned.albedo_color = Color(0.08, 0.08, 0.08)
+				_bind_hero_maps(tuned, "res://assets/textures/rubber_tiles_Diffuse.jpg")
+			elif mat_name.begins_with("chrome"):
+				tuned.metallic = 1.0
+				tuned.roughness = 0.08
+				_bind_hero_maps(tuned, "res://assets/textures/metal_plate_Diffuse.jpg")
+			elif mat_name.begins_with("body"):
+				tuned.metallic = maxf(tuned.metallic, 0.48)
+				tuned.roughness = minf(tuned.roughness, 0.2)
+			elif mat_name.begins_with("boot"):
+				tuned.roughness = 0.9
+				tuned.metallic = 0.05
+			else:
+				continue
+			mesh_child.set_surface_override_material(surface, tuned)
+
+
+static func _bind_hero_maps(mat: StandardMaterial3D, diffuse_path: String) -> void:
+	if not ResourceLoader.exists(diffuse_path):
+		return
+	mat.albedo_texture = load(diffuse_path)
+	var nor := diffuse_path.replace("_Diffuse.jpg", "_nor_gl.jpg")
+	var arm := diffuse_path.replace("_Diffuse.jpg", "_arm.jpg")
+	if ResourceLoader.exists(nor):
+		mat.normal_enabled = true
+		mat.normal_texture = load(nor)
+		mat.normal_scale = 0.55
+	if ResourceLoader.exists(arm):
+		mat.ao_enabled = true
+		mat.ao_texture = load(arm)
+		mat.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+		mat.roughness_texture = load(arm)
+		mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+		mat.metallic_texture = load(arm)
+		mat.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
 
 
 func _build_environment(definition: Dictionary) -> void:
@@ -313,10 +435,11 @@ func _build_environment(definition: Dictionary) -> void:
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
+	_environment = env
 
 	var sun := DirectionalLight3D.new()
-	sun.shadow_enabled = false
-	sun.directional_shadow_max_distance = 180.0
+	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 140.0
 	match biome:
 		"desert":
 			sun.rotation_degrees = Vector3(-42.0, 28.0, 0.0)
@@ -335,14 +458,11 @@ func _build_environment(definition: Dictionary) -> void:
 			sun.light_energy = 1.05
 			sun.light_color = Color(1.0, 0.42, 0.22)
 	add_child(sun)
+	_sun = sun
 
 
-func _hide_helmet_from_cockpit(visual: Node3D) -> void:
-	# Cockpit sits in front of the visor; keep the head out of the lens.
-	for n in ["helmet", "mesh_head", "visor"]:
-		var node := visual.find_child(n, true, false)
-		if node is VisualInstance3D:
-			(node as VisualInstance3D).layers = 2
+func _hide_helmet_from_cockpit(_visual: Node3D) -> void:
+	pass
 
 
 func _build_camera() -> void:
@@ -350,11 +470,8 @@ func _build_camera() -> void:
 	camera.fov = _fov_base
 	camera.near = 0.12
 	camera.far = 900.0
-	camera.cull_mask = camera.cull_mask & ~2
 	add_child(camera)
 	camera.make_current()
-	if player != null and player.visual != null:
-		_cockpit = player.visual.find_child("cockpit_cam", true, false) as Node3D
 	_snap_camera()
 
 
@@ -362,43 +479,33 @@ func _snap_camera() -> void:
 	_update_camera(1.0)
 
 
+## Road Rash 3D camera: behind and above the bike so you see the machine,
+## the rider, and the next corner — not a cockpit that hides all three.
 func _update_camera(delta: float) -> void:
 	if player == null or track == null or camera == null:
 		return
-	if player.state == Rider.State.RIDING or player.state == Rider.State.REMOUNT \
-			or player.is_airborne():
-		_cockpit_camera(delta)
-	else:
-		_chase_camera(delta)
-
-
-func _cockpit_camera(delta: float) -> void:
-	if _cockpit == null and player.visual != null:
-		_cockpit = player.visual.find_child("cockpit_cam", true, false) as Node3D
-	var origin: Vector3
-	if _cockpit != null:
-		origin = _cockpit.global_position
-	else:
-		origin = track.sample(player.distance + 0.28, player.lateral, 1.18 + player.air_height).origin
-	var look := track.sample(player.distance + 16.0, player.lateral * 0.10, 0.62 + player.air_height * 0.25)
-	if delta >= 0.99 or camera.global_position.distance_to(origin) > 8.0:
-		camera.global_position = origin
-	else:
-		camera.global_position = camera.global_position.lerp(origin, 1.0 - exp(-16.0 * delta))
-	View.look_at(camera, look.origin)
-	camera.rotate_object_local(Vector3.FORWARD, player.lean * 1.05)
-	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
-	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 12.0, 7.0 * delta)
+	_chase_camera(delta)
 
 
 func _chase_camera(delta: float) -> void:
-	var behind := track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.4, _cam_up)
-	var look := track.sample(player.distance + 4.0, player.lateral * 0.2, 0.55)
-	if delta >= 0.99 or camera.global_position.distance_to(behind.origin) > 10.0:
+	var back := _cam_back
+	var up := _cam_up
+	var look_ahead := _cam_look
+	if player.state == Rider.State.CRASHED or player.state == Rider.State.RUNNING:
+		back = 7.4
+		up = 2.1
+		look_ahead = 10.0
+	var behind := track.sample(maxf(player.distance - back, 0.0), player.lateral * 0.28, up + player.air_height * 0.35)
+	var look := track.sample(player.distance + look_ahead, player.lateral * 0.12, 0.7 + player.air_height * 0.2)
+	if delta >= 0.99 or camera.global_position.distance_to(behind.origin) > 12.0:
 		camera.global_position = behind.origin
 	else:
-		camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-10.0 * delta))
+		camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-12.0 * delta))
 	View.look_at(camera, look.origin)
+	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
+	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 10.0, 6.0 * delta)
+	if player.state == Rider.State.RIDING:
+		camera.rotate_object_local(Vector3.FORWARD, player.lean * 0.35)
 
 
 func _build_hud() -> void:
@@ -465,6 +572,31 @@ func _toggle_pause() -> void:
 	resume.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
 	resume.pressed.connect(_toggle_pause)
 	box.add_child(resume)
+
+	var restart := Button.new()
+	restart.text = "RESTART"
+	restart.add_theme_font_size_override("font_size", 24)
+	restart.add_theme_stylebox_override("normal", ThemeColors.button_style())
+	restart.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
+	restart.pressed.connect(func():
+		get_tree().paused = false
+		get_tree().reload_current_scene())
+	box.add_child(restart)
+
+	var settings_btn := Button.new()
+	settings_btn.text = "SETTINGS"
+	settings_btn.add_theme_font_size_override("font_size", 24)
+	settings_btn.add_theme_stylebox_override("normal", ThemeColors.button_style())
+	settings_btn.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
+	settings_btn.pressed.connect(func():
+		var packed: PackedScene = load("res://src/ui/Settings.tscn")
+		if packed == null:
+			return
+		var panel := packed.instantiate()
+		_pause_layer.add_child(panel)
+		if panel.has_signal("closed"):
+			panel.closed.connect(apply_graphics))
+	box.add_child(settings_btn)
 
 	var quit_button := Button.new()
 	quit_button.text = "QUIT TO MENU"

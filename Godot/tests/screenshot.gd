@@ -5,6 +5,7 @@ extends SceneTree
 
 const AUTOLOADS := {
 	"GameState": "res://src/autoload/game_state.gd",
+	"GraphicsSettings": "res://src/autoload/graphics_settings.gd",
 	"RaceContext": "res://src/autoload/race_context.gd",
 	"AudioDirector": "res://src/autoload/audio_director.gd",
 }
@@ -30,12 +31,13 @@ func _run() -> void:
 	await process_frame
 
 	await _shoot("res://src/ui/MainMenu.tscn", out.path_join("menu.png"), 18, "")
-	await _shoot("res://src/race/Race.tscn", out.path_join("race_coast.png"), 10, "coast_run")
-	await _shoot("res://src/race/Race.tscn", out.path_join("race_city.png"), 10, "downtown")
-	await _shoot("res://src/race/Race.tscn", out.path_join("race_desert.png"), 10, "palm_desert")
-	await _shoot("res://src/race/Race.tscn", out.path_join("race_sierra.png"), 10, "sierra_pass")
-	await _shoot("res://src/race/Race.tscn", out.path_join("race_night.png"), 10, "night_city")
+	await _shoot("res://src/race/Race.tscn", out.path_join("race_coast.png"), 8, "coast_run")
+	await _shoot("res://src/race/Race.tscn", out.path_join("race_city.png"), 8, "downtown")
+	await _shoot("res://src/race/Race.tscn", out.path_join("race_desert.png"), 8, "palm_desert")
+	await _shoot("res://src/race/Race.tscn", out.path_join("race_sierra.png"), 8, "sierra_pass")
+	await _shoot("res://src/race/Race.tscn", out.path_join("race_night.png"), 8, "night_city")
 	await _shoot("res://src/ui/Garage.tscn", out.path_join("garage.png"), 12, "")
+	await _shoot("res://src/ui/Settings.tscn", out.path_join("settings.png"), 8, "")
 
 	print("SCREENSHOTS DONE")
 	quit(0)
@@ -56,13 +58,21 @@ func _shoot(scene_path: String, out_path: String, frames: int, track_id: String)
 	var instance := scene.instantiate()
 	root.add_child(instance)
 
+	if scene_path.contains("Race"):
+		_skip_countdown(instance)
+		_place_pack(instance)
+
 	for frame in frames:
 		await process_frame
 
 	if scene_path.contains("Race"):
-		_prepare_race_shot(instance)
+		_skip_countdown(instance)
+		_place_pack(instance)
 		_frame_chase(instance)
+		_clear_countdown_labels(instance)
 		await process_frame
+		await process_frame
+		_freeze_tree(instance)
 		await process_frame
 
 	var image := root.get_viewport().get_texture().get_image()
@@ -74,17 +84,22 @@ func _shoot(scene_path: String, out_path: String, frames: int, track_id: String)
 	await process_frame
 
 
-func _prepare_race_shot(instance: Node) -> void:
-	var player := instance.get("player") as Rider
+func _skip_countdown(instance: Node) -> void:
 	var manager = instance.get("manager")
+	if manager == null:
+		return
+	manager.phase = RaceManager.Phase.RACING
+	manager.countdown_remaining = -2.0
+
+
+func _place_pack(instance: Node) -> void:
+	var player := instance.get("player") as Rider
 	if player == null:
 		return
-	if manager != null:
-		manager.phase = RaceManager.Phase.RACING
-		manager.countdown_remaining = 0.0
-	player.distance = 420.0
+	# Mid first corner so the chase look-ahead shows the road actually bending.
+	player.distance = 100.0
 	player.lateral = 0.0
-	player.speed = 34.0
+	player.speed = 38.0
 	player.in_throttle = 1.0
 	if player.has_method("_apply_transform"):
 		player._apply_transform()
@@ -92,13 +107,12 @@ func _prepare_race_shot(instance: Node) -> void:
 	for child in instance.get_children():
 		if child is Rider and child != player:
 			var rival := child as Rider
-			rival.distance = 455.0 + extra * 7.0
-			rival.lateral = clampf(rival.lateral, -4.0, 4.0)
-			rival.speed = 28.0
+			rival.distance = 112.0 + extra * 4.2
+			rival.lateral = clampf(-3.0 + extra * 1.05, -4.5, 4.5)
+			rival.speed = 32.0
 			if rival.has_method("_apply_transform"):
 				rival._apply_transform()
 			extra += 1
-	_freeze_tree(instance)
 
 
 func _freeze_tree(node: Node) -> void:
@@ -108,14 +122,23 @@ func _freeze_tree(node: Node) -> void:
 		_freeze_tree(child)
 
 
+func _clear_countdown_labels(node: Node) -> void:
+	if node is Label:
+		var text := String((node as Label).text)
+		if text in ["1", "2", "3", "GO!"]:
+			(node as Label).text = ""
+	for child in node.get_children():
+		_clear_countdown_labels(child)
+
+
 func _frame_chase(instance: Node) -> void:
 	var cam := instance.get("camera") as Camera3D
 	var track := instance.get("track") as Track
 	var player := instance.get("player") as Rider
 	if cam == null or track == null or player == null:
 		return
-	var behind := track.sample(maxf(player.distance - 8.0, 0.0), player.lateral * 0.2, 2.7)
-	var look := track.sample(player.distance + 24.0, player.lateral * 0.1, 0.85)
+	var behind := track.sample(maxf(player.distance - 6.2, 0.0), player.lateral * 0.28, 2.05)
+	var look := track.sample(player.distance + 55.0, player.lateral * 0.08, 0.7)
 	cam.global_position = behind.origin
 	View.look_at(cam, look.origin)
-	cam.fov = 60.0
+	cam.fov = 68.0

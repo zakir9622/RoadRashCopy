@@ -3,7 +3,7 @@ extends Node
 ## so a future format change migrates instead of corrupting.
 
 const SAVE_PATH := "user://save.json"
-const SCHEMA := 2
+const SCHEMA := 3
 
 var save: Dictionary = _default_save()
 
@@ -29,6 +29,14 @@ static func _default_save() -> Dictionary:
 		"game_over": false,
 		"champion": false,
 		"seen_prologue": false,
+		"graphics_quality": "high",
+		"steer_sensitivity": 1.0,
+		"invert_swipe": false,
+		"show_brake": true,
+		"mirrors": false,
+		"weather": "auto",
+		"camera_distance": "far",
+		"camera_look": 55.0,
 	}
 
 

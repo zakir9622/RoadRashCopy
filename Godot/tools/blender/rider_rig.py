@@ -115,14 +115,16 @@ def _cyl_between(name, a, b, radius, material, verts=12):
     o.name = name
     _align_z(o, b - a)
     o.data.materials.append(material)
+    bpy.ops.object.shade_smooth()
     return o
 
 
 def _sphere_at(name, loc, radius, material, segments=12):
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=loc, segments=segments, ring_count=8)
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=loc, segments=segments, ring_count=max(10, segments // 2))
     o = bpy.context.active_object
     o.name = name
     o.data.materials.append(material)
+    bpy.ops.object.shade_smooth()
     return o
 
 
@@ -133,49 +135,71 @@ def _world_bone(arm, name):
     return head, tail
 
 
+def _mat(name, color, metallic=0.0, roughness=0.6):
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    bsdf = m.node_tree.nodes["Principled BSDF"]
+    bsdf.inputs["Base Color"].default_value = (*color, 1.0)
+    bsdf.inputs["Metallic"].default_value = metallic
+    bsdf.inputs["Roughness"].default_value = roughness
+    return m
+
+
 def build_skinned_mesh(arm, suit, skin, helm, visor, scale=1.0):
     s = scale
     parts = []
     bpy.context.view_layer.update()
+    boot = _mat("boot", (0.055, 0.04, 0.032), roughness=0.92)
+    glove = _mat("glove", (0.07, 0.06, 0.05), roughness=0.88)
 
-    def bone_cyl(name, radius, material):
+    def bone_cyl(name, radius, material, verts=14):
         h, t = _world_bone(arm, name)
-        parts.append(_cyl_between(f"mesh_{name}", h, t, radius * s, material))
+        parts.append(_cyl_between(f"mesh_{name}", h, t, radius * s, material, verts))
 
-    # Jacketed torso — spheres + thick capsules, not stick-figure cylinders.
+    # Jacketed torso — overlapping spheres, not a stick of cylinders.
     hips_h, hips_t = _world_bone(arm, "hips")
     chest_h, chest_t = _world_bone(arm, "chest")
-    parts.append(_sphere_at("mesh_hips", (hips_h + hips_t) * 0.5, 0.13 * s, suit, 16))
-    parts.append(_sphere_at("mesh_chest", (chest_h + chest_t) * 0.5, 0.16 * s, suit, 16))
-    bone_cyl("spine", 0.13, suit)
-    bone_cyl("chest", 0.12, suit)
-    bone_cyl("neck", 0.05, skin)
+    hips = _sphere_at("mesh_hips", (hips_h + hips_t) * 0.5, 0.145 * s, suit, 20)
+    hips.scale = (1.15, 0.85, 0.95)
+    parts.append(hips)
+    chest = _sphere_at("mesh_chest", (chest_h + chest_t) * 0.5, 0.175 * s, suit, 20)
+    chest.scale = (1.22, 0.72, 1.15)
+    parts.append(chest)
+    bone_cyl("spine", 0.14, suit)
+    bone_cyl("chest", 0.13, suit)
+    bone_cyl("neck", 0.052, skin)
     h, t = _world_bone(arm, "head")
     head_c = (h + t) * 0.5
-    parts.append(_sphere_at("mesh_head", head_c, 0.11 * s, skin, 20))
-    helm_c = head_c + Vector((0, 0.015 * s, 0.02 * s))
-    parts.append(_sphere_at("helmet", helm_c, 0.135 * s, helm, 20))
-    visor_c = head_c + Vector((0, 0.10 * s, 0.01 * s))
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.09 * s, location=visor_c, segments=16, ring_count=8)
+    parts.append(_sphere_at("mesh_head", head_c, 0.115 * s, skin, 24))
+    helm_c = head_c + Vector((0, 0.018 * s, 0.018 * s))
+    helmet = _sphere_at("helmet", helm_c, 0.142 * s, helm, 24)
+    parts.append(helmet)
+    visor_c = head_c + Vector((0, 0.11 * s, 0.012 * s))
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.092 * s, location=visor_c, segments=18, ring_count=10)
     vis = bpy.context.active_object
     vis.name = "visor"
-    vis.scale = (1.05, 0.35, 0.55)
+    vis.scale = (1.08, 0.32, 0.52)
     bpy.ops.object.transform_apply(scale=True)
     vis.rotation_euler = (_rad(12), 0, 0)
     vis.data.materials.append(visor)
     parts.append(vis)
 
     for side in ("l", "r"):
-        bone_cyl(f"shoulder_{side}", 0.07, suit)
-        bone_cyl(f"upper_arm_{side}", 0.055, suit)
-        bone_cyl(f"forearm_{side}", 0.048, suit)
+        bone_cyl(f"shoulder_{side}", 0.078, suit)
+        bone_cyl(f"upper_arm_{side}", 0.062, suit)
+        bone_cyl(f"forearm_{side}", 0.052, suit)
         hh, ht = _world_bone(arm, f"hand_{side}")
-        parts.append(_sphere_at(f"glove_{side}", (hh + ht) * 0.5, 0.052 * s, suit, 12))
-        bone_cyl(f"thigh_{side}", 0.08, suit)
-        bone_cyl(f"shin_{side}", 0.062, suit)
+        parts.append(_sphere_at(f"glove_{side}", (hh + ht) * 0.5, 0.055 * s, glove, 14))
+        bone_cyl(f"thigh_{side}", 0.092, suit)
+        bone_cyl(f"shin_{side}", 0.068, suit)
         fh, ft = _world_bone(arm, f"foot_{side}")
-        parts.append(_cyl_between(f"boot_{side}", fh, ft, 0.055 * s, suit, 12))
-        parts.append(_sphere_at(f"knee_{side}", fh, 0.05 * s, suit, 10))
+        boot_cyl = _cyl_between(f"boot_{side}", fh, ft, 0.058 * s, boot, 12)
+        parts.append(boot_cyl)
+        heel = _sphere_at(f"boot_heel_{side}", fh, 0.048 * s, boot, 12)
+        parts.append(heel)
+        toe = _sphere_at(f"boot_toe_{side}", ft + Vector((0, -0.02 * s, 0)), 0.042 * s, boot, 12)
+        parts.append(toe)
+        parts.append(_sphere_at(f"knee_{side}", fh, 0.055 * s, suit, 12))
 
     bpy.ops.object.select_all(action="DESELECT")
     for p in parts:
@@ -184,6 +208,7 @@ def build_skinned_mesh(arm, suit, skin, helm, visor, scale=1.0):
     bpy.ops.object.join()
     mesh = bpy.context.active_object
     mesh.name = "rider_mesh"
+    bpy.ops.object.shade_smooth()
 
     bpy.ops.object.select_all(action="DESELECT")
     mesh.select_set(True)

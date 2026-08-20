@@ -57,13 +57,21 @@ void fragment() {
 	albedo = mix(albedo, line_color.rgb, clamp(edge + lanes, 0.0, 1.0) * 0.95);
 	albedo = mix(albedo, center_color.rgb, clamp(center, 0.0, 1.0) * 0.98);
 
+	float tracks = stripe(u, 0.38, 0.045) + stripe(u, 0.62, 0.045);
+	albedo *= 1.0 - tracks * (0.08 + wetness * 0.16);
+
+	float puddle = wetness * smoothstep(0.32, 0.62, texture(albedo_tex, uv * 0.28).r);
+	float ripple = sin(TIME * 9.0 + track_uv.y * 14.0 + track_uv.x * 22.0) * 0.5 + 0.5;
+
 	ALBEDO = albedo;
-	NORMAL_MAP = texture(normal_tex, uv).rgb;
+	vec3 nmap = texture(normal_tex, uv).rgb;
+	nmap = mix(nmap, vec3(0.5, 0.5, 1.0) + vec3(ripple - 0.5, ripple - 0.5, 0.0) * 0.22, puddle);
+	NORMAL_MAP = nmap;
 	AO = arm.r;
-	float shine = clamp(edge + center + wetness, 0.0, 1.0);
-	ROUGHNESS = mix(arm.g, 0.18, shine * 0.65);
-	METALLIC = mix(arm.b, 0.15, wetness);
+	float shine = clamp(edge + center + wetness + puddle, 0.0, 1.0);
+	ROUGHNESS = mix(arm.g, 0.12, shine * 0.72);
+	METALLIC = mix(arm.b, 0.18, wetness * 0.85 + puddle * 0.2);
 
 	float fresnel = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 4.0);
-	SPECULAR = 0.5 + fresnel * (0.3 + wetness * 0.4);
+	SPECULAR = 0.5 + fresnel * (0.3 + wetness * 0.45);
 }

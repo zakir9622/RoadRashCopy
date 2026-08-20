@@ -1,11 +1,9 @@
 extends CanvasLayer
-## Road Rash dashboard HUD: diegetic bottom instrument cluster, dual rear
-## mirrors, clear centre view, and bottom-thumb touch controls on mobile.
+## Modern in-race HUD: slim top strip, digital speed, PUBG-style two-thumb
+## controls, optional rear mirrors.
 
-const DASH_H := 0.0
 const MIRROR_W := 96.0
 const MIRROR_H := 52.0
-const PORTRAIT := true
 
 var _race: Node3D
 var _speed_value: Label
@@ -20,18 +18,20 @@ var _stamina_bar: ProgressBar
 var _bike_bar: ProgressBar
 var _rival_bar: ProgressBar
 var _nitro_bar: ProgressBar
-var _speed_gauge: Control
-var _rpm_gauge: Control
+var _rpm_bar: ProgressBar
 var _mirror_l_cam: Camera3D
 var _mirror_r_cam: Camera3D
-var _mirror_l_tex: TextureRect
-var _mirror_r_tex: TextureRect
+var _mirror_row: Control
 var _damage_flash: ColorRect
 var _flash_level: float = 0.0
 var _rival_portrait: PanelContainer
 var _banter_label: Label
 var _banter_timer: float = 0.0
 var _touch_root: Control
+var _steer_origin: float = 0.0
+var _steering: bool = false
+var _punch_held: bool = false
+var _brake_btn: Button
 
 
 func bind(race: Node3D) -> void:
@@ -45,6 +45,16 @@ func bind(race: Node3D) -> void:
 	player.damaged.connect(_on_player_damaged)
 	player.attacked.connect(_on_player_attacked)
 	player.weapon_stolen.connect(_on_weapon_stolen)
+
+
+func _gfx():
+	return get_node_or_null("/root/GraphicsSettings")
+
+
+func refresh_quality() -> void:
+	var gfx =  _gfx()
+	if _brake_btn != null and gfx != null:
+		_brake_btn.visible = bool(gfx.call("show_brake"))
 
 
 func _build() -> void:
@@ -67,141 +77,121 @@ func _build() -> void:
 	ThemeColors.place(_countdown_overlay, Control.PRESET_CENTER, 0)
 
 	_build_dashboard(root)
-	_build_mirrors(root)
-	if DisplayServer.is_touchscreen_available() or OS.has_feature("mobile"):
+	var gfx =  _gfx()
+	if gfx != null and bool(gfx.call("mirrors_enabled")):
+		_build_mirrors(root)
+	if DisplayServer.get_name() != "headless":
 		_build_touch_controls(root)
 
 
 func _build_dashboard(root: Control) -> void:
-	# Thin top strip — never covers the road. Analog cluster sits over the bars.
+	_weapon_label = _label(root, "FISTS", 13, ThemeColors.INK)
+	ThemeColors.place(_weapon_label, Control.PRESET_TOP_LEFT, 12)
+
 	_position_label = _label(root, "POS 15/15", 18, ThemeColors.ACCENT)
 	ThemeColors.place(_position_label, Control.PRESET_CENTER_TOP, 10)
 	_position_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	_police_label = _label(root, "", 15, ThemeColors.POLICE_BLUE)
+	_police_label = _label(root, "", 14, ThemeColors.POLICE_BLUE)
 	ThemeColors.place(_police_label, Control.PRESET_CENTER_TOP, 32)
 	_police_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	_ko_label = _label(root, "KO 0", 14, ThemeColors.ACCENT)
-	ThemeColors.place(_ko_label, Control.PRESET_TOP_RIGHT, 12)
+	_ko_label = _label(root, "KO 0", 13, ThemeColors.ACCENT)
+	ThemeColors.place(_ko_label, Control.PRESET_TOP_RIGHT, 64)
 
-	_weapon_label = _label(root, "FISTS", 14, ThemeColors.INK)
-	ThemeColors.place(_weapon_label, Control.PRESET_TOP_LEFT, 12)
+	var pause := Button.new()
+	pause.text = "II"
+	pause.custom_minimum_size = Vector2(48, 48)
+	pause.focus_mode = Control.FOCUS_NONE
+	pause.process_mode = Node.PROCESS_MODE_ALWAYS
+	pause.add_theme_font_size_override("font_size", 16)
+	pause.add_theme_color_override("font_color", Color(1, 1, 1, 0.85))
+	var pst := StyleBoxFlat.new()
+	pst.bg_color = Color(0, 0, 0, 0.45)
+	pst.set_corner_radius_all(24)
+	pst.set_border_width_all(1)
+	pst.border_color = Color(1, 1, 1, 0.28)
+	pause.add_theme_stylebox_override("normal", pst)
+	pause.add_theme_stylebox_override("pressed", ThemeColors.button_style(true))
+	root.add_child(pause)
+	ThemeColors.place(pause, Control.PRESET_TOP_RIGHT, 10)
+	pause.pressed.connect(func():
+		if _race != null and _race.has_method("_toggle_pause"):
+			_race._toggle_pause())
 
-	_rival_name = _label(root, "", 14, ThemeColors.INK_MUTED)
+	_rival_name = _label(root, "", 13, ThemeColors.INK_MUTED)
 	ThemeColors.place(_rival_name, Control.PRESET_TOP_WIDE, 52)
 	_rival_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	_banter_label = _label(root, "", 16, ThemeColors.ACCENT)
+	_banter_label = _label(root, "", 15, ThemeColors.ACCENT)
 	_banter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ThemeColors.place(_banter_label, Control.PRESET_TOP_WIDE, 72)
+	ThemeColors.place(_banter_label, Control.PRESET_TOP_WIDE, 70)
 
 	_rival_portrait = PanelContainer.new()
 	_rival_portrait.visible = false
 	root.add_child(_rival_portrait)
 
-	var cluster := HBoxContainer.new()
-	cluster.add_theme_constant_override("separation", 28)
+	var cluster := VBoxContainer.new()
+	cluster.add_theme_constant_override("separation", 3)
+	cluster.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(cluster)
-	ThemeColors.place(cluster, Control.PRESET_CENTER_BOTTOM, 18)
+	ThemeColors.place(cluster, Control.PRESET_CENTER_BOTTOM, 118)
 
-	_rpm_gauge = _make_gauge(cluster, "RPM")
-	var mid := VBoxContainer.new()
-	mid.add_theme_constant_override("separation", 4)
-	cluster.add_child(mid)
-	_speed_gauge = _make_gauge(mid, "MPH")
-	_speed_value = _label(mid, "0", 22, ThemeColors.INK)
+	_speed_value = _label(cluster, "0", 36, ThemeColors.INK)
 	_speed_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_distance_label = _label(mid, "", 12, ThemeColors.INK_MUTED)
+	var mph := _label(cluster, "MPH", 11, ThemeColors.INK_MUTED)
+	mph.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_distance_label = _label(cluster, "", 11, ThemeColors.INK_MUTED)
 	_distance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
-	var bars := VBoxContainer.new()
-	bars.add_theme_constant_override("separation", 3)
+	_rpm_bar = _bar(cluster, ThemeColors.ACCENT_DIM)
+	_rpm_bar.custom_minimum_size = Vector2(160, 6)
+
+	var bars := HBoxContainer.new()
+	bars.add_theme_constant_override("separation", 8)
+	bars.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cluster.add_child(bars)
 	_stamina_bar = _bar(bars, ThemeColors.ACCENT)
-	_stamina_bar.custom_minimum_size = Vector2(92, 8)
+	_stamina_bar.custom_minimum_size = Vector2(70, 7)
 	_bike_bar = _bar(bars, ThemeColors.DANGER)
-	_bike_bar.custom_minimum_size = Vector2(92, 8)
+	_bike_bar.custom_minimum_size = Vector2(70, 7)
 	_nitro_bar = _bar(bars, ThemeColors.POLICE_BLUE)
-	_nitro_bar.custom_minimum_size = Vector2(92, 8)
+	_nitro_bar.custom_minimum_size = Vector2(70, 7)
 	_rival_bar = _bar(bars, Color(0.4, 0.7, 1.0, 0.8))
-	_rival_bar.custom_minimum_size = Vector2(92, 6)
-
-
-func _make_gauge(parent: Control, caption: String) -> Control:
-	var g := Control.new()
-	g.custom_minimum_size = Vector2(108, 108)
-	g.set_meta("value", 0.0)
-	g.set_meta("caption", caption)
-	g.draw.connect(func():
-		var c := g.size * 0.5
-		var r := minf(g.size.x, g.size.y) * 0.42
-		g.draw_arc(c, r, PI * 0.75, PI * 2.25, 28, Color(0, 0, 0, 0.45), 10.0, true)
-		g.draw_arc(c, r, PI * 0.75, PI * 2.25, 28, ThemeColors.ACCENT_DIM, 2.0, true)
-		var t := clampf(float(g.get_meta("value")), 0.0, 1.0)
-		var ang := lerpf(PI * 0.75, PI * 2.25, t)
-		var needle := c + Vector2(cos(ang), sin(ang)) * r * 0.82
-		g.draw_line(c, needle, ThemeColors.ACCENT, 3.0, true)
-		g.draw_circle(c, 4.0, ThemeColors.INK)
-	)
-	parent.add_child(g)
-	var cap := Label.new()
-	cap.text = caption
-	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cap.add_theme_font_size_override("font_size", 11)
-	cap.add_theme_color_override("font_color", ThemeColors.INK_MUTED)
-	cap.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	cap.offset_top = -16
-	g.add_child(cap)
-	return g
+	_rival_bar.custom_minimum_size = Vector2(70, 5)
 
 
 func _build_mirrors(root: Control) -> void:
-	var mirror_row := HBoxContainer.new()
-	mirror_row.add_theme_constant_override("separation", 6)
-	root.add_child(mirror_row)
-	if PORTRAIT:
-		ThemeColors.place(mirror_row, Control.PRESET_TOP_WIDE, 8)
-	else:
-		ThemeColors.place(mirror_row, Control.PRESET_BOTTOM_WIDE, int(DASH_H + 6))
-
+	_mirror_row = HBoxContainer.new()
+	_mirror_row.add_theme_constant_override("separation", 8)
+	_mirror_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_mirror_row)
+	ThemeColors.place(_mirror_row, Control.PRESET_TOP_WIDE, 8)
 	var spacer_l := Control.new()
 	spacer_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mirror_row.add_child(spacer_l)
-
-	_mirror_l_tex = _make_mirror_panel(mirror_row, "mirror_l")
-	if PORTRAIT:
-		var gap := Control.new()
-		gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		mirror_row.add_child(gap)
-	else:
-		var gap := Control.new()
-		gap.custom_minimum_size = Vector2(280, 0)
-		mirror_row.add_child(gap)
-	_mirror_r_tex = _make_mirror_panel(mirror_row, "mirror_r")
-
+	_mirror_row.add_child(spacer_l)
+	_make_mirror_panel(_mirror_row, "mirror_l")
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_mirror_row.add_child(gap)
+	_make_mirror_panel(_mirror_row, "mirror_r")
 	var spacer_r := Control.new()
 	spacer_r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mirror_row.add_child(spacer_r)
+	_mirror_row.add_child(spacer_r)
 
 
-func _make_mirror_panel(parent: Control, cam_name: String) -> TextureRect:
+func _make_mirror_panel(parent: Control, cam_name: String) -> void:
 	var frame := PanelContainer.new()
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0, 0, 0, 0.88)
-	style.border_width_left = 2
-	style.border_width_right = 2
-	style.border_width_top = 2
-	style.border_width_bottom = 2
+	style.set_border_width_all(2)
 	style.border_color = ThemeColors.POLICE_BLUE
 	frame.add_theme_stylebox_override("panel", style)
 	parent.add_child(frame)
-
 	var vp := SubViewport.new()
 	vp.size = Vector2i(int(MIRROR_W), int(MIRROR_H))
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(vp)
-
 	var cam := Camera3D.new()
 	cam.name = cam_name
 	cam.fov = 68.0
@@ -210,111 +200,125 @@ func _make_mirror_panel(parent: Control, cam_name: String) -> TextureRect:
 		_mirror_l_cam = cam
 	else:
 		_mirror_r_cam = cam
-
 	var view := TextureRect.new()
 	view.texture = vp.get_texture()
 	view.custom_minimum_size = Vector2(MIRROR_W, MIRROR_H)
 	view.stretch_mode = TextureRect.STRETCH_SCALE
 	view.flip_h = true
 	frame.add_child(view)
-	return view
 
 
 func _build_touch_controls(root: Control) -> void:
 	var controller: PlayerController = _race.get_node_or_null("PlayerController")
 	if controller == null:
 		return
-
 	_touch_root = Control.new()
 	_touch_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_touch_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_touch_root)
 
-	# Left: translucent steer pad. Right: throttle + compact punches.
-	var steer := _ghost_pad(_touch_root, Vector2(132, 132))
-	ThemeColors.place(steer, Control.PRESET_BOTTOM_LEFT, 20)
+	var steer := Control.new()
+	steer.mouse_filter = Control.MOUSE_FILTER_STOP
+	_touch_root.add_child(steer)
+	steer.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	steer.anchor_right = 0.42
+	steer.anchor_top = 0.38
+	steer.offset_left = 0
+	steer.offset_right = 0
 	steer.gui_input.connect(func(event: InputEvent) -> void:
-		if event is InputEventScreenTouch or event is InputEventScreenDrag or event is InputEventMouseButton or event is InputEventMouseMotion:
-			var local := steer.get_local_mouse_position()
-			var x := clampf((local.x / maxf(steer.size.x, 1.0)) * 2.0 - 1.0, -1.0, 1.0)
-			if event is InputEventScreenTouch and not event.pressed:
-				controller.touch_steer = 0.0
-			elif event is InputEventMouseButton and not event.pressed:
-				controller.touch_steer = 0.0
-			else:
-				controller.touch_steer = x
-	)
+		_on_steer_input(controller, steer, event))
 
-	var throttle := _ghost_pad(_touch_root, Vector2(120, 150))
-	ThemeColors.place(throttle, Control.PRESET_BOTTOM_RIGHT, 20)
-	var go_lbl := Label.new()
-	go_lbl.text = "GAS"
-	go_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	go_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	go_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	go_lbl.add_theme_font_size_override("font_size", 16)
-	go_lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
-	throttle.add_child(go_lbl)
-	throttle.gui_input.connect(func(event: InputEvent) -> void:
-		var down := false
-		if event is InputEventScreenTouch:
-			down = event.pressed
-			controller.touch_throttle = 1.0 if down else 0.0
-		elif event is InputEventMouseButton:
-			down = event.pressed
-			controller.touch_throttle = 1.0 if down else 0.0
-	)
+	var race_btn := _round_btn(_touch_root, "RACE", Vector2(132, 132), Color(1.0, 0.78, 0.2, 0.22))
+	ThemeColors.place(race_btn, Control.PRESET_BOTTOM_RIGHT, 18)
+	race_btn.button_down.connect(func(): controller.touch_throttle = 1.0)
+	race_btn.button_up.connect(func(): controller.touch_throttle = 0.0)
 
-	var punches := HBoxContainer.new()
-	punches.add_theme_constant_override("separation", 8)
-	_touch_root.add_child(punches)
-	ThemeColors.place(punches, Control.PRESET_BOTTOM_RIGHT, 24)
-	punches.offset_bottom = -180
-	punches.offset_top = punches.offset_bottom - 56
-	punches.offset_right = -20
-	punches.offset_left = -220
+	var punch := _round_btn(_touch_root, "PUNCH", Vector2(76, 76), Color(1.0, 0.28, 0.32, 0.28))
+	ThemeColors.place(punch, Control.PRESET_BOTTOM_RIGHT, 18)
+	punch.offset_bottom = -160
+	punch.offset_top = punch.offset_bottom - 76
+	punch.offset_right = -28
+	punch.offset_left = punch.offset_right - 76
+	punch.button_down.connect(func():
+		_punch_held = true
+		controller.begin_touch_punch())
+	punch.button_up.connect(func():
+		_punch_held = false
+		controller.end_touch_punch())
 
-	var brake := _ghost_btn(punches, "BRK")
-	brake.button_down.connect(func(): controller.touch_brake = 1.0)
-	brake.button_up.connect(func(): controller.touch_brake = 0.0)
-	var punch_l := _ghost_btn(punches, "L")
-	punch_l.pressed.connect(func(): controller.touch_attack_left = true)
-	var punch_r := _ghost_btn(punches, "R")
-	punch_r.pressed.connect(func(): controller.touch_attack_right = true)
-	var kick := _ghost_btn(punches, "K")
+	var center := HBoxContainer.new()
+	center.add_theme_constant_override("separation", 14)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_touch_root.add_child(center)
+	ThemeColors.place(center, Control.PRESET_CENTER_BOTTOM, 18)
+
+	var kick := _round_btn(center, "KICK", Vector2(64, 64), Color(1, 1, 1, 0.12))
 	kick.pressed.connect(func(): controller.touch_kick = true)
-	var nitro := _ghost_btn(punches, "N")
+	_brake_btn = _round_btn(center, "BRK", Vector2(64, 64), Color(1, 1, 1, 0.12))
+	_brake_btn.button_down.connect(func(): controller.touch_brake = 1.0)
+	_brake_btn.button_up.connect(func(): controller.touch_brake = 0.0)
+	var gfx =  _gfx()
+	if gfx != null:
+		_brake_btn.visible = bool(gfx.call("show_brake"))
+	var nitro := _round_btn(center, "N2O", Vector2(64, 64), Color(0.3, 0.55, 1.0, 0.2))
 	nitro.button_down.connect(func(): controller.touch_nitro = true)
 	nitro.button_up.connect(func(): controller.touch_nitro = false)
 
 
-func _ghost_pad(parent: Control, size: Vector2) -> Control:
-	var p := Panel.new()
-	p.custom_minimum_size = size
-	p.mouse_filter = Control.MOUSE_FILTER_STOP
-	var st := StyleBoxFlat.new()
-	st.bg_color = Color(1, 1, 1, 0.08)
-	st.set_corner_radius_all(int(minf(size.x, size.y) * 0.5))
-	st.border_color = Color(1, 1, 1, 0.18)
-	st.set_border_width_all(1)
-	p.add_theme_stylebox_override("panel", st)
-	parent.add_child(p)
-	return p
+func _on_steer_input(controller: PlayerController, pad: Control, event: InputEvent) -> void:
+	var gfx = _gfx()
+	var sens := 1.0
+	var invert := false
+	if gfx != null:
+		sens = float(gfx.call("steer_sensitivity"))
+		invert = bool(gfx.call("invert_swipe"))
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			_steering = true
+			_steer_origin = touch.position.x
+		else:
+			_steering = false
+			controller.touch_steer = 0.0
+	elif event is InputEventScreenDrag and _steering:
+		var drag := event as InputEventScreenDrag
+		var delta := (drag.position.x - _steer_origin) / maxf(pad.size.x * 0.28, 40.0)
+		if invert:
+			delta = -delta
+		controller.touch_steer = clampf(delta * sens, -1.0, 1.0)
+	elif event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.pressed:
+			_steering = true
+			_steer_origin = pad.get_local_mouse_position().x
+		else:
+			_steering = false
+			controller.touch_steer = 0.0
+	elif event is InputEventMouseMotion and _steering and (event as InputEventMouseMotion).button_mask != 0:
+		var local := pad.get_local_mouse_position().x
+		var delta := (local - _steer_origin) / maxf(pad.size.x * 0.28, 40.0)
+		if invert:
+			delta = -delta
+		controller.touch_steer = clampf(delta * sens, -1.0, 1.0)
 
 
-func _ghost_btn(parent: Control, text: String) -> Button:
+func _round_btn(parent: Control, text: String, size: Vector2, fill: Color) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(52, 52)
-	b.add_theme_font_size_override("font_size", 15)
+	b.custom_minimum_size = size
+	b.focus_mode = Control.FOCUS_NONE
+	b.add_theme_font_size_override("font_size", 14)
+	b.add_theme_color_override("font_color", Color(1, 1, 1, 0.78))
 	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(1, 1, 1, 0.10)
-	normal.set_corner_radius_all(26)
+	normal.bg_color = fill
+	normal.set_corner_radius_all(int(minf(size.x, size.y) * 0.5))
 	normal.set_border_width_all(1)
-	normal.border_color = Color(1, 1, 1, 0.22)
+	normal.border_color = Color(1, 1, 1, 0.28)
+	var pressed := normal.duplicate() as StyleBoxFlat
+	pressed.bg_color = Color(fill.r, fill.g, fill.b, minf(fill.a + 0.25, 0.7))
 	b.add_theme_stylebox_override("normal", normal)
-	b.add_theme_stylebox_override("pressed", ThemeColors.button_style(true))
-	b.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
+	b.add_theme_stylebox_override("pressed", pressed)
+	b.add_theme_stylebox_override("hover", pressed)
 	parent.add_child(b)
 	return b
 
@@ -324,6 +328,7 @@ func _label(parent: Control, text: String, size: int, colour: Color) -> Label:
 	label.text = text
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", colour)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(label)
 	return label
 
@@ -334,10 +339,13 @@ func _bar(parent: Control, colour: Color) -> ProgressBar:
 	bar.value = 1.0
 	bar.show_percentage = false
 	bar.custom_minimum_size = Vector2(120, 12)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0, 0, 0, 0.75)
+	bg.bg_color = Color(0, 0, 0, 0.55)
+	bg.set_corner_radius_all(4)
 	var fill := StyleBoxFlat.new()
 	fill.bg_color = colour
+	fill.set_corner_radius_all(4)
 	bar.add_theme_stylebox_override("background", bg)
 	bar.add_theme_stylebox_override("fill", fill)
 	parent.add_child(bar)
@@ -389,12 +397,8 @@ func _process(delta: float) -> void:
 	var track: Track = _race.track
 
 	_speed_value.text = str(int(TrackCatalog.to_mph(player.speed)))
-	if _speed_gauge != null:
-		_speed_gauge.set_meta("value", clampf(TrackCatalog.to_mph(player.speed) / 150.0, 0.0, 1.0))
-		_speed_gauge.queue_redraw()
-	if _rpm_gauge != null:
-		_rpm_gauge.set_meta("value", clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.0))
-		_rpm_gauge.queue_redraw()
+	if _rpm_bar != null:
+		_rpm_bar.value = clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.0)
 	_position_label.text = "POS %d/%d" % [manager.position_of(player), manager.racers.size()]
 	_weapon_label.text = String(CombatMath.WEAPON_NAMES.get(player.weapon, "FISTS"))
 	_stamina_bar.value = player.stamina / StaminaRules.MAX
@@ -451,6 +455,8 @@ func _process(delta: float) -> void:
 	_police_label.text = cop_text
 
 	_update_mirrors(player, track)
+	if _race.has_method("update_detail_window"):
+		_race.update_detail_window()
 
 	_flash_level = maxf(_flash_level - delta * 2.2, 0.0)
 	_damage_flash.color.a = _flash_level
@@ -471,14 +477,13 @@ func _nearest_rival(manager: RaceManager, player: Rider) -> Rider:
 
 
 func _update_mirrors(player: Rider, track: Track) -> void:
-	if track == null:
+	if track == null or _mirror_l_cam == null:
 		return
 	var back_s := maxf(player.distance - 14.0, 0.0)
 	var back_t := track.sample(back_s, player.lateral - 0.5, 1.35)
-	if _mirror_l_cam != null:
-		_mirror_l_cam.global_transform = back_t
-		var look := track.sample(maxf(player.distance - 28.0, 0.0), player.lateral - 1.2, 0.8)
-		View.look_at(_mirror_l_cam, look.origin)
+	_mirror_l_cam.global_transform = back_t
+	var look := track.sample(maxf(player.distance - 28.0, 0.0), player.lateral - 1.2, 0.8)
+	View.look_at(_mirror_l_cam, look.origin)
 	if _mirror_r_cam != null:
 		var back_r := track.sample(back_s, player.lateral + 0.5, 1.35)
 		_mirror_r_cam.global_transform = back_r

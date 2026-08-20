@@ -56,6 +56,23 @@ func set_colors(_body: Color, suit: Color) -> void:
 	_tint_suit_meshes()
 
 
+func _leather_tex() -> Texture2D:
+	var diff := "res://assets/textures/leather_red_02_Diffuse.jpg"
+	if ResourceLoader.exists(diff):
+		var leather: Texture2D = load(diff)
+		return leather
+	var tex := NoiseTexture2D.new()
+	var n := FastNoiseLite.new()
+	n.noise_type = FastNoiseLite.TYPE_CELLULAR
+	n.frequency = 0.11
+	n.cellular_jitter = 0.35
+	tex.noise = n
+	tex.seamless = true
+	tex.width = 256
+	tex.height = 256
+	return tex
+
+
 func _clip_leaf(n: String) -> String:
 	var leaf := n.to_lower()
 	var parts := leaf.split("|")
@@ -88,9 +105,25 @@ func _tint_suit_meshes() -> void:
 			var std := mat as StandardMaterial3D
 			if std == null:
 				continue
-			if std.resource_name.begins_with("suit") or std.albedo_color.v < 0.35:
+			if std.resource_name.to_lower().begins_with("suit"):
 				var tinted := std.duplicate() as StandardMaterial3D
-				tinted.albedo_color = _suit_color.lerp(Color(0.08, 0.08, 0.1), 0.35)
+				tinted.albedo_color = _suit_color
+				tinted.albedo_texture = _leather_tex()
+				tinted.uv1_scale = Vector3(3.2, 3.2, 3.2)
+				tinted.roughness = 0.74
+				tinted.metallic = 0.04
+				var nor := "res://assets/textures/leather_red_02_nor_gl.jpg"
+				if ResourceLoader.exists(nor):
+					tinted.normal_enabled = true
+					tinted.normal_texture = load(nor)
+					tinted.normal_scale = 0.55
+				var arm := "res://assets/textures/leather_red_02_arm.jpg"
+				if ResourceLoader.exists(arm):
+					tinted.ao_enabled = true
+					tinted.ao_texture = load(arm)
+					tinted.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+					tinted.roughness_texture = load(arm)
+					tinted.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
 				mesh.set_surface_override_material(i, tinted)
 
 

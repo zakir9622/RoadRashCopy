@@ -5,6 +5,7 @@ extends SceneTree
 
 const AUTOLOADS := {
 	"GameState": "res://src/autoload/game_state.gd",
+	"GraphicsSettings": "res://src/autoload/graphics_settings.gd",
 	"RaceContext": "res://src/autoload/race_context.gd",
 	"AudioDirector": "res://src/autoload/audio_director.gd",
 }

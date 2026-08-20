@@ -115,6 +115,7 @@ func _build_menu() -> void:
 	_menu_button("TIME TRIAL", _on_time_trial)
 	_menu_button("QUICK RACE", _on_quick_race)
 	_menu_button("GARAGE", _on_garage)
+	_menu_button("SETTINGS", _on_settings)
 	if bool(GameState.save.get("game_over", false)) or bool(GameState.save.get("champion", false)):
 		_menu_button("NEW CAREER", func(): GameState.reset_career(); get_tree().reload_current_scene())
 	_menu_button("QUIT", _on_quit)
@@ -384,6 +385,13 @@ func _on_quick_race() -> void:
 
 func _on_garage() -> void:
 	get_tree().change_scene_to_file("res://src/ui/Garage.tscn")
+
+
+func _on_settings() -> void:
+	var settings: PackedScene = load("res://src/ui/Settings.tscn")
+	if settings == null:
+		return
+	add_child(settings.instantiate())
 
 
 func _on_quit() -> void:

@@ -21,10 +21,11 @@ func _init() -> void:
 	_test_view()
 	_test_race_simulation()
 	_test_rider_rig()
+	_test_cinematic_hud()
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 128
+	const EXPECTED_CHECKS := 165
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -157,6 +158,20 @@ func _test_track_geometry() -> void:
 	var left := track.sample(50.0, -5.0)
 	var right := track.sample(50.0, 5.0)
 	check(left.origin.distance_to(right.origin) > 8.0, "lateral offset separates")
+	check(_min_forward_dot(track, 50.0, 160.0) < 0.85, "coast turns within 200 m of the grid")
+	track.queue_free()
+
+	var city := Track.new()
+	root.add_child(city)
+	city.build(TrackCatalog.find("downtown"))
+	check(_min_forward_dot(city, 50.0, 160.0) < 0.50, "city corners harder than coast")
+	var s300 := city.sample(300.0, 0.0)
+	check(absf(s300.origin.x) > 12.0, "city has left the start axis by 300 m")
+	city.queue_free()
+
+	track = Track.new()
+	root.add_child(track)
+	track.build(TrackCatalog.find("coast_run"))
 	var kinds := {}
 	for hz in track.hazards:
 		kinds[String(hz["kind"])] = true
@@ -165,6 +180,16 @@ func _test_track_geometry() -> void:
 	check(bool(kinds.get("cow", false)), "cow on track")
 	check(track.get_node_or_null("FinishBanner") != null, "chequered finish banner")
 	track.queue_free()
+
+
+func _min_forward_dot(track: Track, d0: float, d1: float) -> float:
+	var f0 := track.forward(d0)
+	var worst := 1.0
+	var d := d0 + 15.0
+	while d <= d1:
+		worst = minf(worst, f0.dot(track.forward(d)))
+		d += 15.0
+	return worst
 
 
 func _test_world_biomes() -> void:
@@ -390,3 +415,106 @@ func _test_rider_rig() -> void:
 	check("crash" in joined, "crash clip exported")
 	check("run" in joined, "run clip exported")
 	model.queue_free()
+
+
+func _test_cinematic_hud() -> void:
+	var gs: GDScript = load("res://src/autoload/game_state.gd")
+	check(int(gs.get("SCHEMA")) == 3, "save schema is 3")
+	var defaults: Dictionary = gs.call("_default_save")
+	check(String(defaults.get("graphics_quality", "")) == "high", "default quality is high")
+	check(not bool(defaults.get("mirrors", true)), "mirrors off by default")
+
+	var gfx_script: GDScript = load("res://src/autoload/graphics_settings.gd")
+	var state_script: GDScript = load("res://src/autoload/game_state.gd")
+	var state: Node = state_script.new()
+	state.name = "GameState"
+	root.add_child(state)
+	var gfx: Node = gfx_script.new()
+	root.add_child(gfx)
+	check(bool(gfx.call("is_high")), "GraphicsSettings defaults to high")
+	check(not bool(gfx.call("mirrors_enabled")), "GraphicsSettings mirrors default off")
+	check(is_equal_approx(float(gfx.call("shadow_distance")), 180.0), "high shadow distance")
+	gfx.call("set_high", false)
+	check(is_equal_approx(float(gfx.call("shadow_distance")), 80.0), "low shadow distance")
+	gfx.queue_free()
+	state.queue_free()
+
+	check(ResourceLoader.exists("res://src/ui/Settings.tscn"), "settings scene exists")
+	var packed: PackedScene = load("res://src/ui/Settings.tscn")
+	var settings := packed.instantiate() as Control
+	check(settings != null and settings.get_script() != null, "settings builds a panel")
+	if settings != null:
+		settings.free()
+
+	var pc := PlayerController.new()
+	check(pc.has_method("begin_touch_punch"), "touch punch windup API")
+	check(pc.has_method("end_touch_punch"), "touch punch release API")
+	pc.free()
+
+	var city := Track.new()
+	root.add_child(city)
+	city.build(TrackCatalog.find("downtown"))
+	check(city.find_child("Landmark", true, false) != null, "city landmarks")
+	check(city.find_child("Billboard", true, false) != null, "city billboards")
+	check(city.light_anchors.size() > 0, "streetlight anchors for the omni pool")
+	var road := city.get_node_or_null("Road") as MeshInstance3D
+	check(road != null and road.material_override is ShaderMaterial, "road shader material")
+	city.set_wetness(0.9)
+	var wet := 0.0
+	if road != null:
+		wet = float((road.material_override as ShaderMaterial).get_shader_parameter("wetness"))
+	check(wet > 0.8, "set_wetness updates the road")
+	var landmark := city.find_child("Landmark", true, false) as Node3D
+	if landmark != null:
+		landmark.set_meta("track_distance", 0.0)
+		city.set_detail_window(2000.0, 80.0)
+		check(not landmark.visible, "far landmark hidden by detail window")
+		city.set_detail_window(0.0, 400.0)
+		check(landmark.visible, "near landmark shown by detail window")
+	else:
+		check(false, "far landmark hidden by detail window")
+		check(false, "near landmark shown by detail window")
+	city.queue_free()
+
+	var night := Track.new()
+	root.add_child(night)
+	night.build(TrackCatalog.find("night_city"))
+	var weather_script: GDScript = load("res://src/race/weather_director.gd")
+	var weather: Node3D = weather_script.new()
+	root.add_child(weather)
+	weather.call("configure", night, null, null, "night")
+	check(bool(weather.get("raining")), "night city rains on high")
+	weather.call("configure", night, null, null, "desert")
+	check(not bool(weather.get("raining")), "desert stays dry")
+	weather.queue_free()
+	night.queue_free()
+
+	var coast := Track.new()
+	root.add_child(coast)
+	coast.build(TrackCatalog.find("coast_run"))
+	check(coast.get_node_or_null("OceanFoam") != null, "coast foam strip")
+	var traffic := Traffic.new()
+	root.add_child(traffic)
+	traffic.build(coast, 8, null)
+	check(traffic.cars.size() == 8, "traffic pool size")
+	check(traffic.get_child_count() >= 2, "several traffic mesh kits")
+	var vary := traffic.cars.size() >= 2 and not is_equal_approx(
+		float(traffic.cars[0]["speed"]), float(traffic.cars[1]["speed"]))
+	check(vary, "traffic speed variance")
+	traffic.queue_free()
+	coast.queue_free()
+
+	check(ResourceLoader.exists("res://assets/models/kenney/car/car_sedan.glb"), "Kenney sedan")
+	check(ResourceLoader.exists("res://assets/models/kenney/city/kenney_shop_a.glb"), "Kenney shop")
+	check(ResourceLoader.exists("res://assets/models/kenney_tree.glb"), "Kenney tree")
+	check(ResourceLoader.exists("res://assets/models/kenney_cactus_tall.glb"), "Kenney cactus")
+	check(ResourceLoader.exists("res://assets/textures/leather_red_02_Diffuse.jpg"), "CC0 leather")
+	check(ResourceLoader.exists("res://assets/textures/sand_01_Diffuse.jpg"), "CC0 sand")
+	check(ResourceLoader.exists("res://assets/textures/rubber_tiles_Diffuse.jpg"), "CC0 rubber")
+	check(ResourceLoader.exists("res://assets/textures/painted_worn_brick_Diffuse.jpg"), "CC0 brick")
+	check(FileAccess.file_exists("res://assets/CC0.md"), "CC0 credits")
+	check(Track._first_model([
+		"res://assets/models/missing_kit.glb",
+		"res://assets/models/kenney/city/kenney_shop_a.glb",
+	]) == "res://assets/models/kenney/city/kenney_shop_a.glb", "first_model skips missing kits")
+
