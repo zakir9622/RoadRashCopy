@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="20" fill="#0b0e12"/>
+  <path d="M14 96 L64 34 L114 96 Z" fill="#1a2230"/>
+  <path d="M54 96 L64 44 L74 96 Z" fill="#2c3648"/>
+  <rect x="61" y="52" width="6" height="10" fill="#ffc53d"/>
+  <rect x="61" y="68" width="6" height="10" fill="#ffc53d"/>
+  <rect x="61" y="84" width="6" height="10" fill="#ffc53d"/>
+  <circle cx="44" cy="88" r="12" fill="#111" stroke="#ffc53d" stroke-width="3"/>
+  <circle cx="84" cy="88" r="12" fill="#111" stroke="#ffc53d" stroke-width="3"/>
+  <path d="M44 88 L60 70 L78 74 L84 88" stroke="#ff5533" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <text x="64" y="26" font-family="sans-serif" font-size="14" font-weight="bold" fill="#ffc53d" text-anchor="middle">RENEGADE</text>
+</svg>

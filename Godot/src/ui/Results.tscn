@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3 uid="uid://results0000001"]
+
+[ext_resource type="Script" path="res://src/ui/results.gd" id="1"]
+
+[node name="Results" type="CanvasLayer"]
+layer = 10
+script = ExtResource("1")
