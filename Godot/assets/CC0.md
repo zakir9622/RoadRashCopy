@@ -24,6 +24,6 @@ Older asphalt, concrete, grass, and rust maps already in this folder are also Po
 
 GLTF kits from [kenney.nl](https://kenney.nl) (CC0 1.0):
 
-- [Car Kit](https://kenney.nl/assets/car-kit) — traffic and parked cars
-- [City Kit (Commercial)](https://kenney.nl/assets/city-kit-commercial) — shops, towers, horizon blocks
-- [Nature Kit](https://kenney.nl/assets/nature-kit) — trees, palms, pines, rocks, cactus
+- [Car Kit](https://kenney.nl/assets/car-kit) — `assets/models/kenney/car/` (plus `Textures/colormap.png`)
+- [City Kit (Commercial)](https://kenney.nl/assets/city-kit-commercial) — `assets/models/kenney/city/`
+- [Nature Kit](https://kenney.nl/assets/nature-kit) — trees, palms, pines, rocks, cactus beside the Blender fallbacks

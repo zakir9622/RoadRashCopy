@@ -489,52 +489,57 @@ func _build_props(rng_seed: int) -> void:
 		_build_city_skyline(rng)
 		_build_city_furniture(rng)
 		_scatter_prop(_first_model(["res://assets/models/kenney_tree.glb", "res://assets/models/tree.glb"]),
-			"StreetTrees", rng, 18.0, Vector2(1.5, 2.4), Vector2(0.55, 0.85), 0.0, [-1.0, 1.0])
+			"StreetTrees", rng, 18.0, Vector2(1.5, 2.4), Vector2(6.0, 10.0), 0.0, [-1.0, 1.0])
 		_scatter_prop(_first_model([
-			"res://assets/models/car_sedan.glb", "res://assets/models/car.glb"
-		]), "ParkedCars", rng, 34.0, Vector2(2.0, 2.6), Vector2(0.95, 1.05), 0.0, [-1.0, 1.0], true)
+			"res://assets/models/kenney/car/car_sedan.glb", "res://assets/models/car.glb"
+		]), "ParkedCars", rng, 34.0, Vector2(2.4, 3.2), Vector2(4.3, 4.8), 0.0, [-1.0, 1.0], true, true)
 		_scatter_prop(_first_model([
-			"res://assets/models/car_van.glb", "res://assets/models/car.glb"
-		]), "ParkedVans", rng, 52.0, Vector2(2.2, 2.8), Vector2(0.95, 1.05), 0.0, [-1.0, 1.0], true)
+			"res://assets/models/kenney/car/car_van.glb", "res://assets/models/car.glb"
+		]), "ParkedVans", rng, 52.0, Vector2(2.6, 3.4), Vector2(4.6, 5.2), 0.0, [-1.0, 1.0], true, true)
 		return
 
 	match biome:
 		"coast":
 			_scatter_prop(_first_model([
 				"res://assets/models/kenney_tree_palmTall.glb", "res://assets/models/palm.glb"
-			]), "Palms", rng, 10.0, Vector2(4.2, 9.0), Vector2(0.9, 1.4), -0.05, [1.0])
+			]), "Palms", rng, 10.0, Vector2(4.2, 9.0), Vector2(10.0, 16.0), -0.05, [1.0])
 			_scatter_prop(_first_model([
 				"res://assets/models/kenney_tree_palm.glb", "res://assets/models/palm.glb"
-			]), "PalmsOcean", rng, 16.0, Vector2(6.0, 11.0), Vector2(0.8, 1.2), -0.8, [-1.0])
+			]), "PalmsOcean", rng, 16.0, Vector2(6.0, 11.0), Vector2(8.0, 13.0), -0.8, [-1.0])
 			_scatter_prop(_first_model(["res://assets/models/kenney_tree.glb", "res://assets/models/tree.glb"]),
-				"Trees", rng, 28.0, Vector2(12.0, 32.0), Vector2(0.9, 1.7), -0.3, [1.0])
+				"Trees", rng, 28.0, Vector2(12.0, 32.0), Vector2(12.0, 20.0), -0.3, [1.0])
 		"desert":
 			_scatter_prop(_first_model(["res://assets/models/kenney_rock.glb", "res://assets/models/rock.glb"]),
-				"Rocks", rng, 16.0, Vector2(4.5, 28.0), Vector2(0.7, 2.1), -0.2)
+				"Rocks", rng, 16.0, Vector2(4.5, 28.0), Vector2(2.5, 8.0), -0.2)
 			_scatter_prop(_first_model([
 				"res://assets/models/kenney_cactus_tall.glb", "res://assets/models/cactus.glb"
-			]), "Cactus", rng, 22.0, Vector2(6.0, 20.0), Vector2(0.8, 1.6), 0.0)
+			]), "Cactus", rng, 22.0, Vector2(6.0, 20.0), Vector2(3.2, 6.0), 0.0)
 			_scatter_prop(_first_model([
 				"res://assets/models/kenney_cactus_short.glb", "res://assets/models/cactus.glb"
-			]), "CactusLow", rng, 14.0, Vector2(5.0, 16.0), Vector2(0.7, 1.3), 0.0)
+			]), "CactusLow", rng, 14.0, Vector2(5.0, 16.0), Vector2(1.2, 2.4), 0.0)
 		"mountain":
 			_scatter_prop(_first_model(["res://assets/models/kenney_pine.glb", "res://assets/models/pine.glb"]),
-				"Pines", rng, 8.0, Vector2(3.6, 14.0), Vector2(1.0, 1.9), -0.15)
+				"Pines", rng, 8.0, Vector2(3.6, 14.0), Vector2(14.0, 22.0), -0.15)
 			_scatter_prop(_first_model(["res://assets/models/kenney_pine.glb", "res://assets/models/pine.glb"]),
-				"PineWall", rng, 12.0, Vector2(14.0, 28.0), Vector2(1.2, 2.2), -0.2)
+				"PineWall", rng, 12.0, Vector2(14.0, 28.0), Vector2(18.0, 30.0), -0.2)
 			_scatter_prop(_first_model(["res://assets/models/kenney_rock.glb", "res://assets/models/rock.glb"]),
-				"Boulders", rng, 16.0, Vector2(4.0, 12.0), Vector2(0.8, 2.0), -0.15)
+				"Boulders", rng, 16.0, Vector2(4.0, 12.0), Vector2(2.0, 6.0), -0.15)
 			_build_tunnel()
 		_:
-			_scatter_prop("res://assets/models/tree.glb", "Props", rng, 26.0, Vector2(6.0, 34.0), Vector2(0.8, 1.6), -0.4)
+			_scatter_prop("res://assets/models/tree.glb", "Props", rng, 26.0, Vector2(6.0, 34.0), Vector2(8.0, 14.0), -0.4)
 
 
 func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 		spacing: float, clearance: Vector2, scale_range: Vector2, y_bias: float,
-		sides: Array = [-1.0, 1.0], face_road: bool = false) -> void:
+		sides: Array = [-1.0, 1.0], face_road: bool = false, fit_length: bool = false) -> void:
 	var mesh := _extract_mesh(path)
 	if mesh == null:
 		mesh = _fallback_prop_mesh(String(definition.get("biome", "coast")))
+	var aabb := mesh.get_aabb()
+	var base := aabb.size.y
+	if fit_length:
+		base = maxf(aabb.size.x, aabb.size.z)
+	base = maxf(base, 0.05)
 	var count := maxi(int(length / spacing), 1)
 	var side_count := maxi(sides.size(), 1)
 	var mm := MultiMesh.new()
@@ -550,7 +555,7 @@ func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 			var d := i * spacing + rng.randf_range(-spacing * 0.28, spacing * 0.28)
 			var lateral := (half_width + rng.randf_range(clearance.x, clearance.y)) * sside
 			var t := sample(clampf(d, 0.0, length), lateral, y_bias)
-			var s := rng.randf_range(scale_range.x, scale_range.y)
+			var s := rng.randf_range(scale_range.x, scale_range.y) / base
 			if face_road:
 				var inward := (-t.basis.x * sside)
 				inward.y = 0.0
@@ -559,7 +564,6 @@ func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 				t.basis = Basis.looking_at(inward.normalized(), Vector3.UP).scaled(Vector3(s, s, s))
 			else:
 				t.basis = Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3(s, s, s))
-			var aabb := mesh.get_aabb()
 			t.origin += t.basis.y.normalized() * (-aabb.position.y * s)
 			mm.set_instance_transform(idx, t)
 			distances[idx] = d
@@ -577,24 +581,21 @@ func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 
 func _build_city_skyline(rng: RandomNumberGenerator) -> void:
 	# RR3D city: shop fronts hard against the curb, then a wall of towers, then a far skyline.
+	# width/height ranges are target metres; Kenney kits are ~1 m tall so they get scaled up.
 	_city_row(rng, [
-		"res://assets/models/kenney_shop_a.glb",
-		"res://assets/models/kenney_shop_b.glb",
-		"res://assets/models/kenney_shop_c.glb",
-		"res://assets/models/building_shop.glb",
-	], 8.2, 3.6, Vector2(0.95, 1.15), Vector2(0.9, 1.15), "City_Shops")
+		"res://assets/models/kenney/city/kenney_shop_a.glb",
+		"res://assets/models/kenney/city/kenney_shop_b.glb",
+		"res://assets/models/kenney/city/kenney_shop_c.glb",
+	], 9.0, 0.6, Vector2(8.0, 12.0), Vector2(8.0, 13.0), "City_Shops")
 	_city_row(rng, [
-		"res://assets/models/kenney_tower_a.glb",
-		"res://assets/models/kenney_tower_b.glb",
-		"res://assets/models/kenney_tower_c.glb",
-		"res://assets/models/building_apartment.glb",
-		"res://assets/models/building_office.glb",
-	], 11.0, 10.5, Vector2(0.95, 1.35), Vector2(0.85, 1.7), "City_Towers")
+		"res://assets/models/kenney/city/kenney_tower_a.glb",
+		"res://assets/models/kenney/city/kenney_tower_b.glb",
+		"res://assets/models/kenney/city/kenney_tower_c.glb",
+	], 12.0, 8.0, Vector2(10.0, 16.0), Vector2(22.0, 38.0), "City_Towers")
 	_city_row(rng, [
-		"res://assets/models/kenney_horizon_a.glb",
-		"res://assets/models/kenney_horizon_b.glb",
-		"res://assets/models/building_office.glb",
-	], 22.0, 24.0, Vector2(1.6, 2.4), Vector2(1.8, 2.6), "City_Horizon")
+		"res://assets/models/kenney/city/kenney_horizon_a.glb",
+		"res://assets/models/kenney/city/kenney_horizon_b.glb",
+	], 24.0, 22.0, Vector2(16.0, 28.0), Vector2(40.0, 70.0), "City_Horizon")
 
 
 func _city_row(rng: RandomNumberGenerator, kits: Array, spacing: float, shoulder: float,
@@ -629,13 +630,15 @@ func _city_row(rng: RandomNumberGenerator, kits: Array, spacing: float, shoulder
 				if idx >= mm.instance_count:
 					break
 				var d := i * spacing + rng.randf_range(-3.0, 3.0)
-				var lateral := (half_width + shoulder + rng.randf_range(0.0, 0.8)) * side
-				var w := rng.randf_range(width_range.x, width_range.y)
-				var h := rng.randf_range(height_range.x, height_range.y)
-				var t := _facing_road(clampf(d, 0.0, length), lateral, 0.0, side)
-				t.basis = t.basis.scaled(Vector3(w, h, w))
 				var aabb := mesh.get_aabb()
-				t.origin += Vector3.UP * (-aabb.position.y * h)
+				var foot := maxf(aabb.size.x, aabb.size.z)
+				var sx := rng.randf_range(width_range.x, width_range.y) / maxf(foot, 0.05)
+				var sy := rng.randf_range(height_range.x, height_range.y) / maxf(aabb.size.y, 0.05)
+				var half_depth := aabb.size.z * sx * 0.5
+				var lateral := (half_width + 4.5 + shoulder + half_depth) * side
+				var t := _facing_road(clampf(d, 0.0, length), lateral, 0.0, side)
+				t.basis = t.basis.scaled(Vector3(sx, sy, sx))
+				t.origin += t.basis.y.normalized() * (-aabb.position.y * sy)
 				mm.set_instance_transform(idx, t)
 				idx += 1
 		var inst := MultiMeshInstance3D.new()
@@ -926,15 +929,48 @@ func _build_tunnel() -> void:
 static func _extract_mesh(path: String) -> Mesh:
 	if not ResourceLoader.exists(path):
 		return null
-	var packed := load(path)
+	var packed: Resource = load(path)
 	if packed is PackedScene:
-		var node := packed.instantiate()
-		var mesh := _find_mesh(node)
+		var node: Node = packed.instantiate()
+		var mesh := _combine_scene_meshes(node)
 		node.queue_free()
 		return mesh
 	if packed is Mesh:
 		return packed
 	return null
+
+
+static func _combine_scene_meshes(root: Node) -> Mesh:
+	var instances: Array[MeshInstance3D] = []
+	if root is MeshInstance3D and (root as MeshInstance3D).mesh != null:
+		instances.append(root as MeshInstance3D)
+	for child in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := child as MeshInstance3D
+		if mi != null and mi.mesh != null:
+			instances.append(mi)
+	if instances.is_empty():
+		return null
+	var out := ArrayMesh.new()
+	for inst in instances:
+		var xf := _xform_to_root(inst, root)
+		for s in inst.mesh.get_surface_count():
+			var st := SurfaceTool.new()
+			st.append_from(inst.mesh, s, xf)
+			st.commit(out)
+			var mat := inst.get_active_material(s)
+			if mat != null:
+				out.surface_set_material(out.get_surface_count() - 1, mat)
+	return out if out.get_surface_count() > 0 else null
+
+
+static func _xform_to_root(node: Node3D, root: Node) -> Transform3D:
+	var xf := Transform3D.IDENTITY
+	var cur: Node = node
+	while cur != null and cur != root:
+		if cur is Node3D:
+			xf = (cur as Node3D).transform * xf
+		cur = cur.get_parent()
+	return xf
 
 
 static func _first_model(paths: Array) -> String:
@@ -1237,9 +1273,9 @@ func _build_landmarks() -> void:
 
 func _make_landmark(kind: int) -> Node3D:
 	var shops := [
-		"res://assets/models/kenney_shop_a.glb",
-		"res://assets/models/kenney_shop_b.glb",
-		"res://assets/models/kenney_shop_c.glb",
+		"res://assets/models/kenney/city/kenney_shop_a.glb",
+		"res://assets/models/kenney/city/kenney_shop_b.glb",
+		"res://assets/models/kenney/city/kenney_shop_c.glb",
 	]
 	if kind != 0:
 		var path := _first_model([shops[kind % shops.size()], shops[0]])
@@ -1247,7 +1283,11 @@ func _make_landmark(kind: int) -> Node3D:
 			var packed: PackedScene = load(path)
 			var shop := packed.instantiate() as Node3D
 			if shop != null:
-				shop.scale = Vector3(1.15, 1.15, 1.15)
+				var kit := _extract_mesh(path)
+				var h := 11.0
+				if kit != null:
+					h = 11.0 / maxf(kit.get_aabb().size.y, 0.2)
+				shop.scale = Vector3(h, h, h)
 				return shop
 	var root := Node3D.new()
 	match kind:
