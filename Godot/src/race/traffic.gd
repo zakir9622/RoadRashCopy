@@ -169,6 +169,7 @@ static func _traffic_mesh_paths() -> Array:
 		"res://assets/models/kenney/car/car_suv.glb",
 		"res://assets/models/kenney/car/car_taxi.glb",
 		"res://assets/models/kenney/car/car_hatch.glb",
+		"res://assets/models/kenney/car/car_police.glb",
 		"res://assets/models/car.glb",
 	]
 

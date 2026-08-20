@@ -343,8 +343,13 @@ static func _apply_hero_materials(model: Node3D) -> void:
 				tuned.roughness = 0.08
 				_bind_hero_maps(tuned, "res://assets/textures/metal_plate_Diffuse.jpg")
 			elif mat_name.begins_with("body"):
-				tuned.metallic = maxf(tuned.metallic, 0.48)
-				tuned.roughness = minf(tuned.roughness, 0.2)
+				tuned.metallic = maxf(tuned.metallic, 0.55)
+				tuned.roughness = minf(tuned.roughness, 0.16)
+				tuned.clearcoat_enabled = true
+				tuned.clearcoat = 0.55
+				tuned.clearcoat_roughness = 0.12
+				_bind_hero_maps(tuned, "res://assets/textures/metal_plate_Diffuse.jpg")
+				tuned.uv1_scale = Vector3(2.6, 2.6, 2.6)
 			elif mat_name.begins_with("boot"):
 				tuned.roughness = 0.9
 				tuned.metallic = 0.05
@@ -408,6 +413,11 @@ func _build_environment(definition: Dictionary) -> void:
 	sky.sky_material = sky_mat
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
+	if night and ResourceLoader.exists("res://assets/sky/dikhololo_night_hdri.hdr"):
+		var pano := PanoramaSkyMaterial.new()
+		pano.panorama = load("res://assets/sky/dikhololo_night_hdri.hdr")
+		pano.energy_multiplier = 0.48
+		sky.sky_material = pano
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_energy = 0.85 if not night else 0.35
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC

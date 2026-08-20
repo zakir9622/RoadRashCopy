@@ -360,6 +360,16 @@ func is_winding_up() -> bool:
 	return _windup_active
 
 
+func pickup_weapon(w: int) -> bool:
+	if w == CombatMath.Weapon.FISTS or w == CombatMath.Weapon.KICK:
+		return false
+	if CombatMath.better(w, weapon) != w or w == weapon:
+		return false
+	weapon = w
+	Sfx.play("pickup", -4.0, 1.15)
+	return true
+
+
 func heal_for_new_race(reset_weapon: bool = false) -> void:
 	health = 100.0
 	stamina = StaminaRules.MAX
