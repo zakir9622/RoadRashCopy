@@ -4,6 +4,7 @@ extends Node3D
 ## file itself is nearly empty, so there is nothing to desync from code.
 
 const RIDER_MODEL := "res://assets/models/bike.glb"
+const RAT_MODEL := "res://assets/models/bike_rat.glb"
 const COP_MODEL := "res://assets/models/cop_bike.glb"
 
 var manager: RaceManager
@@ -12,7 +13,10 @@ var player: Rider
 var camera: Camera3D
 var hud: CanvasLayer
 
-var _fov_base := 68.0
+var _fov_base := 52.0
+var _cam_back := 3.6
+var _cam_up := 1.12
+var _cam_look := 6.0
 
 
 ## Autoloads fetched by tree path, not identifier: identifier globals bind to
@@ -55,7 +59,8 @@ func _ready() -> void:
 	add_child(traffic)
 	traffic.build(track, int(definition["traffic"]), player)
 
-	manager.configure(track, player, rival_ais, police_ais, traffic)
+	manager.configure(track, player, rival_ais, police_ais, traffic, int(definition["police"]))
+	manager.spawn_police_behind = _spawn_police_unit
 	manager.finished.connect(_on_finished)
 	manager.start()
 
@@ -83,7 +88,7 @@ func _spawn_grid(definition: Dictionary) -> void:
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
-	var rival_count: int = mini(int(definition["rivals"]), Campaign.ROSTER.size())
+	var rival_count: int = mini(int(definition["rivals"]) + 2, Campaign.ROSTER.size())
 	var palette := [
 		Color(0.15, 0.35, 0.8), Color(0.8, 0.75, 0.2), Color(0.2, 0.7, 0.4),
 		Color(0.75, 0.2, 0.65), Color(0.9, 0.9, 0.9), Color(0.1, 0.1, 0.1),
@@ -99,14 +104,22 @@ func _spawn_grid(definition: Dictionary) -> void:
 		rival.weapon = int(profile["weapon"])
 		_rival_ais.append(RivalAI.new(rival, float(profile["skill"]), float(profile["aggression"]), 1000 + i))
 
-	# Police stage down the route like real speed traps, not on the grid —
-	# the player rides into the heat instead of launching next to it.
-	for i in int(definition["police"]):
-		var stakeout := track.length * (0.25 + 0.5 * float(i) / maxf(float(int(definition["police"])), 1.0))
-		var cop := _make_rider("Officer", stakeout, track.half_width * 0.7, Color(0.1, 0.2, 0.85), true)
-		cop.top_speed = 56.0
-		cop.accel = 14.0
-		_police_ais.append(PoliceAI.new(cop))
+	# One officer starts behind the grid; heat spawns reinforcements from the rear.
+	if int(definition["police"]) > 0:
+		_spawn_police_unit(-22.0, track.half_width * 0.55)
+
+func _spawn_police_unit(offset_behind: float = -18.0, lateral: float = 0.0) -> void:
+	var start_s := maxf(player.distance + offset_behind, 0.0)
+	var cop := _make_rider("Officer", start_s, lateral, Color(0.12, 0.22, 0.88), true)
+	cop.top_speed = player.top_speed * 1.05 + 4.0
+	cop.accel = player.accel * 1.1
+	var ai := PoliceAI.new(cop)
+	_police_ais.append(ai)
+	if manager != null:
+		manager.police_ais = _police_ais
+		manager.riders = manager.racers.duplicate()
+		for p in _police_ais:
+			manager.riders.append(p.rider)
 
 
 func _make_rider(rider_name: String, start_s: float, start_x: float,
@@ -116,16 +129,24 @@ func _make_rider(rider_name: String, start_s: float, start_x: float,
 	rider.rider_name = rider_name
 	add_child(rider)
 	rider.setup(track, start_s, start_x)
-	rider.visual = _make_bike_visual(colour, cop)
+	rider.visual = _make_bike_visual(colour, cop, rider)
 	rider.add_child(rider.visual)
+	rider.bind_pose_nodes(rider.visual)
 	return rider
 
 
-func _make_bike_visual(colour: Color, cop: bool) -> Node3D:
-	var path := COP_MODEL if cop else RIDER_MODEL
+func _make_bike_visual(colour: Color, cop: bool, rider: Rider) -> Node3D:
+	var path := COP_MODEL if cop else RAT_MODEL
+	if not cop and rider != null and rider.is_player:
+		var bike_id := String(_state().save.get("bike", "rat"))
+		if bike_id != "rat" and ResourceLoader.exists(RIDER_MODEL):
+			path = RIDER_MODEL
+	elif not cop and ResourceLoader.exists(RIDER_MODEL):
+		path = RIDER_MODEL
 	if ResourceLoader.exists(path):
 		var scene: PackedScene = load(path)
 		var model := scene.instantiate() as Node3D
+		model.scale = Vector3(1.08, 1.08, 1.08)
 		_tint_model(model, colour)
 		return model
 	# Fallback silhouette: body box + wheels, still clearly a bike.
@@ -304,13 +325,13 @@ func _toggle_pause() -> void:
 func _update_camera(delta: float) -> void:
 	if player == null or track == null:
 		return
-	var behind := track.sample(maxf(player.distance - 7.5, 0.0), player.lateral * 0.75, 2.6)
-	camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-8.0 * delta))
-	var look_target := track.sample(player.distance + 12.0, player.lateral * 0.4, 1.0)
+	var behind := track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.35, _cam_up)
+	camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-10.0 * delta))
+	var look_target := track.sample(player.distance + _cam_look, player.lateral * 0.25, 0.85)
 	camera.look_at(look_target.origin, Vector3.UP)
 
-	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.3)
-	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 14.0, 6.0 * delta)
+	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
+	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 6.0, 6.0 * delta)
 
 
 func _on_finished(summary: Dictionary) -> void:

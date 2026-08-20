@@ -1,22 +1,30 @@
 extends CanvasLayer
-## In-race HUD: speed, stamina/health bars, position, countdown, weapon,
-## knockouts, cash, police warning, rear-view mirror, and touch controls.
-## Pull-based: reads the race every frame, so it can never go stale or leak.
+## Road Rash dashboard HUD: diegetic bottom instrument cluster, dual rear
+## mirrors, clear centre view, and bottom-thumb touch controls on mobile.
+
+const DASH_H := 168.0
+const MIRROR_W := 128.0
+const MIRROR_H := 56.0
 
 var _race: Node3D
-var _speed: Label
+var _speed_value: Label
 var _position_label: Label
-var _weapon: Label
-var _knockouts: Label
-var _countdown: Label
-var _police_warning: Label
-var _health_bar: ProgressBar
+var _distance_label: Label
+var _weapon_label: Label
+var _rival_name: Label
+var _countdown_overlay: Label
+var _ko_label: Label
+var _police_label: Label
 var _stamina_bar: ProgressBar
-var _nitro_bar: ProgressBar
-var _mirror_viewport: SubViewport
-var _mirror_camera: Camera3D
+var _bike_bar: ProgressBar
+var _rival_bar: ProgressBar
+var _mirror_l_cam: Camera3D
+var _mirror_r_cam: Camera3D
+var _mirror_l_tex: TextureRect
+var _mirror_r_tex: TextureRect
 var _damage_flash: ColorRect
 var _flash_level: float = 0.0
+var _touch_root: Control
 
 
 func bind(race: Node3D) -> void:
@@ -24,11 +32,13 @@ func bind(race: Node3D) -> void:
 	_build()
 	var player: Rider = race.player
 	player.damaged.connect(_on_player_damaged)
+	player.attacked.connect(_on_player_attacked)
 
 
 func _build() -> void:
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 
 	_damage_flash = ColorRect.new()
@@ -37,76 +47,150 @@ func _build() -> void:
 	_damage_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_damage_flash)
 
-	# --- top-left: position ---
-	var top_left := _panel(root, Control.PRESET_TOP_LEFT)
-	_position_label = _label(top_left, "POS 1", 34, ThemeColors.ACCENT)
-	_knockouts = _label(top_left, "KO 0", 18, ThemeColors.INK_MUTED)
+	_countdown_overlay = Label.new()
+	_countdown_overlay.add_theme_font_size_override("font_size", 72)
+	_countdown_overlay.add_theme_color_override("font_color", ThemeColors.ACCENT)
+	_countdown_overlay.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	root.add_child(_countdown_overlay)
+	ThemeColors.place(_countdown_overlay, Control.PRESET_CENTER, 0)
 
-	# --- top-right: cash + weapon ---
-	var top_right := _panel(root, Control.PRESET_TOP_RIGHT)
-	var state := get_node("/root/GameState")
-	_label(top_right, "$%d" % int(state.save.get("cash", 0)), 24, ThemeColors.ACCENT)
-	_weapon = _label(top_right, "FISTS", 18, ThemeColors.INK)
-
-	# --- bottom-right: speed + nitro ---
-	var bottom_right := _panel(root, Control.PRESET_BOTTOM_RIGHT)
-	_speed = _label(bottom_right, "0", 56, ThemeColors.INK)
-	_label(bottom_right, "KM/H", 14, ThemeColors.INK_MUTED)
-	_nitro_bar = _bar(bottom_right, Color(1.0, 0.48, 0.1))
-
-	# --- bottom-left: stamina + health ---
-	var bottom_left := _panel(root, Control.PRESET_BOTTOM_LEFT)
-	_label(bottom_left, "STAMINA", 14, ThemeColors.INK_MUTED)
-	_stamina_bar = _bar(bottom_left, ThemeColors.ACCENT)
-	_label(bottom_left, "BIKE", 14, ThemeColors.INK_MUTED)
-	_health_bar = _bar(bottom_left, ThemeColors.DANGER)
-
-	# --- centre: countdown + police warning ---
-	var centre := VBoxContainer.new()
-	ThemeColors.place(centre, Control.PRESET_CENTER_TOP, 150)
-	centre.alignment = BoxContainer.ALIGNMENT_CENTER
-	root.add_child(centre)
-	_countdown = _label(centre, "", 110, ThemeColors.INK)
-	_countdown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_police_warning = _label(centre, "", 20, ThemeColors.POLICE_BLUE)
-	_police_warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-
-	_build_mirror(root)
-	if DisplayServer.is_touchscreen_available():
+	_build_dashboard(root)
+	_build_mirrors(root)
+	if DisplayServer.is_touchscreen_available() or OS.has_feature("mobile"):
 		_build_touch_controls(root)
 
 
-func _build_mirror(root: Control) -> void:
-	_mirror_viewport = SubViewport.new()
-	_mirror_viewport.size = Vector2i(360, 120)
-	_mirror_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	add_child(_mirror_viewport)
+func _build_dashboard(root: Control) -> void:
+	var dash := PanelContainer.new()
+	var dash_style := StyleBoxFlat.new()
+	dash_style.bg_color = Color(0.02, 0.03, 0.05, 0.92)
+	dash_style.border_width_top = 3
+	dash_style.border_color = ThemeColors.ACCENT_DIM
+	dash_style.content_margin_left = 16.0
+	dash_style.content_margin_right = 16.0
+	dash_style.content_margin_top = 10.0
+	dash_style.content_margin_bottom = 10.0
+	dash.add_theme_stylebox_override("panel", dash_style)
+	dash.custom_minimum_size = Vector2(0, DASH_H)
+	root.add_child(dash)
+	ThemeColors.place(dash, Control.PRESET_BOTTOM_WIDE, 0)
 
-	_mirror_camera = Camera3D.new()
-	_mirror_camera.fov = 65.0
-	_mirror_viewport.add_child(_mirror_camera)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 18)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	dash.add_child(row)
 
+	# Left gauge cluster — speedo
+	var left := VBoxContainer.new()
+	left.custom_minimum_size = Vector2(150, 0)
+	row.add_child(left)
+	_speed_value = _label(left, "0", 44, ThemeColors.INK)
+	_speed_value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_label(left, "KM/H", 13, ThemeColors.INK_MUTED).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_position_label = _label(left, "POS 1/8", 18, ThemeColors.ACCENT)
+	_position_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+	# Centre — stamina, bike, rival, weapon, distance
+	var centre := VBoxContainer.new()
+	centre.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	centre.add_theme_constant_override("separation", 6)
+	row.add_child(centre)
+
+	var bar_row := HBoxContainer.new()
+	bar_row.add_theme_constant_override("separation", 12)
+	centre.add_child(bar_row)
+	var stam_col := VBoxContainer.new()
+	stam_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar_row.add_child(stam_col)
+	_label(stam_col, "STAMINA", 12, ThemeColors.INK_MUTED)
+	_stamina_bar = _bar(stam_col, ThemeColors.ACCENT)
+	var bike_col := VBoxContainer.new()
+	bike_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar_row.add_child(bike_col)
+	_label(bike_col, "BIKE", 12, ThemeColors.INK_MUTED)
+	_bike_bar = _bar(bike_col, ThemeColors.DANGER)
+
+	var rival_row := HBoxContainer.new()
+	centre.add_child(rival_row)
+	_rival_name = _label(rival_row, "RIVAL —", 13, ThemeColors.INK_MUTED)
+	_rival_name.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_rival_bar = _bar(centre, ThemeColors.POLICE_BLUE)
+	_rival_bar.custom_minimum_size = Vector2(0, 10)
+
+	var info_row := HBoxContainer.new()
+	centre.add_child(info_row)
+	_weapon_label = _label(info_row, "FISTS", 15, ThemeColors.INK)
+	_weapon_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_distance_label = _label(info_row, "2.4 KM", 15, ThemeColors.INK_MUTED)
+	_police_label = _label(info_row, "", 14, ThemeColors.POLICE_BLUE)
+
+	# Right gauge — tach style readout + KO
+	var right := VBoxContainer.new()
+	right.custom_minimum_size = Vector2(150, 0)
+	row.add_child(right)
+	var tach := _label(right, "RPM", 13, ThemeColors.INK_MUTED)
+	tach.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var rpm := _label(right, "x4", 36, ThemeColors.INK)
+	rpm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_label(right, "KNOCKOUTS", 12, ThemeColors.INK_MUTED).horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ko_label = _label(right, "KO 0", 18, ThemeColors.ACCENT)
+	_ko_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+
+
+func _build_mirrors(root: Control) -> void:
+	var mirror_row := HBoxContainer.new()
+	mirror_row.add_theme_constant_override("separation", 8)
+	root.add_child(mirror_row)
+	ThemeColors.place(mirror_row, Control.PRESET_BOTTOM_WIDE, int(DASH_H + 6))
+
+	var spacer_l := Control.new()
+	spacer_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mirror_row.add_child(spacer_l)
+
+	_mirror_l_tex = _make_mirror_panel(mirror_row, "mirror_l")
+	var gap := Control.new()
+	gap.custom_minimum_size = Vector2(280, 0)
+	mirror_row.add_child(gap)
+	_mirror_r_tex = _make_mirror_panel(mirror_row, "mirror_r")
+
+	var spacer_r := Control.new()
+	spacer_r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mirror_row.add_child(spacer_r)
+
+
+func _make_mirror_panel(parent: Control, cam_name: String) -> TextureRect:
 	var frame := PanelContainer.new()
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0, 0, 0, 0.85)
-	style.border_width_bottom = 2
-	style.border_width_top = 2
+	style.bg_color = Color(0, 0, 0, 0.88)
 	style.border_width_left = 2
 	style.border_width_right = 2
+	style.border_width_top = 2
+	style.border_width_bottom = 2
 	style.border_color = ThemeColors.POLICE_BLUE
-	style.corner_radius_top_left = 16
-	style.corner_radius_top_right = 16
-	style.corner_radius_bottom_left = 16
-	style.corner_radius_bottom_right = 16
 	frame.add_theme_stylebox_override("panel", style)
-	root.add_child(frame)
-	ThemeColors.place(frame, Control.PRESET_CENTER_TOP, 8)
+	parent.add_child(frame)
+
+	var vp := SubViewport.new()
+	vp.size = Vector2i(int(MIRROR_W), int(MIRROR_H))
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	add_child(vp)
+
+	var cam := Camera3D.new()
+	cam.name = cam_name
+	cam.fov = 68.0
+	vp.add_child(cam)
+	if cam_name == "mirror_l":
+		_mirror_l_cam = cam
+	else:
+		_mirror_r_cam = cam
 
 	var view := TextureRect.new()
-	view.texture = _mirror_viewport.get_texture()
-	view.custom_minimum_size = Vector2(360, 120)
-	view.flip_h = true   # mirrors mirror
+	view.texture = vp.get_texture()
+	view.custom_minimum_size = Vector2(MIRROR_W, MIRROR_H)
+	view.stretch_mode = TextureRect.STRETCH_SCALE
+	view.flip_h = true
 	frame.add_child(view)
+	return view
 
 
 func _build_touch_controls(root: Control) -> void:
@@ -114,62 +198,70 @@ func _build_touch_controls(root: Control) -> void:
 	if controller == null:
 		return
 
-	# Left thumb: steering. Right thumb: throttle, combat, nitro. Clusters sit
-	# at screen mid-height, clear of the corner info panels.
-	var left := HBoxContainer.new()
-	left.add_theme_constant_override("separation", 14)
-	root.add_child(left)
-	ThemeColors.place(left, Control.PRESET_CENTER_LEFT, 24)
+	_touch_root = Control.new()
+	_touch_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_touch_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_touch_root)
 
-	var left_zone := _touch_button(left, "<")
-	left_zone.button_down.connect(func(): controller.touch_steer = -1.0)
-	left_zone.button_up.connect(func(): controller.touch_steer = 0.0)
-	var right_zone := _touch_button(left, ">")
-	right_zone.button_down.connect(func(): controller.touch_steer = 1.0)
-	right_zone.button_up.connect(func(): controller.touch_steer = 0.0)
+	var safe := DisplayServer.get_display_safe_area()
+	var bottom_inset := maxf(0.0, float(get_viewport().get_visible_rect().size.y - safe.end.y))
 
-	var right := VBoxContainer.new()
-	right.add_theme_constant_override("separation", 14)
-	root.add_child(right)
-	ThemeColors.place(right, Control.PRESET_CENTER_RIGHT, 24)
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 10)
+	bar.alignment = BoxContainer.ALIGNMENT_END
+	_touch_root.add_child(bar)
+	bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bar.offset_bottom = -(DASH_H + bottom_inset + 8)
+	bar.offset_top = bar.offset_bottom - 108
+	bar.offset_left = 12
+	bar.offset_right = -12
 
-	var throttle := _touch_button(right, "GO")
-	throttle.button_down.connect(func(): controller.touch_throttle = 1.0)
-	throttle.button_up.connect(func(): controller.touch_throttle = 0.0)
+	# Steer cluster — bottom-left
+	var steer_box := HBoxContainer.new()
+	steer_box.add_theme_constant_override("separation", 8)
+	steer_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(steer_box)
+	var steer_l := _touch_btn(steer_box, "◄", Vector2(108, 100))
+	steer_l.button_down.connect(func(): controller.touch_steer = -1.0)
+	steer_l.button_up.connect(func(): controller.touch_steer = 0.0)
+	var steer_r := _touch_btn(steer_box, "►", Vector2(108, 100))
+	steer_r.button_down.connect(func(): controller.touch_steer = 1.0)
+	steer_r.button_up.connect(func(): controller.touch_steer = 0.0)
 
-	var combat_row := HBoxContainer.new()
-	combat_row.add_theme_constant_override("separation", 14)
-	right.add_child(combat_row)
-	var punch := _touch_button(combat_row, "PUNCH")
-	punch.pressed.connect(func(): controller.touch_attack_right = true)
-	var kick := _touch_button(combat_row, "KICK")
+	# Drive + combat — bottom-right
+	var action_box := HBoxContainer.new()
+	action_box.add_theme_constant_override("separation", 8)
+	bar.add_child(action_box)
+
+	var brake := _touch_btn(action_box, "BRK", Vector2(88, 100))
+	brake.button_down.connect(func(): controller.touch_brake = 1.0)
+	brake.button_up.connect(func(): controller.touch_brake = 0.0)
+
+	var go := _touch_btn(action_box, "GO", Vector2(108, 100))
+	go.button_down.connect(func(): controller.touch_throttle = 1.0)
+	go.button_up.connect(func(): controller.touch_throttle = 0.0)
+
+	var punch_l := _touch_btn(action_box, "👊L", Vector2(88, 100))
+	punch_l.pressed.connect(func(): controller.touch_attack_left = true)
+	var punch_r := _touch_btn(action_box, "👊R", Vector2(88, 100))
+	punch_r.pressed.connect(func(): controller.touch_attack_right = true)
+	var kick := _touch_btn(action_box, "KICK", Vector2(88, 100))
 	kick.pressed.connect(func(): controller.touch_kick = true)
 
-	var nitro := _touch_button(right, "NITRO")
-	nitro.button_down.connect(func(): controller.touch_nitro = true)
-	nitro.button_up.connect(func(): controller.touch_nitro = false)
 
-
-func _touch_button(parent: Control, text: String) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.custom_minimum_size = Vector2(100, 84)
-	button.add_theme_stylebox_override("normal", ThemeColors.button_style())
-	button.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
-	button.add_theme_stylebox_override("pressed", ThemeColors.button_style(true))
-	button.add_theme_color_override("font_color", ThemeColors.INK)
-	parent.add_child(button)
-	return button
-
-
-func _panel(root: Control, preset: int) -> VBoxContainer:
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", ThemeColors.styled_panel())
-	root.add_child(panel)
-	ThemeColors.place(panel, preset)
-	var box := VBoxContainer.new()
-	panel.add_child(box)
-	return box
+func _touch_btn(parent: Control, text: String, size: Vector2) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.custom_minimum_size = size
+	b.add_theme_font_size_override("font_size", 18)
+	var normal := ThemeColors.button_style()
+	normal.bg_color = Color(1, 1, 1, 0.12)
+	b.add_theme_stylebox_override("normal", normal)
+	b.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
+	b.add_theme_stylebox_override("pressed", ThemeColors.button_style(true))
+	b.add_theme_color_override("font_color", ThemeColors.INK)
+	parent.add_child(b)
+	return b
 
 
 func _label(parent: Control, text: String, size: int, colour: Color) -> Label:
@@ -186,12 +278,12 @@ func _bar(parent: Control, colour: Color) -> ProgressBar:
 	bar.max_value = 1.0
 	bar.value = 1.0
 	bar.show_percentage = false
-	bar.custom_minimum_size = Vector2(190, 12)
-	var background := StyleBoxFlat.new()
-	background.bg_color = Color(0, 0, 0, 0.8)
+	bar.custom_minimum_size = Vector2(120, 12)
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0, 0, 0, 0.75)
 	var fill := StyleBoxFlat.new()
 	fill.bg_color = colour
-	bar.add_theme_stylebox_override("background", background)
+	bar.add_theme_stylebox_override("background", bg)
 	bar.add_theme_stylebox_override("fill", fill)
 	parent.add_child(bar)
 	return bar
@@ -201,42 +293,95 @@ func _on_player_damaged(_amount: float, _from_side: float) -> void:
 	_flash_level = 0.55
 
 
+func _on_player_attacked(_side: float, _kick: bool) -> void:
+	if _race != null and _race.manager != null:
+		_race.manager.register_heat_punch()
+
+
 func _process(delta: float) -> void:
 	if _race == null or _race.manager == null:
 		return
 	var manager: RaceManager = _race.manager
 	var player: Rider = _race.player
+	var track: Track = _race.track
 
-	_speed.text = str(int(player.speed * 3.6))
+	_speed_value.text = str(int(player.speed * 3.6))
 	_position_label.text = "POS %d/%d" % [manager.position_of(player), manager.racers.size()]
-	_knockouts.text = "KO %d" % player.knockouts
-	_weapon.text = String(CombatMath.WEAPON_NAMES[player.weapon])
-	_health_bar.value = player.health / 100.0
+	_weapon_label.text = String(CombatMath.WEAPON_NAMES[player.weapon])
 	_stamina_bar.value = player.stamina / StaminaRules.MAX
-	_nitro_bar.value = player.nitro_fuel
+	_bike_bar.value = player.health / 100.0
+
+	var remaining := maxf(track.length - player.distance, 0.0)
+	_distance_label.text = "%.1f KM" % (remaining / 1000.0)
+
+	var nearest: Rider = _nearest_rival(manager, player)
+	if nearest != null:
+		_rival_name.text = nearest.rider_name.to_upper()
+		_rival_bar.value = nearest.stamina / StaminaRules.MAX
+	else:
+		_rival_name.text = "CLEAR"
+		_rival_bar.value = 0.0
+
+	_ko_label.text = "KO %d" % player.knockouts
 
 	match manager.phase:
 		RaceManager.Phase.COUNTDOWN:
-			_countdown.text = str(int(ceil(manager.countdown_remaining)))
+			_countdown_overlay.text = str(int(ceil(manager.countdown_remaining)))
 		RaceManager.Phase.RACING:
-			_countdown.text = "GO!" if manager.countdown_remaining > -1.0 else ""
+			if manager.countdown_remaining > -0.8:
+				_countdown_overlay.text = "GO!"
+			else:
+				_countdown_overlay.text = ""
 			manager.countdown_remaining -= delta
 		_:
-			_countdown.text = ""
+			_countdown_overlay.text = ""
 
-	# Police proximity warning.
-	var nearest := 1e9
+	var cop_text := ""
+	var nearest_cop_gap := 1e9
+	var cop_behind := true
 	for ai in manager.police_ais:
-		var cop: Rider = ai.rider
-		nearest = minf(nearest, absf(cop.distance - player.distance))
-	_police_warning.text = "COP %d M" % int(nearest) if nearest < 40.0 else ""
+		if ai.dormant and not ai.pursuing:
+			continue
+		var g: float = ai.signed_gap_to(player)
+		if absf(g) < absf(nearest_cop_gap):
+			nearest_cop_gap = g
+			cop_behind = g > 0.0
+	if absf(nearest_cop_gap) < 80.0:
+		var arrow := "◄" if cop_behind else "►"
+		cop_text = "%s COP %dm" % [arrow, int(absf(nearest_cop_gap))]
+	_police_label.text = cop_text
 
-	# Rear-view mirror follows the player, looking backwards.
-	if _mirror_camera != null and _race.track != null:
-		var t: Transform3D = _race.track.sample(player.distance + 1.5, player.lateral, 1.6)
-		_mirror_camera.global_position = t.origin
-		var back: Transform3D = _race.track.sample(maxf(player.distance - 10.0, 0.0), player.lateral, 1.2)
-		_mirror_camera.look_at(back.origin, Vector3.UP)
+	_update_mirrors(player, track)
 
 	_flash_level = maxf(_flash_level - delta * 2.2, 0.0)
 	_damage_flash.color.a = _flash_level
+
+
+func _nearest_rival(manager: RaceManager, player: Rider) -> Rider:
+	var best: Rider = null
+	var best_gap := 1e9
+	for rival in manager.racers:
+		var r := rival as Rider
+		if r == player:
+			continue
+		var gap := absf(r.distance - player.distance)
+		if gap < best_gap:
+			best_gap = gap
+			best = r
+	return best
+
+
+func _update_mirrors(player: Rider, track: Track) -> void:
+	if track == null:
+		return
+	var back_s := maxf(player.distance - 14.0, 0.0)
+	var back_t := track.sample(back_s, player.lateral - 0.5, 1.35)
+	if _mirror_l_cam != null:
+		_mirror_l_cam.global_transform = back_t
+		var look := track.sample(maxf(player.distance - 28.0, 0.0), player.lateral - 1.2, 0.8)
+		_mirror_l_cam.look_at(look.origin, Vector3.UP)
+	if _mirror_r_cam != null:
+		var back_r := track.sample(back_s, player.lateral + 0.5, 1.35)
+		_mirror_r_cam.global_transform = back_r
+		var look_r := track.sample(maxf(player.distance - 28.0, 0.0), player.lateral + 1.2, 0.8)
+		_mirror_r_cam.look_at(look_r.origin, Vector3.UP)

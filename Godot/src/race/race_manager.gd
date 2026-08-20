@@ -1,8 +1,6 @@
 class_name RaceManager
 extends Node
-## Owns the race: phases, standings, traffic collisions, police busts, finish.
-## Everything the HUD shows comes from here; everything the campaign records
-## leaves through `finished`.
+## Race phases, standings, traffic, heat-driven police spawns, and bust handling.
 
 signal phase_changed(phase: int)
 signal finished(summary: Dictionary)
@@ -12,22 +10,32 @@ enum Phase { STAGING, COUNTDOWN, RACING, FINISHED }
 var phase: int = Phase.STAGING
 var countdown_remaining: float = 3.0
 var track: Track
-var riders: Array = []          # every Rider incl. player and police
-var racers: Array = []          # standings-eligible: player + rivals
+var riders: Array = []
+var racers: Array = []
 var player: Rider
 var rival_ais: Array = []
 var police_ais: Array = []
 var traffic: Traffic
 var busted: bool = false
+var heat: HeatDirector = HeatDirector.new()
+var _max_police: int = 1
+var _police_spawned: int = 0
+var _spawn_cooldown: float = 0.0
 var _finish_position: int = 0
 
+## Callable set by Race scene to spawn a cop behind the player when heat demands it.
+var spawn_police_behind: Callable = Callable()
 
-func configure(p_track: Track, p_player: Rider, p_rivals: Array, p_police: Array, p_traffic: Traffic) -> void:
+
+func configure(p_track: Track, p_player: Rider, p_rivals: Array, p_police: Array,
+		p_traffic: Traffic, max_police: int = 1) -> void:
 	track = p_track
 	player = p_player
 	traffic = p_traffic
 	rival_ais = p_rivals
 	police_ais = p_police
+	_max_police = maxi(max_police, 1)
+	_police_spawned = p_police.size()
 
 	racers = [player]
 	for ai in rival_ais:
@@ -35,6 +43,24 @@ func configure(p_track: Track, p_player: Rider, p_rivals: Array, p_police: Array
 	riders = racers.duplicate()
 	for ai in police_ais:
 		riders.append(ai.rider)
+
+	player.crashed.connect(_on_player_crashed)
+	player.attacked.connect(_on_player_attacked)
+
+
+func register_heat_punch() -> void:
+	heat.on_punch()
+
+
+func _on_player_crashed(_r: Rider) -> void:
+	heat.on_crash()
+
+
+func _on_player_attacked(_side: float, kick: bool) -> void:
+	if kick:
+		heat.on_kick()
+	else:
+		heat.on_punch()
 
 
 func start() -> void:
@@ -58,6 +84,18 @@ func _physics_process(delta: float) -> void:
 
 
 func _step_race(delta: float) -> void:
+	heat.tick(delta)
+	_spawn_cooldown = maxf(_spawn_cooldown - delta, 0.0)
+	if _spawn_cooldown <= 0.0 and spawn_police_behind.is_valid():
+		if heat.should_spawn_reinforcement(_active_police(), _max_police):
+			spawn_police_behind.call()
+			_police_spawned += 1
+			_spawn_cooldown = 25.0
+		elif heat.should_spawn_cop(_active_police(), _max_police) and _police_spawned == 0:
+			spawn_police_behind.call()
+			_police_spawned += 1
+			_spawn_cooldown = 18.0
+
 	for ai in rival_ais:
 		ai.step(delta, racers, player)
 	for ai in police_ais:
@@ -67,8 +105,7 @@ func _step_race(delta: float) -> void:
 			return
 
 	for rider_obj in riders:
-		var rider := rider_obj as Rider
-		rider.step(delta)
+		(rider_obj as Rider).step(delta)
 
 	if traffic != null:
 		traffic.step(delta)
@@ -76,14 +113,22 @@ func _step_race(delta: float) -> void:
 
 	_check_rider_collisions()
 
-	if player.distance >= track.length:
-		_finish(position_of(player))
+	if player.bike_destroyed():
+		_finish(0)
 		return
 
-	# Rivals that cross the line keep their result; the race ends on the player.
+	if player.distance >= track.length:
+		_finish(position_of(player))
 
 
-## Standings: distance travelled, finished riders locked ahead.
+func _active_police() -> int:
+	var n := 0
+	for ai in police_ais:
+		if not ai.dormant or ai.pursuing:
+			n += 1
+	return n
+
+
 func position_of(rider: Rider) -> int:
 	var pos := 1
 	for other_obj in racers:
@@ -99,7 +144,6 @@ func standings() -> Array:
 	return sorted
 
 
-## Hitting a car is a wall at speed: heavy damage plus a crash.
 func _check_traffic_collisions() -> void:
 	for rider_obj in riders:
 		var rider := rider_obj as Rider
@@ -110,11 +154,12 @@ func _check_traffic_collisions() -> void:
 			var gap_x: float = absf(float(car["lane"]) - rider.lateral)
 			if gap_s < 2.6 and gap_x < 1.6:
 				var closing: float = absf(rider.speed - float(car["speed"]))
-				rider.take_damage(minf(closing * 1.2, 55.0), signf(rider.lateral - float(car["lane"])), null)
+				rider.take_bike_damage(minf(closing * 1.2, 55.0), null)
+				if rider.is_player:
+					heat.on_near_miss()
 				break
 
 
-## Rider-vs-rider shoulder contact: gentle push apart, damage only at speed delta.
 func _check_rider_collisions() -> void:
 	for i in riders.size():
 		for j in range(i + 1, riders.size()):
