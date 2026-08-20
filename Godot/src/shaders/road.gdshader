@@ -40,10 +40,13 @@ void fragment() {
 	float dash_mask = step(0.5, fract(track_uv.y * 0.55));
 	float center = stripe(u, 0.5, 0.010) * dash_mask;
 
-	// Paint sits on top of the asphalt, slightly worn by the same noise.
+	// Paint sits on top of the asphalt, slightly worn by the same noise. The
+	// asphalt albedo is dark (r ≈ 0.1–0.3), so the mask keeps a floor — worn
+	// paint should thin out, never vanish.
 	float paint_wear = texture(albedo_tex, uv * 2.7).r;
-	edge *= smoothstep(0.15, 0.45, paint_wear);
-	center *= smoothstep(0.15, 0.45, paint_wear);
+	float wear_mask = 0.55 + 0.45 * smoothstep(0.08, 0.35, paint_wear);
+	edge *= wear_mask;
+	center *= wear_mask;
 
 	albedo = mix(albedo, line_color.rgb, clamp(edge, 0.0, 1.0) * 0.85);
 	albedo = mix(albedo, center_color.rgb, clamp(center, 0.0, 1.0) * 0.9);

@@ -96,13 +96,14 @@ func _build_road() -> void:
 		var v0 := d0 * v_tile
 		var v1 := d1 * v_tile
 
+		# Clockwise from above — Godot culls counter-clockwise faces.
 		st.set_normal(n0); st.set_uv(Vector2(0, v0)); st.add_vertex(l0)
-		st.set_normal(n0); st.set_uv(Vector2(1, v0)); st.add_vertex(r0)
 		st.set_normal(n1); st.set_uv(Vector2(1, v1)); st.add_vertex(r1)
+		st.set_normal(n0); st.set_uv(Vector2(1, v0)); st.add_vertex(r0)
 
 		st.set_normal(n0); st.set_uv(Vector2(0, v0)); st.add_vertex(l0)
-		st.set_normal(n1); st.set_uv(Vector2(1, v1)); st.add_vertex(r1)
 		st.set_normal(n1); st.set_uv(Vector2(0, v1)); st.add_vertex(l1)
+		st.set_normal(n1); st.set_uv(Vector2(1, v1)); st.add_vertex(r1)
 	st.generate_tangents()
 
 	var mesh_instance := MeshInstance3D.new()
@@ -117,11 +118,13 @@ func _build_road() -> void:
 func _build_ground() -> void:
 	var biome := String(definition.get("biome", "coast"))
 	var ground_tex := "res://assets/textures/aerial_grass_rock_Diffuse.jpg"
-	var tint := Color(1, 1, 1)
+	var tint := Color(0.72, 0.95, 0.62)
 	match biome:
 		"desert": tint = Color(1.25, 1.05, 0.72)
-		"city", "night": ground_tex = "res://assets/textures/concrete_wall_008_Diffuse.jpg"
-		"mountain": tint = Color(0.85, 0.9, 0.85)
+		"city", "night":
+			ground_tex = "res://assets/textures/concrete_wall_008_Diffuse.jpg"
+			tint = Color(1, 1, 1)
+		"mountain": tint = Color(0.7, 0.88, 0.68)
 
 	var mat := StandardMaterial3D.new()
 	if ResourceLoader.exists(ground_tex):
@@ -162,12 +165,22 @@ static func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector
 	var n := (b - a).cross(c - a).normalized()
 	if n.y < 0.0:
 		n = -n
-	st.set_normal(n); st.set_uv(ua); st.add_vertex(a)
-	st.set_normal(n); st.set_uv(ub); st.add_vertex(b)
-	st.set_normal(n); st.set_uv(uc); st.add_vertex(c)
-	st.set_normal(n); st.set_uv(ua); st.add_vertex(a)
-	st.set_normal(n); st.set_uv(uc); st.add_vertex(c)
-	st.set_normal(n); st.set_uv(ud); st.add_vertex(d)
+	# Emit whichever winding is clockwise seen from above (the visible side).
+	var flipped := (b - a).cross(c - a).y > 0.0
+	if flipped:
+		st.set_normal(n); st.set_uv(ua); st.add_vertex(a)
+		st.set_normal(n); st.set_uv(uc); st.add_vertex(c)
+		st.set_normal(n); st.set_uv(ub); st.add_vertex(b)
+		st.set_normal(n); st.set_uv(ua); st.add_vertex(a)
+		st.set_normal(n); st.set_uv(ud); st.add_vertex(d)
+		st.set_normal(n); st.set_uv(uc); st.add_vertex(c)
+	else:
+		st.set_normal(n); st.set_uv(ua); st.add_vertex(a)
+		st.set_normal(n); st.set_uv(ub); st.add_vertex(b)
+		st.set_normal(n); st.set_uv(uc); st.add_vertex(c)
+		st.set_normal(n); st.set_uv(ua); st.add_vertex(a)
+		st.set_normal(n); st.set_uv(uc); st.add_vertex(c)
+		st.set_normal(n); st.set_uv(ud); st.add_vertex(d)
 
 
 ## Guardrails as one MultiMesh per side: hundreds of posts+rails, two draw calls.
@@ -207,6 +220,9 @@ func _build_props(rng_seed: int) -> void:
 
 	var prop_path := "res://assets/models/tree.glb"
 	var scale_range := Vector2(0.8, 1.6)
+	var is_city := biome == "city" or biome == "night"
+	# Buildings are 8 m wide at scale 1 — keep their walls clear of the rail.
+	var clearance := Vector2(16.0, 46.0) if is_city else Vector2(6.0, 34.0)
 	match biome:
 		"desert":
 			prop_path = "res://assets/models/rock.glb"
@@ -227,10 +243,13 @@ func _build_props(rng_seed: int) -> void:
 	for i in count:
 		for side: float in [-1.0, 1.0]:
 			var d := i * 26.0 + rng.randf_range(-8.0, 8.0)
-			var lateral := (half_width + rng.randf_range(6.0, 34.0)) * side
+			var lateral := (half_width + rng.randf_range(clearance.x, clearance.y)) * side
 			var t := sample(clampf(d, 0.0, length), lateral, -0.4)
 			var s := rng.randf_range(scale_range.x, scale_range.y)
-			t.basis = Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3(s, s, s))
+			# Skylines need height variety; footprints stay believable.
+			var height_scale := rng.randf_range(0.7, 2.6) if is_city else s
+			t.basis = Basis(Vector3.UP, rng.randf_range(0.0, TAU)) \
+				.scaled(Vector3(s, height_scale, s))
 			mm.set_instance_transform(idx, t)
 			idx += 1
 	var inst := MultiMeshInstance3D.new()

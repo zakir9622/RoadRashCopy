@@ -9,6 +9,9 @@ var escape_distance: float = 120.0
 var _stopped_timer: float = 0.0
 var _escape_timer: float = 0.0
 var _siren_timer: float = 0.0
+## No busts for the first seconds after GO — launching from the grid at 0 km/h
+## must never read as "stopped next to an officer".
+var _grace: float = 6.0
 var pursuing: bool = true
 var has_busted: bool = false
 
@@ -23,10 +26,16 @@ func step(delta: float, player: Rider) -> bool:
 	if has_busted or player == null or rider.state != Rider.State.RIDING:
 		return false
 
+	_grace = maxf(_grace - delta, 0.0)
 	var gap := player.distance - rider.distance
 
 	if not pursuing:
 		rider.in_throttle = 0.5
+		return false
+
+	# Staked out ahead: hold position until the target is nearly on top of us.
+	if gap < -30.0:
+		rider.in_throttle = 0.0
 		return false
 
 	# Chase: full throttle behind, ease off alongside to sit on the target.
@@ -50,6 +59,8 @@ func step(delta: float, player: Rider) -> bool:
 		_escape_timer = 0.0
 
 	# Bust: crashed nearby, or stopped alongside for over a second.
+	if _grace > 0.0:
+		return false
 	if distance_to < bust_radius:
 		if player.state == Rider.State.CRASHED:
 			has_busted = true

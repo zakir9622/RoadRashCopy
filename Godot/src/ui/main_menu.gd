@@ -56,23 +56,24 @@ func _build_backdrop() -> void:
 	world.add_child(camera)
 	camera.make_current()
 
+	# Slow dolly down the road itself, low over the tarmac like a title shot.
 	var tween := create_tween().set_loops()
-	camera.global_position = track.sample(80.0, -6.0, 4.0).origin
+	camera.global_position = track.sample(80.0, 0.0, 3.0).origin
 	var drift := func(progress: float) -> void:
-		var t := track.sample(lerpf(80.0, 400.0, progress), lerpf(-6.0, 6.0, progress), 4.5)
+		var s := lerpf(80.0, 600.0, progress)
+		var t := track.sample(s, sin(progress * TAU) * 3.0, 3.0)
 		camera.global_position = t.origin
-		var ahead := track.sample(lerpf(80.0, 400.0, progress) + 40.0, 0.0, 1.0)
+		var ahead := track.sample(s + 55.0, 0.0, 0.5)
 		camera.look_at(ahead.origin, Vector3.UP)
-	tween.tween_method(drift, 0.0, 1.0, 24.0)
-	tween.tween_method(drift, 1.0, 0.0, 24.0)
+	tween.tween_method(drift, 0.0, 1.0, 40.0)
+	tween.tween_method(drift, 1.0, 0.0, 40.0)
 
 
 func _build_menu() -> void:
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER_LEFT)
-	panel.position += Vector2(80, 0)
 	panel.add_theme_stylebox_override("panel", ThemeColors.styled_panel())
 	add_child(panel)
+	ThemeColors.place(panel, Control.PRESET_CENTER_LEFT, 80)
 
 	_menu_box = VBoxContainer.new()
 	_menu_box.add_theme_constant_override("separation", 10)
@@ -134,9 +135,8 @@ func _show_chapter_intro(chapter_index: int) -> void:
 	add_child(scrim)
 
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.add_theme_stylebox_override("panel", ThemeColors.styled_panel())
-	scrim.add_child(panel)
+	ThemeColors.center_wrap(scrim).add_child(panel)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 14)
@@ -178,9 +178,8 @@ func _on_quick_race() -> void:
 	add_child(scrim)
 
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.add_theme_stylebox_override("panel", ThemeColors.styled_panel())
-	scrim.add_child(panel)
+	ThemeColors.center_wrap(scrim).add_child(panel)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)

@@ -18,7 +18,7 @@ func _init() -> void:
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 41
+	const EXPECTED_CHECKS := 52
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -188,6 +188,8 @@ func _test_race_simulation() -> void:
 	player.crash()
 	cop.distance = player.distance
 	cop.lateral = player.lateral
+	check(not police.step(delta, player), "grace period blocks start-line busts")
+	police._grace = 0.0
 	var busted := police.step(delta, player)
 	check(busted, "crashing on a cop is a bust")
 

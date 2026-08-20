@@ -38,23 +38,24 @@ func _build() -> void:
 	root.add_child(_damage_flash)
 
 	# --- top-left: position ---
-	var top_left := _panel(root, Control.PRESET_TOP_LEFT, Vector2(24, 24))
+	var top_left := _panel(root, Control.PRESET_TOP_LEFT)
 	_position_label = _label(top_left, "POS 1", 34, ThemeColors.ACCENT)
 	_knockouts = _label(top_left, "KO 0", 18, ThemeColors.INK_MUTED)
 
 	# --- top-right: cash + weapon ---
-	var top_right := _panel(root, Control.PRESET_TOP_RIGHT, Vector2(-24, 24))
-	_label(top_right, "$%d" % int(GameState.save.get("cash", 0)), 24, ThemeColors.ACCENT)
+	var top_right := _panel(root, Control.PRESET_TOP_RIGHT)
+	var state := get_node("/root/GameState")
+	_label(top_right, "$%d" % int(state.save.get("cash", 0)), 24, ThemeColors.ACCENT)
 	_weapon = _label(top_right, "FISTS", 18, ThemeColors.INK)
 
 	# --- bottom-right: speed + nitro ---
-	var bottom_right := _panel(root, Control.PRESET_BOTTOM_RIGHT, Vector2(-24, -24))
+	var bottom_right := _panel(root, Control.PRESET_BOTTOM_RIGHT)
 	_speed = _label(bottom_right, "0", 56, ThemeColors.INK)
 	_label(bottom_right, "KM/H", 14, ThemeColors.INK_MUTED)
 	_nitro_bar = _bar(bottom_right, Color(1.0, 0.48, 0.1))
 
 	# --- bottom-left: stamina + health ---
-	var bottom_left := _panel(root, Control.PRESET_BOTTOM_LEFT, Vector2(24, -24))
+	var bottom_left := _panel(root, Control.PRESET_BOTTOM_LEFT)
 	_label(bottom_left, "STAMINA", 14, ThemeColors.INK_MUTED)
 	_stamina_bar = _bar(bottom_left, ThemeColors.ACCENT)
 	_label(bottom_left, "BIKE", 14, ThemeColors.INK_MUTED)
@@ -62,8 +63,7 @@ func _build() -> void:
 
 	# --- centre: countdown + police warning ---
 	var centre := VBoxContainer.new()
-	centre.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	centre.position += Vector2(0, 60)
+	ThemeColors.place(centre, Control.PRESET_CENTER_TOP, 150)
 	centre.alignment = BoxContainer.ALIGNMENT_CENTER
 	root.add_child(centre)
 	_countdown = _label(centre, "", 110, ThemeColors.INK)
@@ -87,8 +87,6 @@ func _build_mirror(root: Control) -> void:
 	_mirror_viewport.add_child(_mirror_camera)
 
 	var frame := PanelContainer.new()
-	frame.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	frame.position = Vector2(-180, 8)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0, 0, 0, 0.85)
 	style.border_width_bottom = 2
@@ -102,6 +100,7 @@ func _build_mirror(root: Control) -> void:
 	style.corner_radius_bottom_right = 16
 	frame.add_theme_stylebox_override("panel", style)
 	root.add_child(frame)
+	ThemeColors.place(frame, Control.PRESET_CENTER_TOP, 8)
 
 	var view := TextureRect.new()
 	view.texture = _mirror_viewport.get_texture()
@@ -115,46 +114,59 @@ func _build_touch_controls(root: Control) -> void:
 	if controller == null:
 		return
 
-	var left_zone := _touch_button(root, "<", Control.PRESET_BOTTOM_LEFT, Vector2(24, -160))
+	# Left thumb: steering. Right thumb: throttle, combat, nitro. Clusters sit
+	# at screen mid-height, clear of the corner info panels.
+	var left := HBoxContainer.new()
+	left.add_theme_constant_override("separation", 14)
+	root.add_child(left)
+	ThemeColors.place(left, Control.PRESET_CENTER_LEFT, 24)
+
+	var left_zone := _touch_button(left, "<")
 	left_zone.button_down.connect(func(): controller.touch_steer = -1.0)
 	left_zone.button_up.connect(func(): controller.touch_steer = 0.0)
-	var right_zone := _touch_button(root, ">", Control.PRESET_BOTTOM_LEFT, Vector2(140, -160))
+	var right_zone := _touch_button(left, ">")
 	right_zone.button_down.connect(func(): controller.touch_steer = 1.0)
 	right_zone.button_up.connect(func(): controller.touch_steer = 0.0)
 
-	var throttle := _touch_button(root, "GO", Control.PRESET_BOTTOM_RIGHT, Vector2(-140, -160))
+	var right := VBoxContainer.new()
+	right.add_theme_constant_override("separation", 14)
+	root.add_child(right)
+	ThemeColors.place(right, Control.PRESET_CENTER_RIGHT, 24)
+
+	var throttle := _touch_button(right, "GO")
 	throttle.button_down.connect(func(): controller.touch_throttle = 1.0)
 	throttle.button_up.connect(func(): controller.touch_throttle = 0.0)
 
-	var punch := _touch_button(root, "PUNCH", Control.PRESET_BOTTOM_RIGHT, Vector2(-260, -160))
+	var combat_row := HBoxContainer.new()
+	combat_row.add_theme_constant_override("separation", 14)
+	right.add_child(combat_row)
+	var punch := _touch_button(combat_row, "PUNCH")
 	punch.pressed.connect(func(): controller.touch_attack_right = true)
-	var kick := _touch_button(root, "KICK", Control.PRESET_BOTTOM_RIGHT, Vector2(-260, -60))
+	var kick := _touch_button(combat_row, "KICK")
 	kick.pressed.connect(func(): controller.touch_kick = true)
-	var nitro := _touch_button(root, "NITRO", Control.PRESET_BOTTOM_RIGHT, Vector2(-140, -60))
+
+	var nitro := _touch_button(right, "NITRO")
 	nitro.button_down.connect(func(): controller.touch_nitro = true)
 	nitro.button_up.connect(func(): controller.touch_nitro = false)
 
 
-func _touch_button(root: Control, text: String, preset: int, offset: Vector2) -> Button:
+func _touch_button(parent: Control, text: String) -> Button:
 	var button := Button.new()
 	button.text = text
 	button.custom_minimum_size = Vector2(100, 84)
-	button.set_anchors_preset(preset)
-	button.position += offset
 	button.add_theme_stylebox_override("normal", ThemeColors.button_style())
 	button.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
 	button.add_theme_stylebox_override("pressed", ThemeColors.button_style(true))
 	button.add_theme_color_override("font_color", ThemeColors.INK)
-	root.add_child(button)
+	parent.add_child(button)
 	return button
 
 
-func _panel(root: Control, preset: int, offset: Vector2) -> VBoxContainer:
+func _panel(root: Control, preset: int) -> VBoxContainer:
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(preset)
-	panel.position += offset
 	panel.add_theme_stylebox_override("panel", ThemeColors.styled_panel())
 	root.add_child(panel)
+	ThemeColors.place(panel, preset)
 	var box := VBoxContainer.new()
 	panel.add_child(box)
 	return box

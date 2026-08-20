@@ -15,8 +15,19 @@ var hud: CanvasLayer
 var _fov_base := 68.0
 
 
+## Autoloads fetched by tree path, not identifier: identifier globals bind to
+## phantom instances under --script test harnesses, silently ignoring test
+## setup. The path is identical in game mode and under tests.
+func _context() -> Node:
+	return get_node("/root/RaceContext")
+
+
+func _state() -> Node:
+	return get_node("/root/GameState")
+
+
 func _ready() -> void:
-	var definition := RaceContext.track()
+	var definition: Dictionary = _context().track()
 
 	track = Track.new()
 	track.name = "Track"
@@ -56,7 +67,7 @@ var _police_ais: Array = []
 
 
 func _spawn_grid(definition: Dictionary) -> void:
-	var spec: Dictionary = GameState.current_bike_spec()
+	var spec: Dictionary = _state().current_bike_spec()
 	player = _make_rider("You", 40.0, 0.0, Color(0.9, 0.35, 0.1))
 	player.is_player = true
 	player.top_speed = float(spec["top_speed"])
@@ -88,8 +99,11 @@ func _spawn_grid(definition: Dictionary) -> void:
 		rival.weapon = int(profile["weapon"])
 		_rival_ais.append(RivalAI.new(rival, float(profile["skill"]), float(profile["aggression"]), 1000 + i))
 
+	# Police stage down the route like real speed traps, not on the grid —
+	# the player rides into the heat instead of launching next to it.
 	for i in int(definition["police"]):
-		var cop := _make_rider("Officer", 10.0 - i * 8.0, 0.0, Color(0.1, 0.2, 0.85), true)
+		var stakeout := track.length * (0.25 + 0.5 * float(i) / maxf(float(int(definition["police"])), 1.0))
+		var cop := _make_rider("Officer", stakeout, track.half_width * 0.7, Color(0.1, 0.2, 0.85), true)
 		cop.top_speed = 56.0
 		cop.accel = 14.0
 		_police_ais.append(PoliceAI.new(cop))
@@ -151,8 +165,13 @@ static func _tint_model(model: Node3D, colour: Color) -> void:
 		for surface in mesh_child.mesh.get_surface_count():
 			var mat := mesh_child.mesh.surface_get_material(surface)
 			var std := mat as StandardMaterial3D
-			# The generator marks tintable panels bright red; recolour only those.
-			if std != null and std.albedo_color.r > 0.85 and std.albedo_color.g < 0.3:
+			if std == null:
+				continue
+			# Tintable panels are the generator's "body" material, marked
+			# bright red as a fallback signature.
+			var by_name := std.resource_name.begins_with("body")
+			var by_color := std.albedo_color.r > 0.85 and std.albedo_color.g < 0.3
+			if by_name or by_color:
 				var tinted := std.duplicate() as StandardMaterial3D
 				tinted.albedo_color = colour
 				mesh_child.set_surface_override_material(surface, tinted)
@@ -221,6 +240,63 @@ func _process(delta: float) -> void:
 	_update_camera(delta)
 	Sfx.set_engine(player.speed / maxf(player.top_speed, 1.0),
 		manager.phase == RaceManager.Phase.RACING and player.state == Rider.State.RIDING)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("pause") and manager.phase != RaceManager.Phase.FINISHED:
+		_toggle_pause()
+
+
+var _pause_layer: CanvasLayer
+
+
+func _toggle_pause() -> void:
+	if _pause_layer != null:
+		_pause_layer.queue_free()
+		_pause_layer = null
+		get_tree().paused = false
+		return
+
+	get_tree().paused = true
+	_pause_layer = CanvasLayer.new()
+	_pause_layer.layer = 20
+	# The pause menu must keep processing while the tree is paused.
+	_pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_pause_layer)
+
+	var scrim := ColorRect.new()
+	scrim.color = Color(0, 0, 0, 0.7)
+	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_pause_layer.add_child(scrim)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	ThemeColors.center_wrap(scrim).add_child(box)
+
+	var title := Label.new()
+	title.text = "PAUSED"
+	title.add_theme_font_size_override("font_size", 44)
+	title.add_theme_color_override("font_color", ThemeColors.ACCENT)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+
+	var resume := Button.new()
+	resume.text = "RESUME"
+	resume.add_theme_font_size_override("font_size", 24)
+	resume.add_theme_stylebox_override("normal", ThemeColors.button_style())
+	resume.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
+	resume.pressed.connect(_toggle_pause)
+	box.add_child(resume)
+
+	var quit_button := Button.new()
+	quit_button.text = "QUIT TO MENU"
+	quit_button.add_theme_font_size_override("font_size", 24)
+	quit_button.add_theme_stylebox_override("normal", ThemeColors.button_style())
+	quit_button.add_theme_stylebox_override("hover", ThemeColors.button_style(true))
+	quit_button.pressed.connect(func():
+		get_tree().paused = false
+		get_tree().change_scene_to_file("res://src/ui/MainMenu.tscn"))
+	box.add_child(quit_button)
 
 
 ## Chase camera: behind and above the bike in track space, spring-damped, with

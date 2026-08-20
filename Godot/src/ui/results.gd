@@ -9,9 +9,8 @@ func present(summary: Dictionary) -> void:
 	add_child(scrim)
 
 	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.add_theme_stylebox_override("panel", ThemeColors.styled_panel())
-	scrim.add_child(panel)
+	ThemeColors.center_wrap(scrim).add_child(panel)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)

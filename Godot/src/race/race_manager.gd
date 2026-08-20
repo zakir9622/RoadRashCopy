@@ -139,11 +139,8 @@ func _finish(position: int) -> void:
 
 	var purse := int(track.definition.get("purse", 800))
 	var repair := int((100.0 - player.health) * 3.0)
+	var state := get_node("/root/GameState")
 	var summary := Campaign.apply_result(
-		GameState.save, position, player.knockouts, purse, busted, repair)
-	if RaceContext.campaign_event and not summary["won"]:
-		# A failed campaign event does not advance the chapter — apply_result
-		# already only advances on a win, so nothing to undo here.
-		pass
-	GameState.persist()
+		state.save, position, player.knockouts, purse, busted, repair)
+	state.persist()
 	finished.emit(summary)
