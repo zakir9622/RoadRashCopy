@@ -1,14 +1,15 @@
 class_name Rider
 extends Node3D
-## One rider — player, rival or cop — moving in track space. States:
-## RIDING / CRASHED / REMOUNT. Combat, stamina and health live here so the
-## player and every AI share exactly one rulebook.
+## Track-space rider with Road Rash states: RIDING, CRASHED (slide),
+## RUNNING (sprint back to the bike), REMOUNT. Rider stamina and bike health
+## are separate meters — empty stamina ejects you; zero bike health is a DNF.
 
 signal crashed(rider: Rider)
 signal knocked_out(rider: Rider)
 signal damaged(amount: float, from_side: float)
+signal attacked(side: float, kick: bool)
 
-enum State { RIDING, CRASHED, REMOUNT }
+enum State { RIDING, CRASHED, RUNNING, REMOUNT }
 
 var rider_name: String = "Rider"
 var is_player: bool = false
@@ -26,6 +27,7 @@ var handling: float = 1.0
 var nitro_boost: float = 0.0
 var nitro_fuel: float = 1.0
 
+## Bike integrity — traffic and crashes chew this up. Zero = explode (DNF).
 var health: float = 100.0
 var stamina: float = StaminaRules.MAX
 var weapon: int = CombatMath.Weapon.FISTS
@@ -36,13 +38,22 @@ var state: int = State.RIDING
 var _state_timer: float = 0.0
 var _attack_cooldown: float = 0.0
 var _knockback_velocity: float = 0.0
+var _pose_timer: float = 0.0
+var _pose_kind: int = 0  # 0 none, 1 punch L, 2 punch R, 3 kick
 
-# Input for this frame; the player controller and AI both write these.
+var _bike_distance: float = 0.0
+var _bike_lateral: float = 0.0
+const RUN_SPEED := 9.5
+
 var in_throttle: float = 0.0
+var in_brake: float = 0.0
 var in_steer: float = 0.0
 var in_nitro: bool = false
 
 var visual: Node3D
+var _arm_l: Node3D
+var _arm_r: Node3D
+var _leg_r: Node3D
 
 
 func setup(p_track: Track, start_distance: float, start_lateral: float) -> void:
@@ -52,34 +63,72 @@ func setup(p_track: Track, start_distance: float, start_lateral: float) -> void:
 	_apply_transform()
 
 
+func bind_pose_nodes(root: Node3D) -> void:
+	_arm_l = root.find_child("arm_l", true, false)
+	_arm_r = root.find_child("arm_r", true, false)
+	_leg_r = root.find_child("leg_r", true, false)
+
+
 func alive() -> bool:
 	return health > 0.0
 
 
+func bike_destroyed() -> bool:
+	return health <= 0.0
+
+
 func step(delta: float) -> void:
 	_attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
+	_pose_timer = maxf(_pose_timer - delta, 0.0)
 	stamina = StaminaRules.recover(stamina, delta)
 
 	match state:
 		State.CRASHED:
-			_state_timer -= delta
-			speed = maxf(speed - 30.0 * delta, 0.0)
-			distance += speed * delta
-			if _state_timer <= 0.0 and alive():
-				state = State.REMOUNT
-				# Exhausted riders pick the bike up slowly — Road Rash's stamina bite.
-				_state_timer = 1.2 if not StaminaRules.is_exhausted(stamina) else 2.4
+			_step_crashed(delta)
+		State.RUNNING:
+			_step_running(delta)
 		State.REMOUNT:
 			_state_timer -= delta
 			if _state_timer <= 0.0:
 				state = State.RIDING
+				speed = maxf(speed, 8.0)
 		State.RIDING:
 			_ride(delta)
 
 	_apply_transform()
+	_apply_pose()
+
+
+func _step_crashed(delta: float) -> void:
+	_state_timer -= delta
+	speed = maxf(speed - 22.0 * delta, 0.0)
+	distance += speed * delta
+	if _state_timer <= 0.0 and alive():
+		if StaminaRules.is_exhausted(stamina):
+			crash()
+			return
+		state = State.RUNNING
+		speed = 0.0
+
+
+func _step_running(delta: float) -> void:
+	var to_bike := Vector2(_bike_lateral - lateral, _bike_distance - distance)
+	var dist := to_bike.length()
+	if dist < 1.2:
+		state = State.REMOUNT
+		_state_timer = 0.9 if not StaminaRules.is_exhausted(stamina) else 1.8
+		return
+	var dir := to_bike / maxf(dist, 0.001)
+	lateral += (dir.x + in_steer * 0.35) * RUN_SPEED * delta
+	distance += dir.y * RUN_SPEED * delta
+	lean = lerpf(lean, in_steer * 0.25, 6.0 * delta)
 
 
 func _ride(delta: float) -> void:
+	if stamina <= 0.0:
+		crash()
+		return
+
 	var target_top := top_speed
 	if in_nitro and nitro_fuel > 0.0 and nitro_boost > 0.0:
 		target_top += nitro_boost
@@ -87,10 +136,11 @@ func _ride(delta: float) -> void:
 
 	if in_throttle > 0.0:
 		speed = move_toward(speed, target_top * in_throttle, accel * delta)
+	elif in_brake > 0.0:
+		speed = move_toward(speed, 0.0, 22.0 * in_brake * delta)
 	else:
-		speed = move_toward(speed, 0.0, 14.0 * delta)
+		speed = move_toward(speed, 0.0, 10.0 * delta)
 
-	# Corner drag: carrying full speed through a bend costs grip.
 	var curvature := _local_curvature()
 	var corner_penalty := clampf(curvature * speed * 0.022 / handling, 0.0, 0.35)
 	speed *= 1.0 - corner_penalty * delta
@@ -101,22 +151,18 @@ func _ride(delta: float) -> void:
 	lateral += _knockback_velocity * delta
 	_knockback_velocity = move_toward(_knockback_velocity, 0.0, 18.0 * delta)
 
-	# Running off the road: verge slows hard; the guardrail is a wall.
 	var limit := track.half_width - 0.6
 	if absf(lateral) > limit:
 		lateral = clampf(lateral, -limit, limit)
-		if absf(_knockback_velocity) > 6.0:
-			take_damage(12.0, signf(lateral), null)
-			_knockback_velocity = -_knockback_velocity * 0.4
-		speed *= 1.0 - 1.5 * delta
+		take_bike_damage(8.0 * delta, null)
+		speed *= 1.0 - 1.8 * delta
 
-	lean = lerpf(lean, -in_steer * 0.5 - curvature * signf(_curve_direction()) * 0.15, 8.0 * delta)
+	lean = lerpf(lean, -in_steer * 0.55 - curvature * signf(_curve_direction()) * 0.18, 8.0 * delta)
 
 
 func _local_curvature() -> float:
-	var ahead := 18.0
 	var f0 := track.forward(distance)
-	var f1 := track.forward(distance + ahead)
+	var f1 := track.forward(distance + 18.0)
 	return f0.angle_to(f1)
 
 
@@ -132,6 +178,9 @@ func try_attack(side: float, kick: bool, opponents: Array) -> bool:
 	var w := CombatMath.Weapon.KICK if kick else weapon
 	_attack_cooldown = CombatMath.cooldown(w)
 	stamina = StaminaRules.apply_kick(stamina) if kick else StaminaRules.apply_swing(stamina)
+	_pose_kind = 3 if kick else (1 if side < 0.0 else 2)
+	_pose_timer = 0.32
+	attacked.emit(side, kick)
 	if is_player:
 		Sfx.play("kick" if kick else "hit", -6.0, randf_range(0.95, 1.05))
 
@@ -139,17 +188,16 @@ func try_attack(side: float, kick: bool, opponents: Array) -> bool:
 	var hit_any := false
 	for opponent in opponents:
 		var other := opponent as Rider
-		if other == self or other.state != State.RIDING or not other.alive():
+		if other == self or other.state != Rider.State.RIDING or not other.alive():
 			continue
 		var gap_s: float = absf(other.distance - distance)
 		var gap_x: float = other.lateral - lateral
 		if gap_s > reach or absf(gap_x) > reach or signf(gap_x) != signf(side):
 			continue
 		var damage := CombatMath.compute_damage(w, speed - other.speed, aggression)
-		# Exhausted attackers hit like wet paper — stamina matters.
 		if StaminaRules.is_exhausted(stamina):
 			damage *= 0.45
-		other.take_damage(damage, -signf(gap_x), self)
+		other.take_rider_hit(damage, -signf(gap_x), self)
 		other._knockback_velocity += CombatMath.knockback(w, damage) * signf(gap_x)
 		if CombatMath.can_steal(damage, other.weapon) and not kick:
 			weapon = CombatMath.better(weapon, other.weapon)
@@ -158,30 +206,55 @@ func try_attack(side: float, kick: bool, opponents: Array) -> bool:
 	return hit_any
 
 
-func take_damage(amount: float, from_side: float, attacker: Rider) -> void:
+func take_rider_hit(amount: float, from_side: float, attacker: Rider) -> void:
 	if not alive():
 		return
-	health = maxf(health - amount, 0.0)
 	stamina = StaminaRules.apply_hit(stamina)
+	health = maxf(health - amount * 0.25, 0.0)
 	damaged.emit(amount, from_side)
-	if health <= 0.0:
+	if stamina <= 0.0 or amount >= 22.0:
 		crash()
 		if attacker != null:
 			attacker.knockouts += 1
 		knocked_out.emit(self)
-	elif amount >= 18.0 and state == State.RIDING:
+	elif health <= 0.0:
+		knocked_out.emit(self)
+
+
+func take_bike_damage(amount: float, attacker: Rider) -> void:
+	if not alive():
+		return
+	health = maxf(health - amount, 0.0)
+	damaged.emit(amount, 0.0)
+	if health <= 0.0:
+		knocked_out.emit(self)
+	elif amount >= 28.0 and state == State.RIDING:
 		crash()
 
 
+## Legacy entry — traffic collisions call this.
+func take_damage(amount: float, from_side: float, attacker: Rider) -> void:
+	if attacker != null:
+		take_rider_hit(amount, from_side, attacker)
+	else:
+		take_bike_damage(amount, attacker)
+
+
 func crash() -> void:
-	if state == State.CRASHED:
+	if state == State.CRASHED or state == State.RUNNING:
 		return
+	_bike_distance = distance
+	_bike_lateral = lateral
 	state = State.CRASHED
-	_state_timer = 1.6
-	speed *= 0.3
+	_state_timer = 0.85
+	speed *= 0.35
 	crashed.emit(self)
 	if is_player:
 		Sfx.play("crash", -2.0)
+
+
+func is_vulnerable_to_police() -> bool:
+	return state == State.CRASHED or state == State.RUNNING
 
 
 func heal_for_new_race() -> void:
@@ -193,12 +266,41 @@ func heal_for_new_race() -> void:
 	nitro_fuel = 1.0
 
 
+func _apply_pose() -> void:
+	if visual == null:
+		return
+	if _arm_l != null:
+		_arm_l.rotation.x = 0.0
+	if _arm_r != null:
+		_arm_r.rotation.x = 0.0
+	if _leg_r != null:
+		_leg_r.rotation.x = 0.0
+	if _pose_timer <= 0.0:
+		return
+	var t := _pose_timer / 0.32
+	var swing := sin((1.0 - t) * PI) * 1.1
+	match _pose_kind:
+		1:
+			if _arm_l != null:
+				_arm_l.rotation.x = -swing
+		2:
+			if _arm_r != null:
+				_arm_r.rotation.x = -swing
+		3:
+			if _leg_r != null:
+				_leg_r.rotation.x = swing * 0.9
+
+
 func _apply_transform() -> void:
 	if track == null:
 		return
-	var t := track.sample(distance, lateral, 0.0)
+	var height := 0.0
+	if state == State.RUNNING:
+		height = -0.35
+	var t := track.sample(distance, lateral, height)
 	transform = t
 	if visual != null:
+		visual.visible = state != State.RUNNING
 		visual.rotation.z = lean
 		if state == State.CRASHED:
-			visual.rotation.z = lerpf(visual.rotation.z, PI * 0.45, 0.3)
+			visual.rotation.z = lerpf(visual.rotation.z, PI * 0.42, 0.35)

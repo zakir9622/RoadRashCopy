@@ -1,8 +1,6 @@
-"""Generates every 3D asset headlessly:  blender --background --python gen_assets.py
+"""Headless sportbike generator — Road Rash crotch-rocket silhouettes.
 
-Outputs .glb files into Godot/assets/models/. Bright-red (1,0,0) materials mark
-panels the game recolours per rider; everything else keeps its authored colour.
-Style: clean low-poly with bevels — reads sharply at speed, cheap on mobile.
+  blender --background --python Godot/tools/blender/gen_assets.py
 """
 import bpy
 import math
@@ -24,42 +22,43 @@ def material(name, color, metallic=0.0, roughness=0.6, emission=None):
     bsdf.inputs["Base Color"].default_value = (*color, 1.0)
     bsdf.inputs["Metallic"].default_value = metallic
     bsdf.inputs["Roughness"].default_value = roughness
-    if emission is not None:
+    if emission:
         bsdf.inputs["Emission Color"].default_value = (*emission, 1.0)
         bsdf.inputs["Emission Strength"].default_value = 3.0
     return mat
 
 
-def add_box(name, size, location, mat, rotation=(0, 0, 0), bevel=0.02):
-    bpy.ops.mesh.primitive_cube_add(size=1, location=location, rotation=rotation)
-    obj = bpy.context.active_object
-    obj.name = name
-    obj.scale = (size[0] / 2, size[1] / 2, size[2] / 2)
+def add_mesh(name, mesh_obj, location, mat, rotation=(0, 0, 0)):
+    bpy.context.collection.objects.link(mesh_obj)
+    mesh_obj.name = name
+    mesh_obj.location = location
+    mesh_obj.rotation_euler = rotation
+    if mat:
+        mesh_obj.data.materials.append(mat)
+    return mesh_obj
+
+
+def box(name, size, loc, mat, rot=(0, 0, 0), bevel=0.03):
+    bpy.ops.mesh.primitive_cube_add(size=1, location=loc, rotation=rot)
+    o = bpy.context.active_object
+    o.name = name
+    o.scale = (size[0] / 2, size[1] / 2, size[2] / 2)
     bpy.ops.object.transform_apply(scale=True)
     if bevel > 0:
-        mod = obj.modifiers.new("bevel", "BEVEL")
-        mod.width = bevel
-        mod.segments = 2
-    obj.data.materials.append(mat)
-    return obj
+        m = o.modifiers.new("bevel", "BEVEL")
+        m.width = bevel
+        m.segments = 2
+    o.data.materials.append(mat)
+    return o
 
 
-def add_cylinder(name, radius, depth, location, mat, rotation=(0, 0, 0), vertices=24):
-    bpy.ops.mesh.primitive_cylinder_add(
-        radius=radius, depth=depth, location=location, rotation=rotation, vertices=vertices)
-    obj = bpy.context.active_object
-    obj.name = name
-    obj.data.materials.append(mat)
-    return obj
-
-
-def add_sphere(name, radius, location, mat, segments=16):
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=radius, location=location,
-                                         segments=segments, ring_count=segments // 2)
-    obj = bpy.context.active_object
-    obj.name = name
-    obj.data.materials.append(mat)
-    return obj
+def cyl(name, r, depth, loc, mat, rot=(0, 0, 0), verts=28):
+    bpy.ops.mesh.primitive_cylinder_add(radius=r, depth=depth, location=loc,
+                                         rotation=rot, vertices=verts)
+    o = bpy.context.active_object
+    o.name = name
+    o.data.materials.append(mat)
+    return o
 
 
 def export(filename):
@@ -69,78 +68,102 @@ def export(filename):
     print("WROTE", path)
 
 
-def build_bike(cop=False):
-    """Sport bike with rider. Z-forward becomes -Z in Godot via glTF; built lying
-    along +Y here (Blender forward), rider leaning into the bars."""
+def build_bike(style="sport", cop=False):
+    """Full-fairing sportbike, ~2.0 m wheelbase. Built along +Y (Blender forward)."""
     reset()
-    tank_color = (0.05, 0.15, 0.6) if cop else (1.0, 0.0, 0.0)   # red = tint target
-    body = material("body", tank_color, metallic=0.55, roughness=0.3)
-    dark = material("dark", (0.06, 0.06, 0.07), roughness=0.85)
-    chrome = material("chrome", (0.65, 0.67, 0.7), metallic=1.0, roughness=0.2)
-    leather = material("leather", (0.12, 0.10, 0.09), roughness=0.9)
-    skin = material("skin", (0.7, 0.5, 0.38), roughness=0.8)
-    visor = material("visor", (0.05, 0.05, 0.08), metallic=0.8, roughness=0.1)
+    body_c = (0.05, 0.15, 0.65) if cop else (1.0, 0.0, 0.0)
+    body = material("body", body_c, metallic=0.55, roughness=0.28)
+    dark = material("dark", (0.05, 0.05, 0.06), roughness=0.9)
+    chrome = material("chrome", (0.72, 0.74, 0.78), metallic=1.0, roughness=0.18)
+    rubber = material("rubber", (0.04, 0.04, 0.05), roughness=0.95)
+    leather = material("leather", (0.1, 0.09, 0.08), roughness=0.88)
+    glass = material("glass", (0.02, 0.02, 0.04), metallic=0.7, roughness=0.08)
+    suit = material("suit", (0.12, 0.12, 0.14), roughness=0.85)
 
-    # Wheels (Y axis = forward)
-    add_cylinder("wheel_f", 0.32, 0.11, (0, 0.72, 0.32), dark, rotation=(0, math.pi / 2, 0))
-    add_cylinder("wheel_r", 0.34, 0.14, (0, -0.62, 0.34), dark, rotation=(0, math.pi / 2, 0))
+    scale = 0.82 if style == "rat" else 1.0
+    wb = 1.95 * scale  # wheelbase
 
-    # Frame spine + tank + tail
-    add_box("frame", (0.16, 1.1, 0.14), (0, 0.02, 0.55), chrome, bevel=0.03)
-    add_box("tank", (0.3, 0.5, 0.24), (0, 0.18, 0.72), body, bevel=0.05)
-    add_box("tail", (0.26, 0.45, 0.14), (0, -0.42, 0.78), body, rotation=(math.radians(-12), 0, 0), bevel=0.04)
-    add_box("seat", (0.28, 0.42, 0.07), (0, -0.18, 0.78), leather, bevel=0.03)
+    # Wheels — chunky sport tyres
+    fr = 0.36 * scale
+    rr = 0.38 * scale
+    cyl("wheel_f", fr, 0.13 * scale, (0, wb * 0.42, fr), rubber, (0, math.pi / 2, 0))
+    cyl("wheel_r", rr, 0.17 * scale, (0, -wb * 0.42, rr), rubber, (0, math.pi / 2, 0))
+    # Discs
+    cyl("disc_f", fr * 0.72, 0.04, (0, wb * 0.42, fr + 0.02), chrome, (0, math.pi / 2, 0))
+    cyl("disc_r", rr * 0.72, 0.05, (0, -wb * 0.42, rr + 0.02), chrome, (0, math.pi / 2, 0))
 
-    # Front fork + bars + headlight fairing
-    add_cylinder("fork_l", 0.03, 0.62, (-0.09, 0.62, 0.58), chrome, rotation=(math.radians(-20), 0, 0))
-    add_cylinder("fork_r", 0.03, 0.62, (0.09, 0.62, 0.58), chrome, rotation=(math.radians(-20), 0, 0))
-    add_box("fairing", (0.34, 0.22, 0.3), (0, 0.55, 0.86), body, rotation=(math.radians(-18), 0, 0), bevel=0.05)
-    add_box("bars", (0.5, 0.05, 0.05), (0, 0.48, 1.02), dark)
-    add_cylinder("headlight", 0.07, 0.04, (0, 0.68, 0.88), material(
-        "light", (1, 1, 0.9), emission=(1.0, 0.95, 0.8)), rotation=(math.radians(72), 0, 0))
+    # Frame + engine
+    box("frame", (0.14 * scale, 1.05 * scale, 0.16 * scale), (0, 0.02 * scale, 0.58 * scale), chrome, bevel=0.025)
+    box("engine", (0.38 * scale, 0.55 * scale, 0.34 * scale), (0, 0.0, 0.42 * scale), dark, bevel=0.04)
 
-    # Exhaust
-    add_cylinder("exhaust", 0.05, 0.7, (0.16, -0.35, 0.42), chrome, rotation=(math.radians(80), 0, 0))
+    if style == "rat":
+        # Naked starter — smaller tank, no full fairing
+        box("tank", (0.32 * scale, 0.55 * scale, 0.22 * scale), (0, 0.12 * scale, 0.78 * scale), body, bevel=0.05)
+        box("tail", (0.24 * scale, 0.38 * scale, 0.12 * scale), (0, -0.38 * scale, 0.76 * scale), body,
+            rot=(math.radians(-10), 0, 0), bevel=0.04)
+    else:
+        # Full fairing nose + side panels
+        box("nose", (0.36 * scale, 0.38 * scale, 0.32 * scale), (0, wb * 0.38, 0.92 * scale), body,
+            rot=(math.radians(-16), 0, 0), bevel=0.06)
+        box("belly", (0.34 * scale, 0.62 * scale, 0.26 * scale), (0, 0.08 * scale, 0.62 * scale), body, bevel=0.05)
+        box("tail", (0.28 * scale, 0.48 * scale, 0.16 * scale), (0, -0.44 * scale, 0.82 * scale), body,
+            rot=(math.radians(-14), 0, 0), bevel=0.05)
+        box("windscreen", (0.28 * scale, 0.08 * scale, 0.22 * scale), (0, wb * 0.34, 1.02 * scale), glass,
+            rot=(math.radians(-28), 0, 0), bevel=0.02)
 
-    # Engine block
-    add_box("engine", (0.34, 0.5, 0.3), (0, 0.05, 0.42), dark, bevel=0.04)
+    box("seat", (0.3 * scale, 0.44 * scale, 0.08 * scale), (0, -0.16 * scale, 0.8 * scale), leather, bevel=0.03)
 
-    # --- rider, tucked ---
-    suit = material("suit", (0.08, 0.3, 0.05) if cop else (0.16, 0.16, 0.18), roughness=0.85)
-    add_box("torso", (0.34, 0.55, 0.24), (0, -0.12, 1.06), suit,
-            rotation=(math.radians(38), 0, 0), bevel=0.05)
-    add_sphere("helmet", 0.15, (0, 0.28, 1.22), body if not cop else material(
-        "cop_helmet", (0.9, 0.9, 0.92), metallic=0.3, roughness=0.3))
-    add_box("visor_b", (0.2, 0.05, 0.1), (0, 0.41, 1.2), visor, bevel=0.02)
-    # Arms to the bars
-    add_box("arm_l", (0.09, 0.42, 0.09), (-0.2, 0.18, 1.02), suit, rotation=(math.radians(46), 0, math.radians(10)), bevel=0.02)
-    add_box("arm_r", (0.09, 0.42, 0.09), (0.2, 0.18, 1.02), suit, rotation=(math.radians(46), 0, math.radians(-10)), bevel=0.02)
-    # Legs gripping the tank
-    add_box("leg_l", (0.11, 0.4, 0.12), (-0.17, -0.28, 0.62), suit, rotation=(math.radians(-30), 0, 0), bevel=0.02)
-    add_box("leg_r", (0.11, 0.4, 0.12), (0.17, -0.28, 0.62), suit, rotation=(math.radians(-30), 0, 0), bevel=0.02)
-    _ = skin
+    # Forks + triple clamp
+    for sx in (-0.1, 0.1):
+        cyl(f"fork_{sx}", 0.028 * scale, 0.72 * scale, (sx * scale, wb * 0.36, 0.62 * scale), chrome,
+            rot=(math.radians(-18), 0, 0))
+    box("clamp", (0.22 * scale, 0.08 * scale, 0.06 * scale), (0, wb * 0.32, 0.88 * scale), dark)
+
+    # Handlebars
+    box("bars", (0.56 * scale, 0.05 * scale, 0.05 * scale), (0, wb * 0.28, 1.0 * scale), dark)
+
+    # Dual exhaust
+    for sx in (0.14, 0.2):
+        cyl(f"exhaust_{sx}", 0.045 * scale, 0.75 * scale, (sx * scale, -0.32 * scale, 0.44 * scale), chrome,
+            rot=(math.radians(78), 0, 0))
+
+    cyl("headlight", 0.08 * scale, 0.05, (0, wb * 0.44, 0.98 * scale),
+        material("light", (1, 1, 0.92), emission=(1, 0.95, 0.85)), rot=(math.radians(70), 0, 0))
+
+    # Rider — named bones for combat poses
+    box("torso", (0.36 * scale, 0.52 * scale, 0.26 * scale), (0, -0.1 * scale, 1.08 * scale), suit,
+        rot=(math.radians(36), 0, 0), bevel=0.05)
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.16 * scale, location=(0, 0.26 * scale, 1.26 * scale))
+    helm = bpy.context.active_object
+    helm.name = "helmet"
+    helm.data.materials.append(body if not cop else material("cop_helmet", (0.92, 0.92, 0.95), metallic=0.35))
+    box("visor_b", (0.22 * scale, 0.05 * scale, 0.1 * scale), (0, 0.4 * scale, 1.24 * scale), glass, bevel=0.02)
+    box("arm_l", (0.1 * scale, 0.44 * scale, 0.1 * scale), (-0.22 * scale, 0.16 * scale, 1.04 * scale), suit,
+        rot=(math.radians(44), 0, math.radians(12)), bevel=0.02)
+    box("arm_r", (0.1 * scale, 0.44 * scale, 0.1 * scale), (0.22 * scale, 0.16 * scale, 1.04 * scale), suit,
+        rot=(math.radians(44), 0, math.radians(-12)), bevel=0.02)
+    box("leg_l", (0.12 * scale, 0.42 * scale, 0.13 * scale), (-0.18 * scale, -0.26 * scale, 0.64 * scale), suit,
+        rot=(math.radians(-28), 0, 0), bevel=0.02)
+    box("leg_r", (0.12 * scale, 0.42 * scale, 0.13 * scale), (0.18 * scale, -0.26 * scale, 0.64 * scale), suit,
+        rot=(math.radians(-28), 0, 0), bevel=0.02)
 
     if cop:
-        add_box("beacon", (0.1, 0.1, 0.08), (0, -0.05, 0.95), material(
-            "beacon", (0.9, 0.1, 0.1), emission=(1.0, 0.1, 0.1)), bevel=0.02)
+        box("beacon", (0.12 * scale, 0.1 * scale, 0.08 * scale), (0, -0.02 * scale, 0.98 * scale),
+            material("beacon", (0.95, 0.1, 0.1), emission=(1, 0.1, 0.1)), bevel=0.02)
 
-    export("cop_bike.glb" if cop else "bike.glb")
+    export("cop_bike.glb" if cop else ("bike_rat.glb" if style == "rat" else "bike.glb"))
 
 
 def build_car():
     reset()
-    body = material("paint", (0.8, 0.8, 0.82), metallic=0.4, roughness=0.4)
-    glass = material("glass", (0.1, 0.12, 0.16), metallic=0.6, roughness=0.1)
-    dark = material("tyres", (0.05, 0.05, 0.06), roughness=0.9)
-
-    add_box("body", (1.8, 4.4, 0.7), (0, 0, 0.62), body, bevel=0.08)
-    add_box("cabin", (1.6, 2.2, 0.62), (0, -0.2, 1.2), glass, bevel=0.1)
-    for sx in (-0.82, 0.82):
-        for sy in (1.45, -1.45):
-            add_cylinder(f"wheel_{sx}_{sy}", 0.34, 0.22, (sx, sy, 0.34), dark,
-                         rotation=(0, math.pi / 2, 0))
-    add_box("bumper_f", (1.7, 0.2, 0.25), (0, 2.25, 0.45), dark, bevel=0.04)
-    add_box("bumper_r", (1.7, 0.2, 0.25), (0, -2.25, 0.45), dark, bevel=0.04)
+    body = material("paint", (0.78, 0.78, 0.8), metallic=0.45, roughness=0.38)
+    glass = material("glass", (0.12, 0.14, 0.18), metallic=0.65, roughness=0.12)
+    dark = material("tyres", (0.05, 0.05, 0.06), roughness=0.92)
+    box("body", (1.85, 4.5, 0.72), (0, 0, 0.64), body, bevel=0.09)
+    box("cabin", (1.65, 2.25, 0.64), (0, -0.18, 1.22), glass, bevel=0.1)
+    for sx in (-0.84, 0.84):
+        for sy in (1.48, -1.48):
+            cyl(f"w_{sx}_{sy}", 0.35, 0.22, (sx, sy, 0.35), dark, (0, math.pi / 2, 0))
     export("car.glb")
 
 
@@ -148,10 +171,9 @@ def build_tree():
     reset()
     trunk = material("trunk", (0.24, 0.16, 0.1), roughness=0.95)
     leaf = material("leaf", (0.13, 0.32, 0.12), roughness=0.95)
-    add_cylinder("trunk", 0.22, 2.6, (0, 0, 1.3), trunk, vertices=10)
-    add_sphere("canopy1", 1.5, (0, 0, 3.4), leaf, segments=12)
-    add_sphere("canopy2", 1.1, (0.7, 0.3, 2.8), leaf, segments=10)
-    add_sphere("canopy3", 1.0, (-0.6, -0.2, 2.9), leaf, segments=10)
+    cyl("trunk", 0.22, 2.6, (0, 0, 1.3), trunk, verts=10)
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=1.5, location=(0, 0, 3.4))
+    bpy.context.active_object.data.materials.append(leaf)
     export("tree.glb")
 
 
@@ -159,26 +181,24 @@ def build_rock():
     reset()
     rock = material("rock", (0.45, 0.38, 0.3), roughness=1.0)
     bpy.ops.mesh.primitive_ico_sphere_add(radius=1.4, subdivisions=1, location=(0, 0, 0.8))
-    obj = bpy.context.active_object
-    obj.scale = (1.3, 1.0, 0.75)
-    obj.data.materials.append(rock)
+    bpy.context.active_object.data.materials.append(rock)
     export("rock.glb")
 
 
 def build_building():
     reset()
     concrete = material("concrete", (0.35, 0.36, 0.4), roughness=0.9)
-    glass = material("windows", (0.4, 0.55, 0.7), metallic=0.7, roughness=0.15,
-                     emission=(0.9, 0.8, 0.5))
-    add_box("tower", (8, 8, 18), (0, 0, 9), concrete, bevel=0.0)
+    glass = material("windows", (0.4, 0.55, 0.7), metallic=0.7, roughness=0.15, emission=(0.9, 0.8, 0.5))
+    box("tower", (8, 8, 18), (0, 0, 9), concrete)
     for level in range(4):
-        add_box(f"band{level}", (8.3, 8.3, 1.2), (0, 0, 4 + level * 4), glass, bevel=0.0)
+        box(f"band{level}", (8.3, 8.3, 1.2), (0, 0, 4 + level * 4), glass)
     export("building.glb")
 
 
 if __name__ == "__main__":
-    build_bike(cop=False)
-    build_bike(cop=True)
+    build_bike("sport", cop=False)
+    build_bike("rat", cop=False)
+    build_bike("sport", cop=True)
     build_car()
     build_tree()
     build_rock()

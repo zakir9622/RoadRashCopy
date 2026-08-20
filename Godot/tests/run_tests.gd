@@ -14,11 +14,12 @@ func _init() -> void:
 	_test_campaign_ledger()
 	_test_bike_specs()
 	_test_track_geometry()
+	_test_heat()
 	_test_race_simulation()
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 52
+	const EXPECTED_CHECKS := 58
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -120,6 +121,17 @@ func _test_track_geometry() -> void:
 	track.queue_free()
 
 
+func _test_heat() -> void:
+	var heat := HeatDirector.new()
+	check(heat.heat == 0.0, "heat starts cold")
+	for i in 6:
+		heat.on_punch()
+	check(heat.heat >= HeatDirector.SPAWN_THRESHOLD, "punch raises heat enough to spawn")
+	check(heat.should_spawn_cop(0, 2), "enough heat spawns a cop")
+	heat.tick(100.0)
+	check(heat.heat == 0.0, "heat decays to zero")
+
+
 func _test_race_simulation() -> void:
 	# Full grid, 300 fixed steps, no scene tree tick needed — the manager's
 	# step functions are called directly, exactly what _physics_process does.
@@ -148,7 +160,7 @@ func _test_race_simulation() -> void:
 
 	var cop := Rider.new()
 	root.add_child(cop)
-	cop.setup(track, 5.0, 0.0)
+	cop.setup(track, 28.0, 0.0)  # behind the player on the grid
 	cop.top_speed = 52.0
 	cop.accel = 13.0
 	var police := PoliceAI.new(cop)
@@ -162,7 +174,6 @@ func _test_race_simulation() -> void:
 		police.step(delta, player)
 		for rider_obj in riders:
 			(rider_obj as Rider).step(delta)
-		cop.step(delta)
 
 	check(player.distance > start_distance + 100.0, "player advances under throttle")
 	var any_rival_moved := false
@@ -184,14 +195,20 @@ func _test_race_simulation() -> void:
 	check(target.health < health_before, "landed hit removes health")
 	check(player.stamina < StaminaRules.MAX, "attacking spends stamina")
 
-	# Crash + bust: stop the player on top of the cop.
+	# Crash + bust: classic rule — only while down near an officer.
 	player.crash()
 	cop.distance = player.distance
 	cop.lateral = player.lateral
-	check(not police.step(delta, player), "grace period blocks start-line busts")
+	police.has_busted = false
+	police._grace = 5.0
+	check(player.is_vulnerable_to_police(), "crashed player is vulnerable")
+	check(not police.step(delta, player), "grace blocks immediate bust")
 	police._grace = 0.0
-	var busted := police.step(delta, player)
-	check(busted, "crashing on a cop is a bust")
+	check(police.step(delta, player), "crash near cop is a bust")
+	police.has_busted = false
+	player.state = Rider.State.RIDING
+	player.speed = 30.0
+	check(not police.step(delta, player), "clean riding is not a bust")
 
 	for rider_obj in riders:
 		(rider_obj as Rider).queue_free()
