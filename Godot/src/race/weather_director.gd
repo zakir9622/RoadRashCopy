@@ -10,13 +10,23 @@ var _particles: GPUParticles3D
 var _splash: GPUParticles3D
 
 
+func _gfx_settings():
+	var loop := Engine.get_main_loop()
+	if loop is SceneTree:
+		return (loop as SceneTree).root.get_node_or_null("GraphicsSettings")
+	return null
+
+
 func configure(track: Track, player: Rider, camera: Camera3D, biome: String) -> void:
 	_track = track
 	_player = player
 	_camera = camera
-	var gfx := get_node_or_null("/root/GraphicsSettings")
-	var weather_off := gfx != null and gfx.weather_off()
-	var high := gfx == null or gfx.is_high()
+	var gfx = _gfx_settings()
+	var weather_off := false
+	var high := true
+	if gfx != null:
+		weather_off = bool(gfx.call("weather_off"))
+		high = bool(gfx.call("is_high"))
 	var want_rain := false
 	var wet := 0.0
 	var drops := 0

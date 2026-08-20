@@ -47,14 +47,14 @@ func bind(race: Node3D) -> void:
 	player.weapon_stolen.connect(_on_weapon_stolen)
 
 
-func _gfx() -> Node:
+func _gfx():
 	return get_node_or_null("/root/GraphicsSettings")
 
 
 func refresh_quality() -> void:
-	var gfx := _gfx()
+	var gfx =  _gfx()
 	if _brake_btn != null and gfx != null:
-		_brake_btn.visible = gfx.show_brake()
+		_brake_btn.visible = bool(gfx.call("show_brake"))
 
 
 func _build() -> void:
@@ -77,8 +77,8 @@ func _build() -> void:
 	ThemeColors.place(_countdown_overlay, Control.PRESET_CENTER, 0)
 
 	_build_dashboard(root)
-	var gfx := _gfx()
-	if gfx != null and gfx.mirrors_enabled():
+	var gfx =  _gfx()
+	if gfx != null and bool(gfx.call("mirrors_enabled")):
 		_build_mirrors(root)
 	if DisplayServer.get_name() != "headless":
 		_build_touch_controls(root)
@@ -257,18 +257,21 @@ func _build_touch_controls(root: Control) -> void:
 	_brake_btn = _round_btn(center, "BRK", Vector2(64, 64), Color(1, 1, 1, 0.12))
 	_brake_btn.button_down.connect(func(): controller.touch_brake = 1.0)
 	_brake_btn.button_up.connect(func(): controller.touch_brake = 0.0)
-	var gfx := _gfx()
+	var gfx =  _gfx()
 	if gfx != null:
-		_brake_btn.visible = gfx.show_brake()
+		_brake_btn.visible = bool(gfx.call("show_brake"))
 	var nitro := _round_btn(center, "N2O", Vector2(64, 64), Color(0.3, 0.55, 1.0, 0.2))
 	nitro.button_down.connect(func(): controller.touch_nitro = true)
 	nitro.button_up.connect(func(): controller.touch_nitro = false)
 
 
 func _on_steer_input(controller: PlayerController, pad: Control, event: InputEvent) -> void:
-	var gfx := _gfx()
-	var sens := 1.0 if gfx == null else gfx.steer_sensitivity()
-	var invert := false if gfx == null else gfx.invert_swipe()
+	var gfx = _gfx()
+	var sens := 1.0
+	var invert := false
+	if gfx != null:
+		sens = float(gfx.call("steer_sensitivity"))
+		invert = bool(gfx.call("invert_swipe"))
 	if event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:

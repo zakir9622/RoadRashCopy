@@ -5,29 +5,42 @@ extends Node
 const QUALITY_LOW := "low"
 const QUALITY_HIGH := "high"
 
+var _local: Dictionary = {}
+
 
 func _state() -> Node:
-	return get_node_or_null("/root/GameState")
+	var loop := Engine.get_main_loop()
+	if loop == null or not (loop is SceneTree):
+		return null
+	return (loop as SceneTree).root.get_node_or_null("GameState")
 
 
 func _read(key: String, fallback: Variant) -> Variant:
+	if _local.has(key):
+		return _local[key]
 	var state := _state()
 	if state == null:
 		return fallback
-	return state.save.get(key, fallback)
+	var save: Variant = state.get("save")
+	if not (save is Dictionary):
+		return fallback
+	return (save as Dictionary).get(key, fallback)
 
 
 func _write(key: String, value: Variant) -> void:
+	_local[key] = value
 	var state := _state()
 	if state == null:
 		return
-	state.save[key] = value
+	var save: Variant = state.get("save")
+	if save is Dictionary:
+		(save as Dictionary)[key] = value
 
 
 func persist() -> void:
 	var state := _state()
 	if state != null and state.has_method("persist"):
-		state.persist()
+		state.call("persist")
 
 
 func is_high() -> bool:

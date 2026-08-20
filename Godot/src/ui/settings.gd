@@ -20,7 +20,7 @@ func _ready() -> void:
 	_load_from_save()
 
 
-func _gfx() -> Node:
+func _gfx():
 	return get_node_or_null("/root/GraphicsSettings")
 
 
@@ -100,37 +100,37 @@ func _check_row(parent: Control, caption: String) -> CheckButton:
 
 func _load_from_save() -> void:
 	var state := _state()
-	var gfx := _gfx()
+	var gfx =  _gfx()
 	if state != null:
 		_music.value = float(state.save.get("music_volume", 0.8))
 		_sfx.value = float(state.save.get("sfx_volume", 1.0))
 	if gfx != null:
-		_quality.button_pressed = gfx.is_high()
-		_steer.value = gfx.steer_sensitivity()
-		_invert.button_pressed = gfx.invert_swipe()
-		_brake.button_pressed = gfx.show_brake()
-		_mirrors.button_pressed = gfx.mirrors_enabled()
-		_near.button_pressed = gfx.is_camera_near()
-		_look.value = gfx.cam_look()
-		_weather.button_pressed = gfx.weather_off()
+		_quality.button_pressed = bool(gfx.call("is_high"))
+		_steer.value = float(gfx.call("steer_sensitivity"))
+		_invert.button_pressed = bool(gfx.call("invert_swipe"))
+		_brake.button_pressed = bool(gfx.call("show_brake"))
+		_mirrors.button_pressed = bool(gfx.call("mirrors_enabled"))
+		_near.button_pressed = bool(gfx.call("is_camera_near"))
+		_look.value = float(gfx.call("cam_look"))
+		_weather.button_pressed = bool(gfx.call("weather_off"))
 
 
 func _on_done() -> void:
 	var state := _state()
-	var gfx := _gfx()
+	var gfx =  _gfx()
 	if state != null:
 		state.save["music_volume"] = _music.value
 		state.save["sfx_volume"] = _sfx.value
 	if gfx != null:
-		gfx.set_high(_quality.button_pressed)
-		gfx.set_steer_sensitivity(_steer.value)
-		gfx.set_invert_swipe(_invert.button_pressed)
-		gfx.set_show_brake(_brake.button_pressed)
-		gfx.set_mirrors_enabled(_mirrors.button_pressed)
-		gfx.set_camera_near(_near.button_pressed)
-		gfx.set_camera_look(_look.value)
-		gfx.set_weather_off(_weather.button_pressed)
-		gfx.persist()
+		gfx.call("set_high", _quality.button_pressed)
+		gfx.call("set_steer_sensitivity", _steer.value)
+		gfx.call("set_invert_swipe", _invert.button_pressed)
+		gfx.call("set_show_brake", _brake.button_pressed)
+		gfx.call("set_mirrors_enabled", _mirrors.button_pressed)
+		gfx.call("set_camera_near", _near.button_pressed)
+		gfx.call("set_camera_look", _look.value)
+		gfx.call("set_weather_off", _weather.button_pressed)
+		gfx.call("persist")
 	elif state != null and state.has_method("persist"):
 		state.persist()
 	closed.emit()

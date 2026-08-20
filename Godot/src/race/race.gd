@@ -18,8 +18,8 @@ var _biome := "coast"
 var _night := false
 var _environment: Environment
 var _sun: DirectionalLight3D
-var _weather: WeatherDirector
-var _street_lights: StreetLightPool
+var _weather
+var _street_lights
 
 var _fov_base := 68.0
 var _cam_back := 6.2
@@ -39,22 +39,22 @@ func _state() -> Node:
 	return get_node_or_null("/root/GameState")
 
 
-func _gfx() -> Node:
+func _gfx():
 	return get_node_or_null("/root/GraphicsSettings")
 
 
 func apply_graphics() -> void:
-	var gfx := _gfx()
+	var gfx =  _gfx()
 	if gfx == null:
 		return
-	_cam_back = gfx.cam_back()
-	_cam_up = gfx.cam_up()
-	_cam_look = gfx.cam_look()
-	gfx.apply_to_environment(_environment, _sun, _night)
+	_cam_back = float(gfx.call("cam_back"))
+	_cam_up = float(gfx.call("cam_up"))
+	_cam_look = float(gfx.call("cam_look"))
+	gfx.call("apply_to_environment", _environment, _sun, _night)
 	if _weather != null:
-		_weather.configure(track, player, camera, _biome)
+		_weather.call("configure", track, player, camera, _biome)
 	if _street_lights != null:
-		_street_lights.configure(track.light_anchors, player, gfx.street_omni_count())
+		_street_lights.call("configure", track.light_anchors, player, int(gfx.call("street_omni_count")))
 	if hud != null and hud.has_method("refresh_quality"):
 		hud.refresh_quality()
 
@@ -65,20 +65,22 @@ func update_detail_window() -> void:
 
 
 func _spawn_weather() -> void:
-	_weather = WeatherDirector.new()
+	_weather = (load("res://src/race/weather_director.gd") as GDScript).new()
 	_weather.name = "Weather"
 	add_child(_weather)
-	_weather.configure(track, player, camera, _biome)
+	_weather.call("configure", track, player, camera, _biome)
 
 
 func _spawn_street_lights() -> void:
-	_street_lights = StreetLightPool.new()
+	_street_lights = (load("res://src/race/street_light_pool.gd") as GDScript).new()
 	_street_lights.name = "StreetLights"
 	add_child(_street_lights)
-	var gfx := _gfx()
-	var count := 0 if gfx == null else gfx.street_omni_count()
+	var gfx = _gfx()
+	var count := 0
+	if gfx != null:
+		count = int(gfx.call("street_omni_count"))
 	if track != null:
-		_street_lights.configure(track.light_anchors, player, count)
+		_street_lights.call("configure", track.light_anchors, player, count)
 
 
 func _ready() -> void:
@@ -114,7 +116,7 @@ func _ready() -> void:
 	traffic.name = "Traffic"
 	add_child(traffic)
 	var traffic_count := int(definition["traffic"])
-	var gfx := _gfx()
+	var gfx =  _gfx()
 	if gfx != null and gfx.is_high() and (_biome == "city" or _biome == "night"):
 		traffic_count = mini(traffic_count + 8, 36)
 	traffic.build(track, traffic_count, player)

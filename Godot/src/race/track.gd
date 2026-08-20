@@ -597,15 +597,10 @@ func _city_row(rng: RandomNumberGenerator, kits: Array, spacing: float, shoulder
 					break
 				var d := i * spacing + rng.randf_range(-3.0, 3.0)
 				var lateral := (half_width + shoulder + rng.randf_range(0.0, 0.8)) * side
-				var t := sample(clampf(d, 0.0, length), lateral, 0.0)
 				var w := rng.randf_range(width_range.x, width_range.y)
 				var h := rng.randf_range(height_range.x, height_range.y)
-				# Face the shopfronts into the road, following the new corners.
-				var inward := (-t.basis.x * side)
-				inward.y = 0.0
-				if inward.length() < 0.001:
-					inward = Vector3.FORWARD
-				t.basis = Basis.looking_at(inward.normalized(), Vector3.UP).scaled(Vector3(w, h, w))
+				var t := _facing_road(clampf(d, 0.0, length), lateral, 0.0, side)
+				t.basis = t.basis.scaled(Vector3(w, h, w))
 				var aabb := mesh.get_aabb()
 				t.origin += Vector3.UP * (-aabb.position.y * h)
 				mm.set_instance_transform(idx, t)
@@ -1137,11 +1132,18 @@ func _build_finish_crowd() -> void:
 
 func _facing_road(d: float, lateral: float, height: float, side: float) -> Transform3D:
 	var xf := sample(d, lateral, height)
+	var up := xf.basis.y.normalized()
 	var inward := -xf.basis.x * side
 	inward.y = 0.0
 	if inward.length_squared() < 0.0001:
 		inward = Vector3.FORWARD
-	return Transform3D(Basis.looking_at(inward.normalized(), Vector3.UP), xf.origin)
+	inward = inward.normalized()
+	var along := up.cross(inward)
+	if along.length_squared() < 0.0001:
+		along = -xf.basis.z
+	along = along.normalized()
+	inward = along.cross(up).normalized()
+	return Transform3D(Basis(along, up, inward), xf.origin)
 
 
 static func _apply_pbr_maps(mat: StandardMaterial3D, diffuse_path: String) -> void:
