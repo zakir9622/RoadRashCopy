@@ -64,6 +64,8 @@ func _on_player_attacked(_side: float, kick: bool) -> void:
 
 
 func start() -> void:
+	for rider_obj in riders:
+		(rider_obj as Rider).heal_for_new_race((rider_obj as Rider).is_player)
 	phase = Phase.COUNTDOWN
 	countdown_remaining = 3.0
 	phase_changed.emit(phase)
@@ -111,6 +113,8 @@ func _step_race(delta: float) -> void:
 		traffic.step(delta)
 		_check_traffic_collisions()
 
+	_check_hazards()
+	_check_roadblocks()
 	_check_rider_collisions()
 
 	if player.bike_destroyed():
@@ -154,10 +158,55 @@ func _check_traffic_collisions() -> void:
 			var gap_x: float = absf(float(car["lane"]) - rider.lateral)
 			if gap_s < 2.6 and gap_x < 1.6:
 				var closing: float = absf(rider.speed - float(car["speed"]))
-				rider.take_bike_damage(minf(closing * 1.2, 55.0), null)
+				var dmg := minf(closing * 1.2, 55.0)
+				rider.take_bike_damage(dmg, null)
+				if rider.state == Rider.State.RIDING and dmg >= 30.0:
+					rider.crash()
 				if rider.is_player:
 					heat.on_near_miss()
 				break
+
+
+func _check_hazards() -> void:
+	if track == null:
+		return
+	for rider_obj in riders:
+		var rider := rider_obj as Rider
+		if rider.state != Rider.State.RIDING:
+			continue
+		for hz in track.hazards:
+			var d := float(hz["distance"])
+			var lat := float(hz["lateral"])
+			if absf(rider.distance - d) > 2.0 or absf(rider.lateral - lat) > 1.4:
+				continue
+			match String(hz["kind"]):
+				"oil":
+					rider.speed *= 0.72
+					rider.take_bike_damage(6.0, null)
+					if randf() < 0.08:
+						rider.crash()
+				"sign":
+					rider.take_bike_damage(18.0, null)
+					rider.crash()
+
+
+func _check_roadblocks() -> void:
+	if track == null:
+		return
+	for rider_obj in riders:
+		var rider := rider_obj as Rider
+		if rider.state != Rider.State.RIDING:
+			continue
+		for block in track.roadblocks:
+			var d := float(block["distance"])
+			var lat := float(block["lateral"])
+			var w := float(block.get("width", 3.0))
+			if absf(rider.distance - d) > 2.5 or absf(rider.lateral - lat) > w * 0.5:
+				continue
+			rider.take_bike_damage(32.0, null)
+			rider.crash()
+			if rider.is_player:
+				heat.on_crash()
 
 
 func _check_rider_collisions() -> void:

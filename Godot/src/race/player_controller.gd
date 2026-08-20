@@ -13,6 +13,8 @@ var touch_attack_left: bool = false
 var touch_attack_right: bool = false
 var touch_kick: bool = false
 var touch_nitro: bool = false
+var touch_windup_left: bool = false
+var touch_windup_right: bool = false
 
 
 func _physics_process(_delta: float) -> void:
@@ -37,18 +39,43 @@ func _physics_process(_delta: float) -> void:
 	rider.in_nitro = Input.is_action_pressed("nitro") or touch_nitro
 
 	var opponents: Array = get_opponents.call() if get_opponents.is_valid() else []
-	if Input.is_action_just_pressed("attack_left") or touch_attack_left:
+
+	# Road Rash timed punch: hold attack + throttle = wind-up, release = fast steal punch.
+	if Input.is_action_pressed("attack_left") and Input.is_action_pressed("throttle"):
+		rider.begin_windup(-1.0)
+	elif Input.is_action_just_released("attack_left") and rider.is_winding_up():
+		rider.release_windup(opponents)
+	elif touch_windup_left:
+		rider.begin_windup(-1.0)
+	elif touch_attack_left:
 		rider.try_attack(-1.0, false, opponents)
 		touch_attack_left = false
-	if Input.is_action_just_pressed("attack_right") or touch_attack_right:
+	elif Input.is_action_just_pressed("attack_left"):
+		rider.try_attack(-1.0, false, opponents)
+
+	if Input.is_action_pressed("attack_right") and Input.is_action_pressed("throttle"):
+		rider.begin_windup(1.0)
+	elif Input.is_action_just_released("attack_right") and rider.is_winding_up():
+		rider.release_windup(opponents)
+	elif touch_windup_right:
+		rider.begin_windup(1.0)
+	elif touch_attack_right:
 		rider.try_attack(1.0, false, opponents)
 		touch_attack_right = false
+	elif Input.is_action_just_pressed("attack_right"):
+		rider.try_attack(1.0, false, opponents)
+
 	if Input.is_action_just_pressed("kick") or touch_kick:
 		var side := 1.0
 		for opponent in opponents:
 			var other := opponent as Rider
-			if other != rider and absf(other.distance - rider.distance) < 2.2:
+			if other != rider and absf(other.distance - rider.distance) < 2.4:
 				side = signf(other.lateral - rider.lateral)
 				break
 		rider.try_attack(side if side != 0.0 else 1.0, true, opponents)
 		touch_kick = false
+
+	if not Input.is_action_pressed("attack_left") and not Input.is_action_pressed("attack_right") \
+			and not touch_windup_left and not touch_windup_right:
+		if rider.is_winding_up() and not Input.is_action_pressed("throttle"):
+			rider.cancel_windup()

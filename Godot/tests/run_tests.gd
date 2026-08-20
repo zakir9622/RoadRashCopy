@@ -19,7 +19,7 @@ func _init() -> void:
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 58
+	const EXPECTED_CHECKS := 61
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -56,6 +56,7 @@ func _test_combat() -> void:
 		CombatMath.compute_damage(CombatMath.Weapon.FISTS, 0.0), "relative speed adds damage")
 	check(CombatMath.knockback(CombatMath.Weapon.KICK, 10.0) >
 		CombatMath.knockback(CombatMath.Weapon.BAT, 10.0), "kick shoves hardest")
+	check(CombatMath.traffic_hit_damage(20.0) > 50.0, "traffic hit hurts")
 	check(CombatMath.can_steal(20.0, CombatMath.Weapon.BAT), "hard hit steals a bat")
 	check(not CombatMath.can_steal(20.0, CombatMath.Weapon.FISTS), "cannot steal fists")
 	check(CombatMath.better(CombatMath.Weapon.BAT, CombatMath.Weapon.CHAIN) == CombatMath.Weapon.BAT,
@@ -77,6 +78,8 @@ func _test_campaign_ledger() -> void:
 	var save := {"cash": 100, "chapter": 0}
 	var result := Campaign.apply_result(save, 1, 2, 800, false, 50)
 	check(bool(result["won"]), "P1 wins the event")
+	check(Campaign.total_events() == 25, "25 campaign events")
+	check(String(Campaign.event_at(0)["gang"]) == "Desades", "division gang assigned")
 	check(int(result["prize"]) == 800, "winner takes full purse")
 	check(int(save["cash"]) == 100 + 800 + 300 - 50, "cash math")
 	check(int(save["chapter"]) == 1, "win advances the chapter")

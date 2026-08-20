@@ -7,28 +7,28 @@ static func all() -> Array[Dictionary]:
 	return [
 		{
 			"id": "coast_run", "name": "Coast Run", "biome": "coast",
-			"length": 2400.0, "width": 22.0, "curviness": 0.5, "hills": 0.3,
-			"traffic": 10, "police": 1, "rivals": 5, "purse": 800, "night": false,
+			"length": 2400.0, "width": 20.0, "curviness": 0.5, "hills": 0.3,
+			"traffic": 12, "police": 1, "rivals": 8, "purse": 800, "night": false,
 		},
 		{
 			"id": "palm_desert", "name": "Palm Desert", "biome": "desert",
-			"length": 3000.0, "width": 24.0, "curviness": 0.7, "hills": 0.2,
-			"traffic": 8, "police": 1, "rivals": 6, "purse": 1200, "night": false,
+			"length": 3000.0, "width": 22.0, "curviness": 0.7, "hills": 0.2,
+			"traffic": 10, "police": 1, "rivals": 9, "purse": 1200, "night": false,
 		},
 		{
 			"id": "downtown", "name": "Downtown", "biome": "city",
-			"length": 2600.0, "width": 17.0, "curviness": 1.2, "hills": 0.15,
-			"traffic": 20, "police": 2, "rivals": 7, "purse": 1800, "night": false,
+			"length": 2600.0, "width": 13.0, "curviness": 1.2, "hills": 0.15,
+			"traffic": 22, "police": 2, "rivals": 10, "purse": 1800, "night": false,
 		},
 		{
 			"id": "sierra_pass", "name": "Sierra Pass", "biome": "mountain",
-			"length": 2800.0, "width": 19.0, "curviness": 1.5, "hills": 1.0,
-			"traffic": 6, "police": 1, "rivals": 9, "purse": 2600, "night": false,
+			"length": 2800.0, "width": 18.0, "curviness": 1.5, "hills": 1.0,
+			"traffic": 8, "police": 1, "rivals": 11, "purse": 2600, "night": false,
 		},
 		{
 			"id": "night_city", "name": "Night City", "biome": "night",
-			"length": 2700.0, "width": 16.0, "curviness": 1.3, "hills": 0.4,
-			"traffic": 16, "police": 3, "rivals": 12, "purse": 4000, "night": true,
+			"length": 2700.0, "width": 12.0, "curviness": 1.3, "hills": 0.4,
+			"traffic": 18, "police": 3, "rivals": 14, "purse": 4000, "night": true,
 		},
 	]
 

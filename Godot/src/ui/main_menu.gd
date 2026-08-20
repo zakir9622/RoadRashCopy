@@ -73,7 +73,7 @@ func _build_menu() -> void:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", ThemeColors.styled_panel())
 	add_child(panel)
-	ThemeColors.place(panel, Control.PRESET_CENTER_LEFT, 80)
+	ThemeColors.place(panel, Control.PRESET_CENTER, 0)
 
 	_menu_box = VBoxContainer.new()
 	_menu_box.add_theme_constant_override("separation", 10)
@@ -92,13 +92,14 @@ func _build_menu() -> void:
 	_menu_box.add_child(tagline)
 
 	var cash := Label.new()
-	cash.text = "$%d   ·   CHAPTER %d" % [int(GameState.save.get("cash", 0)),
-		int(GameState.save.get("chapter", 0)) + 1]
+	cash.text = "$%d   ·   EVENT %d/%d" % [int(GameState.save.get("cash", 0)),
+		int(GameState.save.get("chapter", 0)) + 1, Campaign.total_events()]
 	cash.add_theme_font_size_override("font_size", 16)
 	cash.add_theme_color_override("font_color", ThemeColors.INK_MUTED)
 	_menu_box.add_child(cash)
 
 	_menu_button("CAMPAIGN", _on_campaign)
+	_menu_button("THRASH", _on_thrash)
 	_menu_button("QUICK RACE", _on_quick_race)
 	_menu_button("GARAGE", _on_garage)
 	_menu_button("QUIT", _on_quit)
@@ -121,14 +122,53 @@ func _menu_button(text: String, handler: Callable) -> void:
 
 func _on_campaign() -> void:
 	var chapter := int(GameState.save.get("chapter", 0))
-	if chapter >= Campaign.chapters().size():
-		chapter = Campaign.chapters().size() - 1
+	if chapter >= Campaign.total_events():
+		chapter = Campaign.total_events() - 1
 	RaceContext.launch_campaign(chapter)
 	_show_chapter_intro(chapter)
 
 
+func _on_thrash() -> void:
+	var unlocked := int(GameState.save.get("chapter", 0)) + 1
+	var tracks := TrackCatalog.all()
+	var scrim := ColorRect.new()
+	scrim.color = Color(0, 0, 0, 0.8)
+	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(scrim)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", ThemeColors.styled_panel())
+	ThemeColors.center_wrap(scrim).add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	panel.add_child(box)
+
+	var title := Label.new()
+	title.text = "THRASH MODE"
+	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_color_override("font_color", ThemeColors.ACCENT)
+	box.add_child(title)
+
+	for i in tracks.size():
+		var track: Dictionary = tracks[i]
+		var button := Button.new()
+		var locked := i >= unlocked
+		button.text = "%s%s" % ["LOCKED — " if locked else "", String(track["name"])]
+		button.disabled = locked
+		button.pressed.connect(func(id := String(track["id"])):
+			RaceContext.launch_thrash(id)
+			get_tree().change_scene_to_file("res://src/race/Race.tscn"))
+		box.add_child(button)
+
+	var back := Button.new()
+	back.text = "BACK"
+	back.pressed.connect(func(): scrim.queue_free())
+	box.add_child(back)
+
+
 func _show_chapter_intro(chapter_index: int) -> void:
-	var info: Dictionary = Campaign.chapters()[chapter_index]
+	var info: Dictionary = Campaign.event_at(chapter_index)
 	var scrim := ColorRect.new()
 	scrim.color = Color(0, 0, 0, 0.8)
 	scrim.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -151,7 +191,7 @@ func _show_chapter_intro(chapter_index: int) -> void:
 	var intro := Label.new()
 	intro.text = String(info["intro"])
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	intro.custom_minimum_size = Vector2(520, 0)
+	intro.custom_minimum_size = Vector2(340, 0)
 	intro.add_theme_font_size_override("font_size", 19)
 	intro.add_theme_color_override("font_color", ThemeColors.INK)
 	box.add_child(intro)

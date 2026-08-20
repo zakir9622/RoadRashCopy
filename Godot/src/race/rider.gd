@@ -8,10 +8,13 @@ signal crashed(rider: Rider)
 signal knocked_out(rider: Rider)
 signal damaged(amount: float, from_side: float)
 signal attacked(side: float, kick: bool)
+signal weapon_stolen(from_name: String)
 
 enum State { RIDING, CRASHED, RUNNING, REMOUNT }
 
 var rider_name: String = "Rider"
+var rider_id: String = "player"
+var gang: String = ""
 var is_player: bool = false
 var is_police: bool = false
 
@@ -27,7 +30,6 @@ var handling: float = 1.0
 var nitro_boost: float = 0.0
 var nitro_fuel: float = 1.0
 
-## Bike integrity — traffic and crashes chew this up. Zero = explode (DNF).
 var health: float = 100.0
 var stamina: float = StaminaRules.MAX
 var weapon: int = CombatMath.Weapon.FISTS
@@ -40,6 +42,9 @@ var _attack_cooldown: float = 0.0
 var _knockback_velocity: float = 0.0
 var _pose_timer: float = 0.0
 var _pose_kind: int = 0  # 0 none, 1 punch L, 2 punch R, 3 kick
+var _crash_phase: float = 0.0
+var _windup_side: float = 0.0
+var _windup_active: bool = false
 
 var _bike_distance: float = 0.0
 var _bike_lateral: float = 0.0
@@ -53,6 +58,8 @@ var in_nitro: bool = false
 var visual: Node3D
 var _visual_anim: Node3D
 var _run_phase: float = 0.0
+var body_color: Color = Color(0.9, 0.35, 0.1)
+var suit_color: Color = Color(0.14, 0.14, 0.16)
 
 
 func setup(p_track: Track, start_distance: float, start_lateral: float) -> void:
@@ -69,6 +76,8 @@ func bind_visual(root: Node3D) -> void:
 	_visual_anim = root
 	if _visual_anim.has_method("initialize"):
 		_visual_anim.initialize(self)
+	if _visual_anim.has_method("set_colors"):
+		_visual_anim.set_colors(body_color, suit_color)
 
 
 func alive() -> bool:
@@ -83,6 +92,8 @@ func step(delta: float) -> void:
 	_attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
 	_pose_timer = maxf(_pose_timer - delta, 0.0)
 	stamina = StaminaRules.recover(stamina, delta)
+	if state == State.CRASHED:
+		_crash_phase += delta
 
 	match state:
 		State.CRASHED:
@@ -111,6 +122,7 @@ func _step_crashed(delta: float) -> void:
 			return
 		state = State.RUNNING
 		speed = 0.0
+		_crash_phase = 0.0
 
 
 func _step_running(delta: float) -> void:
@@ -175,14 +187,34 @@ func _curve_direction() -> float:
 	return signf(t.basis.x.dot(f1))
 
 
-func try_attack(side: float, kick: bool, opponents: Array) -> bool:
+func begin_windup(side: float) -> void:
+	if state != State.RIDING or _attack_cooldown > 0.0:
+		return
+	if _windup_active and _windup_side == side:
+		return
+	_windup_active = true
+	_windup_side = side
+
+
+func release_windup(opponents: Array) -> bool:
+	if not _windup_active:
+		return false
+	_windup_active = false
+	return try_attack(_windup_side, false, opponents, true)
+
+
+func cancel_windup() -> void:
+	_windup_active = false
+
+
+func try_attack(side: float, kick: bool, opponents: Array, windup: bool = false) -> bool:
 	if state != State.RIDING or _attack_cooldown > 0.0:
 		return false
 	var w := CombatMath.Weapon.KICK if kick else weapon
-	_attack_cooldown = CombatMath.cooldown(w)
+	_attack_cooldown = CombatMath.windup_cooldown(w) if windup else CombatMath.cooldown(w)
 	stamina = StaminaRules.apply_kick(stamina) if kick else StaminaRules.apply_swing(stamina)
 	_pose_kind = 3 if kick else (1 if side < 0.0 else 2)
-	_pose_timer = 0.32
+	_pose_timer = 0.38 if kick else (0.28 if windup else 0.32)
 	attacked.emit(side, kick)
 	if is_player:
 		Sfx.play("kick" if kick else "hit", -6.0, randf_range(0.95, 1.05))
@@ -197,14 +229,22 @@ func try_attack(side: float, kick: bool, opponents: Array) -> bool:
 		var gap_x: float = other.lateral - lateral
 		if gap_s > reach or absf(gap_x) > reach or signf(gap_x) != signf(side):
 			continue
-		var damage := CombatMath.compute_damage(w, speed - other.speed, aggression)
+		var steer_toward := 1.0 - clampf(absf(gap_x) / reach, 0.0, 1.0)
+		var damage := CombatMath.compute_damage(w, speed - other.speed, aggression, steer_toward, windup)
 		if StaminaRules.is_exhausted(stamina):
 			damage *= 0.45
 		other.take_rider_hit(damage, -signf(gap_x), self)
-		other._knockback_velocity += CombatMath.knockback(w, damage) * signf(gap_x)
-		if CombatMath.can_steal(damage, other.weapon) and not kick:
+		var kb := CombatMath.knockback(w, damage)
+		if kick:
+			kb *= 1.35
+		other._knockback_velocity += kb * signf(gap_x)
+		if CombatMath.can_steal(damage, other.weapon, windup) and not kick:
+			var stolen := other.weapon
 			weapon = CombatMath.better(weapon, other.weapon)
 			other.weapon = CombatMath.Weapon.FISTS
+			if is_player and stolen != CombatMath.Weapon.FISTS:
+				weapon_stolen.emit(other.rider_name)
+				Sfx.play("pickup", -4.0, 1.1)
 		hit_any = true
 	return hit_any
 
@@ -235,7 +275,6 @@ func take_bike_damage(amount: float, attacker: Rider) -> void:
 		crash()
 
 
-## Legacy entry — traffic collisions call this.
 func take_damage(amount: float, from_side: float, attacker: Rider) -> void:
 	if attacker != null:
 		take_rider_hit(amount, from_side, attacker)
@@ -249,7 +288,8 @@ func crash() -> void:
 	_bike_distance = distance
 	_bike_lateral = lateral
 	state = State.CRASHED
-	_state_timer = 0.85
+	_state_timer = 1.05
+	_crash_phase = 0.0
 	speed *= 0.35
 	crashed.emit(self)
 	if is_player:
@@ -260,21 +300,29 @@ func is_vulnerable_to_police() -> bool:
 	return state == State.CRASHED or state == State.RUNNING
 
 
-func heal_for_new_race() -> void:
+func is_winding_up() -> bool:
+	return _windup_active
+
+
+func heal_for_new_race(reset_weapon: bool = false) -> void:
 	health = 100.0
 	stamina = StaminaRules.MAX
 	state = State.RIDING
 	knockouts = 0
 	speed = 0.0
 	nitro_fuel = 1.0
+	if reset_weapon:
+		weapon = CombatMath.Weapon.FISTS
+	_crash_phase = 0.0
+	_windup_active = false
 
 
 func _apply_pose() -> void:
 	if _visual_anim == null or not _visual_anim.has_method("apply"):
 		return
-	var pose_t := clampf(_pose_timer / 0.32, 0.0, 1.0) if _pose_timer > 0.0 else 0.0
+	var pose_t := clampf(_pose_timer / 0.38, 0.0, 1.0) if _pose_timer > 0.0 else 0.0
 	_visual_anim.apply(state, speed, lean, _pose_kind, pose_t,
-			state == State.RUNNING, _run_phase)
+			state == State.RUNNING, _run_phase, weapon, _crash_phase, _windup_active, _windup_side)
 
 
 func _apply_transform() -> void:

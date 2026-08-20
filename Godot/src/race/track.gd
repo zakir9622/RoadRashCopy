@@ -10,6 +10,8 @@ var definition: Dictionary
 var curve: Curve3D
 var length: float = 0.0
 var half_width: float = 10.0
+var hazards: Array = []
+var roadblocks: Array = []
 
 const SEGMENT := 6.0  # metres of road per mesh cross-section
 
@@ -22,6 +24,10 @@ func build(track_def: Dictionary, rng_seed: int = 1337) -> void:
 	_build_ground()
 	_build_guardrails()
 	_build_props(rng_seed)
+	_build_hazards(rng_seed)
+	_build_roadblocks(rng_seed)
+	if String(definition.get("biome", "")) == "coast":
+		_build_water()
 
 
 ## Deterministic spine: sweeping sine curves + hills, seeded so the same track
@@ -211,24 +217,23 @@ func _build_guardrails() -> void:
 		add_child(inst)
 
 
-## Roadside props: trees (coast/mountain), cacti-ish (desert), buildings (city),
-## streetlights (night). All MultiMesh — thousands of props, a handful of draw calls.
+## Roadside props: trees, rocks, or layered city skylines close to the road.
 func _build_props(rng_seed: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed * 7 + 1
 	var biome := String(definition.get("biome", "coast"))
 
+	if biome == "city" or biome == "night":
+		_build_city_skyline(rng)
+		if biome == "night":
+			_build_streetlights()
+		return
+
 	var prop_path := "res://assets/models/tree.glb"
 	var scale_range := Vector2(0.8, 1.6)
-	var is_city := biome == "city" or biome == "night"
-	# Buildings are 8 m wide at scale 1 — keep their walls clear of the rail.
-	var clearance := Vector2(16.0, 46.0) if is_city else Vector2(6.0, 34.0)
-	match biome:
-		"desert":
-			prop_path = "res://assets/models/rock.glb"
-		"city", "night":
-			prop_path = "res://assets/models/building.glb"
-			scale_range = Vector2(0.9, 2.2)
+	var clearance := Vector2(6.0, 34.0)
+	if biome == "desert":
+		prop_path = "res://assets/models/rock.glb"
 
 	var mesh := _extract_mesh(prop_path)
 	if mesh == null:
@@ -246,10 +251,7 @@ func _build_props(rng_seed: int) -> void:
 			var lateral := (half_width + rng.randf_range(clearance.x, clearance.y)) * side
 			var t := sample(clampf(d, 0.0, length), lateral, -0.4)
 			var s := rng.randf_range(scale_range.x, scale_range.y)
-			# Skylines need height variety; footprints stay believable.
-			var height_scale := rng.randf_range(0.7, 2.6) if is_city else s
-			t.basis = Basis(Vector3.UP, rng.randf_range(0.0, TAU)) \
-				.scaled(Vector3(s, height_scale, s))
+			t.basis = Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3(s, s, s))
 			mm.set_instance_transform(idx, t)
 			idx += 1
 	var inst := MultiMeshInstance3D.new()
@@ -257,8 +259,35 @@ func _build_props(rng_seed: int) -> void:
 	inst.multimesh = mm
 	add_child(inst)
 
-	if biome == "night":
-		_build_streetlights()
+
+func _build_city_skyline(rng: RandomNumberGenerator) -> void:
+	var kits := [
+		"res://assets/models/building.glb",
+		"res://assets/models/building_shop.glb",
+		"res://assets/models/building_apartment.glb",
+	]
+	for kit_path in kits:
+		var mesh := _extract_mesh(kit_path)
+		if mesh == null:
+			mesh = _fallback_prop_mesh("city")
+		var count := int(length / 38.0)
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = count
+		for i in count:
+			var side := -1.0 if (i + kits.find(kit_path)) % 2 == 0 else 1.0
+			var d := i * 38.0 + rng.randf_range(-6.0, 6.0)
+			var lateral := (half_width + rng.randf_range(5.0, 14.0)) * side
+			var t := sample(clampf(d, 0.0, length), lateral, -0.2)
+			var h := rng.randf_range(0.8, 2.4)
+			var w := rng.randf_range(0.85, 1.35)
+			t.basis = Basis(Vector3.UP, side * PI * 0.5).scaled(Vector3(w, h, w))
+			mm.set_instance_transform(i, t)
+		var inst := MultiMeshInstance3D.new()
+		inst.name = "City_%s" % kit_path.get_file().get_basename()
+		inst.multimesh = mm
+		add_child(inst)
 
 
 func _build_streetlights() -> void:
@@ -327,3 +356,65 @@ static func _fallback_prop_mesh(biome: String) -> Mesh:
 	mat.albedo_color = Color(0.15, 0.32, 0.14)
 	capsule.material = mat
 	return capsule
+
+
+func _build_hazards(rng_seed: int) -> void:
+	hazards.clear()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = rng_seed * 13 + 3
+	var steps := int(length / 180.0)
+	for i in steps:
+		if rng.randf() > 0.55:
+			continue
+		var d := i * 180.0 + rng.randf_range(20.0, 80.0)
+		var kind := "oil" if rng.randf() < 0.45 else "sign"
+		var lat := rng.randf_range(-half_width * 0.5, half_width * 0.5)
+		hazards.append({"distance": d, "lateral": lat, "kind": kind})
+		if ResourceLoader.exists("res://assets/models/sign.glb") and kind == "sign":
+			var side := 1.0 if lat >= 0.0 else -1.0
+			_place_hazard_mesh(d, lat + half_width * side * 0.85, "sign.glb", 0.8)
+
+
+func _place_hazard_mesh(d: float, lateral: float, file: String, scale: float) -> void:
+	var path := "res://assets/models/%s" % file
+	if not ResourceLoader.exists(path):
+		return
+	var scene: PackedScene = load(path)
+	var node := scene.instantiate() as Node3D
+	add_child(node)
+	node.global_transform = sample(clampf(d, 0.0, length), lateral, 0.0)
+	node.scale = Vector3(scale, scale, scale)
+
+
+func _build_roadblocks(rng_seed: int) -> void:
+	roadblocks.clear()
+	if int(definition.get("police", 0)) < 2:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = rng_seed * 19 + 5
+	var count := clampi(int(length / 900.0), 1, 3)
+	for i in count:
+		var d := (i + 1) * (length / float(count + 1))
+		var lat := rng.randf_range(-half_width * 0.35, half_width * 0.35)
+		roadblocks.append({"distance": d, "lateral": lat, "width": 3.2})
+		if ResourceLoader.exists("res://assets/models/barrier.glb"):
+			_place_hazard_mesh(d, lat, "barrier.glb", 1.1)
+
+
+func _build_water() -> void:
+	var plane := MeshInstance3D.new()
+	var mesh := PlaneMesh.new()
+	mesh.size = Vector2(length * 0.35, 120.0)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.08, 0.28, 0.45)
+	mat.metallic = 0.35
+	mat.roughness = 0.18
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color.a = 0.88
+	mesh.material = mat
+	plane.mesh = mesh
+	plane.name = "Ocean"
+	add_child(plane)
+	var t := sample(length * 0.25, -half_width - 38.0, -1.2)
+	plane.global_transform = t
+	plane.rotate_object_local(Vector3.RIGHT, -PI * 0.5)

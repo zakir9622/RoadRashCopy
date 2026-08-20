@@ -133,6 +133,8 @@ def build_humanoid_rider(root, suit_mat, skin_mat, helm_mat, visor_mat, scale=1.
             bevel=0.02, parent=rider)
         if side == "r":
             shin.name = "leg_r"
+        else:
+            shin.name = "leg_l"
 
     return rider
 
@@ -269,6 +271,62 @@ def build_building():
     export("building.glb")
 
 
+def build_building_shop():
+    reset()
+    brick = mat("brick", (0.42, 0.28, 0.22), roughness=0.92)
+    glass = mat("shop_glass", (0.55, 0.7, 0.85), metallic=0.5, roughness=0.12, emission=(0.7, 0.85, 1.0))
+    awning = mat("awning", (0.85, 0.15, 0.12), roughness=0.8)
+    box("shop_base", (7, 6, 5), (0, 0, 2.5), brick, bevel=0.06)
+    box("shop_window", (6, 0.4, 3.2), (0, 3.1, 2.2), glass, bevel=0.02)
+    box("shop_awning", (7.2, 1.2, 0.3), (0, 3.4, 3.8), awning, bevel=0.02)
+    box("shop_roof", (7.5, 7.5, 1.2), (0, 0, 5.6), brick, bevel=0.04)
+    export("building_shop.glb")
+
+
+def build_building_apartment():
+    reset()
+    concrete = mat("concrete", (0.32, 0.34, 0.38), roughness=0.88)
+    glass = mat("apt_glass", (0.35, 0.5, 0.65), metallic=0.65, roughness=0.18, emission=(0.85, 0.75, 0.45))
+    box("apt_base", (6, 6, 14), (0, 0, 7), concrete, bevel=0.05)
+    for row in range(5):
+        for col in range(2):
+            box(f"win_{row}_{col}", (1.4, 0.08, 1.6),
+                (-1.4 + col * 2.8, 3.05, 2.5 + row * 2.4), glass, bevel=0.01)
+    export("building_apartment.glb")
+
+
+def build_weapon_club():
+    reset()
+    wood = mat("wood", (0.45, 0.28, 0.14), roughness=0.85)
+    cyl("club", 0.045, 0.72, (0, 0, 0.36), wood, rot=(0, 0, math.radians(18)))
+    export("weapon_club.glb")
+
+
+def build_weapon_bat():
+    reset()
+    wood = mat("bat", (0.38, 0.24, 0.12), roughness=0.8)
+    cyl("bat", 0.038, 0.82, (0, 0, 0.41), wood, rot=(0, 0, math.radians(12)))
+    export("weapon_bat.glb")
+
+
+def build_sign():
+    reset()
+    metal = mat("pole", (0.35, 0.36, 0.4), metallic=0.7, roughness=0.4)
+    sign = mat("face", (0.9, 0.85, 0.1), roughness=0.7)
+    cyl("post", 0.05, 2.4, (0, 0, 1.2), metal)
+    box("board", (0.9, 0.06, 0.6), (0, 0, 2.2), sign, bevel=0.02)
+    export("sign.glb")
+
+
+def build_barrier():
+    reset()
+    paint = mat("barrier", (0.9, 0.75, 0.1), roughness=0.75)
+    stripe = mat("stripe", (0.1, 0.1, 0.12), roughness=0.9)
+    box("base", (3.2, 1.2, 0.9), (0, 0, 0.45), paint, bevel=0.04)
+    box("stripe_a", (3.25, 1.25, 0.15), (0, 0, 0.55), stripe)
+    export("barrier.glb")
+
+
 if __name__ == "__main__":
     build_bike("sport", cop=False)
     build_bike("rat", cop=False)
@@ -278,5 +336,11 @@ if __name__ == "__main__":
     build_tree()
     build_rock()
     build_building()
+    build_building_shop()
+    build_building_apartment()
+    build_weapon_club()
+    build_weapon_bat()
+    build_sign()
+    build_barrier()
     print("ALL ASSETS DONE")
     sys.exit(0)

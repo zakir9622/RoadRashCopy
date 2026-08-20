@@ -13,10 +13,10 @@ var player: Rider
 var camera: Camera3D
 var hud: CanvasLayer
 
-var _fov_base := 52.0
-var _cam_back := 3.6
-var _cam_up := 1.12
-var _cam_look := 6.0
+var _fov_base := 46.0
+var _cam_back := 2.35
+var _cam_up := 1.38
+var _cam_look := 4.5
 
 
 ## Autoloads fetched by tree path, not identifier: identifier globals bind to
@@ -88,21 +88,25 @@ func _spawn_grid(definition: Dictionary) -> void:
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 4242
-	var rival_count: int = mini(int(definition["rivals"]) + 2, Campaign.ROSTER.size())
-	var palette := [
-		Color(0.15, 0.35, 0.8), Color(0.8, 0.75, 0.2), Color(0.2, 0.7, 0.4),
-		Color(0.75, 0.2, 0.65), Color(0.9, 0.9, 0.9), Color(0.1, 0.1, 0.1),
-	]
+	var rival_count: int = mini(int(definition["rivals"]) + 3, Campaign.ROSTER.size())
+	var scale := _context().division_scale
 	for i in rival_count:
 		var profile: Dictionary = Campaign.ROSTER[i]
-		var lateral := lerpf(-track.half_width * 0.6, track.half_width * 0.6,
+		var lateral := lerpf(-track.half_width * 0.72, track.half_width * 0.72,
 			float(i) / maxf(float(rival_count - 1), 1.0))
-		var rival := _make_rider(String(profile["name"]), 34.0 - (i % 3) * 6.0, lateral,
-			palette[i % palette.size()])
-		rival.top_speed = 44.0 + float(profile["skill"]) * 18.0
-		rival.accel = 10.0 + float(profile["skill"]) * 6.0
+		var stagger := (i % 4) * 4.5 + (i / 4) * 2.0
+		var gang := String(profile.get("gang", "Desades"))
+		var suit: Color = Campaign.GANG_COLORS.get(gang, Color(0.5, 0.5, 0.5))
+		var rival := _make_rider(String(profile["name"]), 38.0 - stagger, lateral, suit, false, profile)
+		rival.rider_id = String(profile["id"])
+		rival.gang = gang
+		rival.suit_color = suit
+		rival.body_color = suit.lightened(0.15)
+		rival.top_speed = (44.0 + float(profile["skill"]) * 18.0) * scale
+		rival.accel = (10.0 + float(profile["skill"]) * 6.0) * scale
 		rival.weapon = int(profile["weapon"])
-		_rival_ais.append(RivalAI.new(rival, float(profile["skill"]), float(profile["aggression"]), 1000 + i))
+		_rival_ais.append(RivalAI.new(rival, float(profile["skill"]) * scale,
+				float(profile["aggression"]), 1000 + i))
 
 	# One officer starts behind the grid; heat spawns reinforcements from the rear.
 	if int(definition["police"]) > 0:
@@ -123,10 +127,15 @@ func _spawn_police_unit(offset_behind: float = -18.0, lateral: float = 0.0) -> v
 
 
 func _make_rider(rider_name: String, start_s: float, start_x: float,
-		colour: Color, cop: bool = false) -> Rider:
+		colour: Color, cop: bool = false, profile: Dictionary = {}) -> Rider:
 	var rider := Rider.new()
 	rider.name = rider_name.replace(" ", "_")
 	rider.rider_name = rider_name
+	rider.body_color = colour
+	rider.suit_color = colour.darkened(0.15)
+	if not profile.is_empty():
+		rider.rider_id = String(profile.get("id", rider_name.to_lower()))
+		rider.gang = String(profile.get("gang", ""))
 	add_child(rider)
 	rider.setup(track, start_s, start_x)
 	rider.visual = _make_bike_visual(colour, cop, rider)
@@ -254,6 +263,7 @@ func _build_camera() -> void:
 func _build_hud() -> void:
 	hud = load("res://src/ui/Hud.tscn").instantiate()
 	add_child(hud)
+	hud.name = "Hud"
 	hud.call_deferred("bind", self)
 
 
@@ -327,11 +337,11 @@ func _update_camera(delta: float) -> void:
 		return
 	var behind := track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.35, _cam_up)
 	camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-10.0 * delta))
-	var look_target := track.sample(player.distance + _cam_look, player.lateral * 0.25, 0.85)
+	var look_target := track.sample(player.distance + _cam_look, player.lateral * 0.22, 0.55)
 	camera.look_at(look_target.origin, Vector3.UP)
 
 	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
-	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 6.0, 6.0 * delta)
+	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 5.0, 6.0 * delta)
 
 
 func _on_finished(summary: Dictionary) -> void:
