@@ -1,0 +1,244 @@
+extends Node3D
+## Race scene root: builds the world from RaceContext, spawns the grid, wires
+## the camera, environment, HUD and manager. Everything procedural — the scene
+## file itself is nearly empty, so there is nothing to desync from code.
+
+const RIDER_MODEL := "res://assets/models/bike.glb"
+const COP_MODEL := "res://assets/models/cop_bike.glb"
+
+var manager: RaceManager
+var track: Track
+var player: Rider
+var camera: Camera3D
+var hud: CanvasLayer
+
+var _fov_base := 68.0
+
+
+func _ready() -> void:
+	var definition := RaceContext.track()
+
+	track = Track.new()
+	track.name = "Track"
+	add_child(track)
+	track.build(definition)
+
+	_build_environment(definition)
+	_spawn_grid(definition)
+	_build_camera()
+	_build_hud()
+
+	manager = RaceManager.new()
+	manager.name = "RaceManager"
+	add_child(manager)
+
+	var rival_ais := []
+	var police_ais := []
+	for child_ai in _rival_ais:
+		rival_ais.append(child_ai)
+	for child_ai in _police_ais:
+		police_ais.append(child_ai)
+
+	var traffic := Traffic.new()
+	traffic.name = "Traffic"
+	add_child(traffic)
+	traffic.build(track, int(definition["traffic"]), player)
+
+	manager.configure(track, player, rival_ais, police_ais, traffic)
+	manager.finished.connect(_on_finished)
+	manager.start()
+
+	Sfx.play_music()
+
+
+var _rival_ais: Array = []
+var _police_ais: Array = []
+
+
+func _spawn_grid(definition: Dictionary) -> void:
+	var spec: Dictionary = GameState.current_bike_spec()
+	player = _make_rider("You", 40.0, 0.0, Color(0.9, 0.35, 0.1))
+	player.is_player = true
+	player.top_speed = float(spec["top_speed"])
+	player.accel = float(spec["accel"])
+	player.handling = float(spec["handling"])
+	player.nitro_boost = float(spec["nitro"])
+
+	var controller := PlayerController.new()
+	controller.name = "PlayerController"
+	controller.rider = player
+	controller.get_opponents = func(): return manager.riders if manager else []
+	add_child(controller)
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var rival_count: int = mini(int(definition["rivals"]), Campaign.ROSTER.size())
+	var palette := [
+		Color(0.15, 0.35, 0.8), Color(0.8, 0.75, 0.2), Color(0.2, 0.7, 0.4),
+		Color(0.75, 0.2, 0.65), Color(0.9, 0.9, 0.9), Color(0.1, 0.1, 0.1),
+	]
+	for i in rival_count:
+		var profile: Dictionary = Campaign.ROSTER[i]
+		var lateral := lerpf(-track.half_width * 0.6, track.half_width * 0.6,
+			float(i) / maxf(float(rival_count - 1), 1.0))
+		var rival := _make_rider(String(profile["name"]), 34.0 - (i % 3) * 6.0, lateral,
+			palette[i % palette.size()])
+		rival.top_speed = 44.0 + float(profile["skill"]) * 18.0
+		rival.accel = 10.0 + float(profile["skill"]) * 6.0
+		rival.weapon = int(profile["weapon"])
+		_rival_ais.append(RivalAI.new(rival, float(profile["skill"]), float(profile["aggression"]), 1000 + i))
+
+	for i in int(definition["police"]):
+		var cop := _make_rider("Officer", 10.0 - i * 8.0, 0.0, Color(0.1, 0.2, 0.85), true)
+		cop.top_speed = 56.0
+		cop.accel = 14.0
+		_police_ais.append(PoliceAI.new(cop))
+
+
+func _make_rider(rider_name: String, start_s: float, start_x: float,
+		colour: Color, cop: bool = false) -> Rider:
+	var rider := Rider.new()
+	rider.name = rider_name.replace(" ", "_")
+	rider.rider_name = rider_name
+	add_child(rider)
+	rider.setup(track, start_s, start_x)
+	rider.visual = _make_bike_visual(colour, cop)
+	rider.add_child(rider.visual)
+	return rider
+
+
+func _make_bike_visual(colour: Color, cop: bool) -> Node3D:
+	var path := COP_MODEL if cop else RIDER_MODEL
+	if ResourceLoader.exists(path):
+		var scene: PackedScene = load(path)
+		var model := scene.instantiate() as Node3D
+		_tint_model(model, colour)
+		return model
+	# Fallback silhouette: body box + wheels, still clearly a bike.
+	var root := Node3D.new()
+	var body := MeshInstance3D.new()
+	var body_mesh := BoxMesh.new()
+	body_mesh.size = Vector3(0.4, 0.6, 2.0)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = colour
+	mat.metallic = 0.6
+	mat.roughness = 0.35
+	body_mesh.material = mat
+	body.mesh = body_mesh
+	body.position.y = 0.7
+	root.add_child(body)
+	for z in [-0.75, 0.75]:
+		var wheel := MeshInstance3D.new()
+		var wheel_mesh := CylinderMesh.new()
+		wheel_mesh.top_radius = 0.32
+		wheel_mesh.bottom_radius = 0.32
+		wheel_mesh.height = 0.12
+		var dark := StandardMaterial3D.new()
+		dark.albedo_color = Color(0.08, 0.08, 0.09)
+		wheel_mesh.material = dark
+		wheel.mesh = wheel_mesh
+		wheel.rotation.z = PI / 2.0
+		wheel.position = Vector3(0.0, 0.32, z)
+		root.add_child(wheel)
+	return root
+
+
+static func _tint_model(model: Node3D, colour: Color) -> void:
+	for child in model.find_children("*", "MeshInstance3D", true, false):
+		var mesh_child := child as MeshInstance3D
+		if mesh_child.mesh == null:
+			continue
+		for surface in mesh_child.mesh.get_surface_count():
+			var mat := mesh_child.mesh.surface_get_material(surface)
+			var std := mat as StandardMaterial3D
+			# The generator marks tintable panels bright red; recolour only those.
+			if std != null and std.albedo_color.r > 0.85 and std.albedo_color.g < 0.3:
+				var tinted := std.duplicate() as StandardMaterial3D
+				tinted.albedo_color = colour
+				mesh_child.set_surface_override_material(surface, tinted)
+
+
+func _build_environment(definition: Dictionary) -> void:
+	var env := Environment.new()
+	var night := bool(definition.get("night", false))
+
+	var sky_path := "res://assets/sky/dikhololo_night_hdri.hdr" if night \
+		else "res://assets/sky/kloppenheim_02_puresky_hdri.hdr"
+	if ResourceLoader.exists(sky_path):
+		var sky_mat := PanoramaSkyMaterial.new()
+		sky_mat.panorama = load(sky_path)
+		var sky := Sky.new()
+		sky.sky_material = sky_mat
+		env.background_mode = Environment.BG_SKY
+		env.sky = sky
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+		env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	else:
+		env.background_mode = Environment.BG_COLOR
+		env.background_color = Color(0.04, 0.05, 0.09) if night else Color(0.45, 0.65, 0.85)
+		env.ambient_light_color = Color(0.5, 0.55, 0.65)
+		env.ambient_light_energy = 1.0
+
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.0 if not night else 1.3
+	env.glow_enabled = true
+	env.glow_intensity = 0.5
+	env.glow_bloom = 0.1
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.05, 0.07, 0.12) if night else Color(0.75, 0.8, 0.88)
+	env.fog_density = 0.0035 if night else 0.0012
+	env.fog_sky_affect = 0.0
+
+	var world_env := WorldEnvironment.new()
+	world_env.environment = env
+	add_child(world_env)
+
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-38.0, 40.0, 0.0)
+	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 220.0
+	sun.light_energy = 0.15 if night else 1.2
+	sun.light_color = Color(0.7, 0.75, 1.0) if night else Color(1.0, 0.95, 0.85)
+	add_child(sun)
+
+
+func _build_camera() -> void:
+	camera = Camera3D.new()
+	camera.fov = _fov_base
+	camera.near = 0.2
+	camera.far = 900.0
+	add_child(camera)
+	camera.make_current()
+
+
+func _build_hud() -> void:
+	hud = load("res://src/ui/Hud.tscn").instantiate()
+	add_child(hud)
+	hud.call_deferred("bind", self)
+
+
+func _process(delta: float) -> void:
+	_update_camera(delta)
+	Sfx.set_engine(player.speed / maxf(player.top_speed, 1.0),
+		manager.phase == RaceManager.Phase.RACING and player.state == Rider.State.RIDING)
+
+
+## Chase camera: behind and above the bike in track space, spring-damped, with
+## an FOV kick at speed so velocity is felt, not just read off the HUD.
+func _update_camera(delta: float) -> void:
+	if player == null or track == null:
+		return
+	var behind := track.sample(maxf(player.distance - 7.5, 0.0), player.lateral * 0.75, 2.6)
+	camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-8.0 * delta))
+	var look_target := track.sample(player.distance + 12.0, player.lateral * 0.4, 1.0)
+	camera.look_at(look_target.origin, Vector3.UP)
+
+	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.3)
+	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 14.0, 6.0 * delta)
+
+
+func _on_finished(summary: Dictionary) -> void:
+	var results_scene: PackedScene = load("res://src/ui/Results.tscn")
+	var results := results_scene.instantiate()
+	add_child(results)
+	results.call_deferred("present", summary)
