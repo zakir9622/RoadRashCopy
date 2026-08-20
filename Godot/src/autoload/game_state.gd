@@ -61,6 +61,10 @@ func load_save() -> void:
 		save = _default_save()
 
 
+func reset_for_preview() -> void:
+	save = _default_save()
+
+
 func persist() -> void:
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file == null:

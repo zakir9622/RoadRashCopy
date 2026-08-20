@@ -25,7 +25,7 @@ Older asphalt, concrete, grass, and rust maps already in this folder are also Po
 
 GLTF kits from [kenney.nl](https://kenney.nl) (CC0 1.0):
 
-- [Car Kit](https://kenney.nl/assets/car-kit) — `assets/models/kenney/car/` (plus `Textures/colormap.png`)
+- [Car Kit](https://kenney.nl/assets/car-kit) — `assets/models/kenney/car/` (sedan, van, SUV, taxi, hatch, police, plus `Textures/colormap.png`)
 - [City Kit (Commercial)](https://kenney.nl/assets/city-kit-commercial) — `assets/models/kenney/city/`
 - [City Kit (Roads)](https://kenney.nl/assets/city-kit-roads) — lamps, signs, barriers, dumpsters, traffic lights
 - [City Kit (Suburban)](https://kenney.nl/assets/city-kit-suburban) — coast/desert houses

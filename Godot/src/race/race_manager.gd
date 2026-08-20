@@ -199,9 +199,14 @@ func _step_animals(delta: float) -> void:
 			hz["dir"] = -float(hz.get("dir", 1.0))
 		var node: Variant = hz.get("node", null)
 		if node is Node3D and is_instance_valid(node):
-			var h := 0.55 if kind == "cow" else 0.45
-			(node as Node3D).global_transform = track.sample(
-				clampf(float(hz["distance"]), 0.0, track.length), float(hz["lateral"]), h)
+			var n := node as Node3D
+			var s := float(n.get_meta("kit_scale", 1.0))
+			var lift := float(n.get_meta("y_lift", 0.5))
+			var xf := track.sample(clampf(float(hz["distance"]), 0.0, track.length),
+					float(hz["lateral"]), 0.0)
+			xf.basis = xf.basis.scaled(Vector3(s, s, s))
+			xf.origin += xf.basis.y.normalized() * lift
+			n.global_transform = xf
 
 
 func _check_hazards() -> void:
@@ -214,6 +219,8 @@ func _check_hazards() -> void:
 		if rider.is_airborne():
 			continue
 		for hz in track.hazards:
+			if bool(hz.get("taken", false)):
+				continue
 			var d := float(hz["distance"])
 			var lat := float(hz["lateral"])
 			if absf(rider.distance - d) > 2.0 or absf(rider.lateral - lat) > 1.4:
@@ -238,6 +245,10 @@ func _check_hazards() -> void:
 					else:
 						rider.take_bike_damage(28.0, null)
 						rider.crash()
+				"chain":
+					_try_pickup(rider, hz, CombatMath.Weapon.CHAIN)
+				"bat":
+					_try_pickup(rider, hz, CombatMath.Weapon.BAT)
 
 
 func _check_roadblocks() -> void:
@@ -257,6 +268,15 @@ func _check_roadblocks() -> void:
 			rider.crash()
 			if rider.is_player:
 				heat.on_crash()
+
+
+func _try_pickup(rider: Rider, hz: Dictionary, weapon: int) -> void:
+	if not rider.pickup_weapon(weapon):
+		return
+	hz["taken"] = true
+	var node: Variant = hz.get("node", null)
+	if node is Node3D and is_instance_valid(node):
+		(node as Node3D).visible = false
 
 
 func _check_rider_collisions() -> void:

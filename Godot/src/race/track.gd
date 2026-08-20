@@ -449,29 +449,45 @@ func _build_curbs() -> void:
 	add_child(inst)
 
 
-## Guardrails as one MultiMesh per side: hundreds of posts+rails, two draw calls.
+## Guardrails as one MultiMesh per side: Kenney jersey barriers, rusty box fallback.
 func _build_guardrails() -> void:
 	var biome := String(definition.get("biome", ""))
 	if biome == "city" or biome == "night":
 		return
-	var rail_mesh := BoxMesh.new()
-	rail_mesh.size = Vector3(0.08, 0.35, SEGMENT + 0.3)
-	var mat := StandardMaterial3D.new()
-	var metal := "res://assets/textures/rusty_metal_02_Diffuse.jpg"
-	mat.metallic = 0.6
-	mat.roughness = 0.5
-	_apply_pbr_maps(mat, metal)
-	rail_mesh.material = mat
+	var kit := _extract_mesh("res://assets/models/kenney/roads/construction-barrier.glb")
+	var aabb := AABB()
+	var s := 1.0
+	var mesh: Mesh
+	if kit != null:
+		mesh = kit
+		aabb = kit.get_aabb()
+		s = 1.05 / maxf(aabb.size.y, 0.08)
+	else:
+		var rail_mesh := BoxMesh.new()
+		rail_mesh.size = Vector3(0.08, 0.35, SEGMENT + 0.3)
+		var mat := StandardMaterial3D.new()
+		mat.metallic = 0.6
+		mat.roughness = 0.5
+		_apply_pbr_maps(mat, "res://assets/textures/rusty_metal_02_Diffuse.jpg")
+		rail_mesh.material = mat
+		mesh = rail_mesh
+		aabb = mesh.get_aabb()
 
-	var steps := int(length / SEGMENT)
+	var spacing := 4.2 if kit != null else SEGMENT
+	var steps := maxi(int(length / spacing), 1)
 	for side: float in [-1.0, 1.0]:
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = rail_mesh
+		mm.mesh = mesh
 		mm.instance_count = steps
 		for i in steps:
-			var d := i * SEGMENT + SEGMENT * 0.5
-			var t := sample(d, (half_width + 0.6) * side, 0.55)
+			var d := i * spacing + spacing * 0.5
+			var t := sample(d, (half_width + 0.7) * side, 0.0)
+			if kit != null:
+				t.basis = t.basis.scaled(Vector3(s, s, s))
+				t.origin += t.basis.y.normalized() * (-aabb.position.y * s)
+			else:
+				t.origin += t.basis.y.normalized() * 0.55
 			mm.set_instance_transform(i, t)
 		var inst := MultiMeshInstance3D.new()
 		inst.name = "Guardrail_L" if side < 0 else "Guardrail_R"
@@ -694,6 +710,17 @@ func _build_city_furniture(rng: RandomNumberGenerator) -> void:
 	_scatter_prop(_first_model([
 		"res://assets/models/kenney/roads/electricity-pole.glb",
 	]), "City_Poles", rng, 80.0, Vector2(2.0, 2.6), Vector2(8.5, 10.5), 0.0, [-1.0, 1.0], true)
+	_scatter_prop(_first_model([
+		"res://assets/models/kenney/suburban/planter.glb",
+	]), "City_Planters", rng, 22.0, Vector2(0.85, 1.35), Vector2(0.7, 1.05), 0.0, [-1.0, 1.0], true)
+	_scatter_prop(_first_model([
+		"res://assets/models/kenney/suburban/tree-small.glb",
+		"res://assets/models/kenney_tree.glb",
+	]), "City_PlanterTrees", rng, 26.0, Vector2(1.6, 2.4), Vector2(3.2, 5.0), 0.0, [-1.0, 1.0])
+	if String(definition.get("biome", "")) == "night":
+		_scatter_prop(_first_model([
+			"res://assets/models/kenney/roads/construction-light.glb",
+		]), "City_WorkLights", rng, 96.0, Vector2(1.3, 1.9), Vector2(2.4, 3.2), 0.0, [-1.0, 1.0], true)
 	_build_billboards(rng)
 
 
@@ -831,17 +858,28 @@ func _build_overpasses() -> void:
 	deck_mat.albedo_color = Color(0.72, 0.73, 0.74)
 	deck_mat.roughness = 0.9
 	_apply_pbr_maps(deck_mat, "res://assets/textures/concrete_wall_008_Diffuse.jpg")
+	var bridge := _extract_mesh("res://assets/models/kenney/roads/road-bridge.glb")
 	var d := 380.0
 	var n := 0
 	while d < length - 200.0:
 		var deck := MeshInstance3D.new()
-		var box := BoxMesh.new()
-		box.size = Vector3(half_width * 2.8 + 8.0, 0.7, 12.0)
-		box.material = deck_mat
-		deck.mesh = box
 		deck.name = "Overpass"
+		var xf := sample(d, 0.0, 6.4)
+		if bridge != null:
+			deck.mesh = bridge
+			var baabb := bridge.get_aabb()
+			var sx := (half_width * 2.8 + 8.0) / maxf(baabb.size.x, 0.2)
+			var sz := 12.0 / maxf(baabb.size.z, 0.2)
+			var sy := 1.15 / maxf(baabb.size.y, 0.05)
+			xf.basis = xf.basis.scaled(Vector3(sx, sy, sz))
+			xf.origin += xf.basis.y.normalized() * (-baabb.position.y * sy)
+		else:
+			var box := BoxMesh.new()
+			box.size = Vector3(half_width * 2.8 + 8.0, 0.7, 12.0)
+			box.material = deck_mat
+			deck.mesh = box
 		add_child(deck)
-		deck.global_transform = sample(d, 0.0, 6.4)
+		deck.global_transform = xf
 		deck.set_meta("track_distance", d)
 		_window_nodes.append(deck)
 		var pillar_mesh := _extract_mesh("res://assets/models/kenney/roads/bridge-pillar.glb")
@@ -1053,10 +1091,12 @@ func _build_hazards(rng_seed: int) -> void:
 	hazards.clear()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed * 13 + 3
-	# Classic set is always present so every race has oil, wildlife, and a sign.
+	# Classic set is always present so every race has oil, wildlife, a sign, and a weapon.
 	_add_hazard(400.0, -half_width * 0.25, "oil", 1.0)
 	_add_hazard(minf(720.0, length * 0.28), half_width * 0.2, "deer", 1.0)
 	_add_hazard(minf(1100.0, length * 0.42), -half_width * 0.15, "cow", -1.0)
+	_add_hazard(minf(520.0, length * 0.22), half_width * 0.72, "chain", 1.0)
+	_add_hazard(minf(880.0, length * 0.36), -half_width * 0.72, "bat", -1.0)
 	var steps := int(length / 180.0)
 	for i in steps:
 		if rng.randf() > 0.5:
@@ -1066,7 +1106,9 @@ func _build_hazards(rng_seed: int) -> void:
 			continue
 		var roll := rng.randf()
 		var kind := "oil"
-		if roll > 0.7:
+		if roll > 0.82:
+			kind = "bat" if rng.randf() < 0.5 else "chain"
+		elif roll > 0.7:
 			kind = "sign"
 		elif roll > 0.45:
 			kind = "cow" if rng.randf() < 0.5 else "deer"
@@ -1089,6 +1131,10 @@ func _add_hazard(d: float, lat: float, kind: String, dir: float) -> void:
 			hz["node"] = _place_animal(d, lat, false)
 		"cow":
 			hz["node"] = _place_animal(d, lat, true)
+		"chain":
+			hz["node"] = _place_weapon_pickup(d, lat, false)
+		"bat":
+			hz["node"] = _place_weapon_pickup(d, lat, true)
 		"oil":
 			_place_oil(d, lat)
 	hazards.append(hz)
@@ -1133,7 +1179,9 @@ func _build_roadblocks(rng_seed: int) -> void:
 		elif ResourceLoader.exists("res://assets/models/barrier.glb"):
 			_place_hazard_mesh(d, lat, "barrier.glb", 1.1)
 		# Police cruiser parked across a lane — classic blockade.
-		if ResourceLoader.exists("res://assets/models/kenney/car/car_sedan.glb"):
+		if ResourceLoader.exists("res://assets/models/kenney/car/car_police.glb"):
+			_place_hazard_mesh(d, lat + 2.4, "kenney/car/car_police.glb", 1.55)
+		elif ResourceLoader.exists("res://assets/models/kenney/car/car_sedan.glb"):
 			_place_hazard_mesh(d, lat + 2.4, "kenney/car/car_sedan.glb", 1.55)
 		elif ResourceLoader.exists("res://assets/models/car.glb"):
 			_place_hazard_mesh(d, lat + 2.4, "car.glb", 1.4)
@@ -1144,9 +1192,9 @@ func _build_water() -> void:
 	var mesh := PlaneMesh.new()
 	mesh.size = Vector2(length * 0.35, 120.0)
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.08, 0.28, 0.45)
-	mat.metallic = 0.35
-	mat.roughness = 0.18
+	mat.albedo_color = Color(0.05, 0.22, 0.38, 0.9)
+	mat.metallic = 0.55
+	mat.roughness = 0.08
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.albedo_color.a = 0.88
 	mat.uv1_scale = Vector3(6, 6, 1)
@@ -1203,6 +1251,8 @@ func _place_animal(d: float, lateral: float, cow: bool) -> Node3D:
 		xf.basis = xf.basis.scaled(Vector3(s, s, s))
 		xf.origin += xf.basis.y.normalized() * (-aabb.position.y * s)
 		body.global_transform = xf
+		body.set_meta("kit_scale", s)
+		body.set_meta("y_lift", -aabb.position.y * s)
 		return body
 	var cap := CapsuleMesh.new()
 	cap.radius = 0.42 if cow else 0.28
@@ -1214,6 +1264,37 @@ func _place_animal(d: float, lateral: float, cow: bool) -> Node3D:
 	add_child(body)
 	body.global_transform = sample(clampf(d, 0.0, length), lateral, 0.55 if cow else 0.45)
 	body.scale = Vector3(1.1, 0.9, 1.6) if cow else Vector3(0.7, 0.7, 1.2)
+	body.set_meta("kit_scale", 1.0)
+	body.set_meta("y_lift", 0.55 if cow else 0.45)
+	return body
+
+
+func _place_weapon_pickup(d: float, lateral: float, bat: bool) -> Node3D:
+	var path := "res://assets/models/weapon_bat.glb" if bat else "res://assets/models/weapon_club.glb"
+	var body := MeshInstance3D.new()
+	body.name = "BatPickup" if bat else "ChainPickup"
+	var mesh := _extract_mesh(path)
+	if mesh == null:
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.05 if bat else 0.04
+		cyl.bottom_radius = 0.05 if bat else 0.04
+		cyl.height = 0.95
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.45, 0.28, 0.12) if bat else Color(0.18, 0.2, 0.22)
+		mat.metallic = 0.15 if bat else 0.85
+		mat.roughness = 0.55 if bat else 0.3
+		cyl.material = mat
+		mesh = cyl
+	body.mesh = mesh
+	add_child(body)
+	var aabb := mesh.get_aabb()
+	var s := 0.85 / maxf(aabb.size.y, 0.08)
+	var xf := sample(clampf(d, 0.0, length), lateral, 0.0)
+	xf.basis = xf.basis.scaled(Vector3(s, s, s))
+	xf.origin += xf.basis.y.normalized() * (-aabb.position.y * s + 0.35)
+	body.global_transform = xf
+	body.set_meta("kit_scale", s)
+	body.set_meta("y_lift", -aabb.position.y * s + 0.35)
 	return body
 
 
@@ -1372,27 +1453,53 @@ func _build_landmarks() -> void:
 
 
 func _make_landmark(kind: int) -> Node3D:
-	var shops := [
+	var root := Node3D.new()
+	var kits := [
+		"res://assets/models/kenney/suburban/building-type-i.glb",
 		"res://assets/models/kenney/city/kenney_shop_a.glb",
+		"res://assets/models/kenney/suburban/building-type-b.glb",
+	]
+	var fallbacks := [
 		"res://assets/models/kenney/city/kenney_shop_b.glb",
 		"res://assets/models/kenney/city/kenney_shop_c.glb",
+		"res://assets/models/building_shop.glb",
 	]
-	if kind != 0:
-		var path := _first_model([shops[kind % shops.size()], shops[0]])
-		if ResourceLoader.exists(path):
-			var packed: PackedScene = load(path)
-			var shop := packed.instantiate() as Node3D
-			if shop != null:
-				var kit := _extract_mesh(path)
-				var h := 11.0
-				if kit != null:
-					h = 11.0 / maxf(kit.get_aabb().size.y, 0.2)
-				shop.scale = Vector3(h, h, h)
-				return shop
-	var root := Node3D.new()
-	match kind:
-		0:
-			# Gas station canopy + pumps.
+	var path := _first_model([kits[kind % kits.size()], fallbacks[kind % fallbacks.size()]])
+	var mesh := _extract_mesh(path)
+	if mesh != null:
+		var building := MeshInstance3D.new()
+		building.mesh = mesh
+		var aabb := mesh.get_aabb()
+		var target := 9.5 if kind == 1 else 8.2
+		var s := target / maxf(aabb.size.y, 0.2)
+		building.scale = Vector3(s, s, s)
+		building.position.y = -aabb.position.y * s
+		root.add_child(building)
+	var planter := _extract_mesh("res://assets/models/kenney/suburban/planter.glb")
+	if planter != null:
+		for i in 2:
+			var pot := MeshInstance3D.new()
+			pot.mesh = planter
+			var paabb := planter.get_aabb()
+			var ps := 0.85 / maxf(paabb.size.y, 0.08)
+			pot.scale = Vector3(ps, ps, ps)
+			pot.position = Vector3(-2.4 + i * 4.8, -paabb.position.y * ps, 2.2)
+			root.add_child(pot)
+	if kind == 0:
+		var car := _extract_mesh(_first_model([
+			"res://assets/models/kenney/car/car_sedan.glb",
+			"res://assets/models/car.glb",
+		]))
+		if car != null:
+			var parked := MeshInstance3D.new()
+			parked.mesh = car
+			var caabb := car.get_aabb()
+			var cs := 1.5 / maxf(caabb.size.y, 0.2)
+			parked.scale = Vector3(cs, cs, cs)
+			parked.position = Vector3(3.6, -caabb.position.y * cs, 0.4)
+			root.add_child(parked)
+		elif mesh == null:
+			# Last-resort gas canopy so a landmark still reads if kits fail to load.
 			var canopy := MeshInstance3D.new()
 			var roof := BoxMesh.new()
 			roof.size = Vector3(8.0, 0.22, 6.0)
@@ -1400,58 +1507,20 @@ func _make_landmark(kind: int) -> Node3D:
 			rmat.albedo_color = Color(0.85, 0.12, 0.1)
 			rmat.emission_enabled = true
 			rmat.emission = Color(0.9, 0.25, 0.12)
-			rmat.emission_energy_multiplier = 0.4
 			roof.material = rmat
 			canopy.mesh = roof
 			canopy.position = Vector3(0, 4.2, 0)
 			root.add_child(canopy)
-			for i in 3:
-				var pump := MeshInstance3D.new()
-				var box := BoxMesh.new()
-				box.size = Vector3(0.6, 1.4, 0.45)
-				var pmat := StandardMaterial3D.new()
-				pmat.albedo_color = Color(0.85, 0.85, 0.82)
-				_apply_pbr_maps(pmat, "res://assets/textures/metal_plate_Diffuse.jpg")
-				box.material = pmat
-				pump.mesh = box
-				pump.position = Vector3(-2.0 + i * 2.0, 0.7, 0.0)
-				root.add_child(pump)
-		1:
-			# Plaza kiosk.
-			var slab := MeshInstance3D.new()
-			var slab_mesh := BoxMesh.new()
-			slab_mesh.size = Vector3(10.0, 0.18, 8.0)
-			var smat := StandardMaterial3D.new()
-			smat.albedo_color = Color(0.78, 0.78, 0.76)
-			_apply_pbr_maps(smat, "res://assets/textures/painted_worn_brick_Diffuse.jpg")
-			slab_mesh.material = smat
-			slab.mesh = slab_mesh
-			slab.position = Vector3(0, 0.1, 0)
-			root.add_child(slab)
-			var kiosk := MeshInstance3D.new()
-			var kmesh := BoxMesh.new()
-			kmesh.size = Vector3(3.2, 3.4, 3.2)
-			var kmat := StandardMaterial3D.new()
-			kmat.albedo_color = Color(0.85, 0.86, 0.88)
-			kmat.emission_enabled = true
-			kmat.emission = Color(0.4, 0.7, 1.0)
-			kmat.emission_energy_multiplier = 0.6
-			_apply_pbr_maps(kmat, "res://assets/textures/painted_plaster_wall_Diffuse.jpg")
-			kmesh.material = kmat
-			kiosk.mesh = kmesh
-			kiosk.position = Vector3(0, 1.8, 0)
-			root.add_child(kiosk)
-		_:
-			# Rest-stop shed.
-			var shed := MeshInstance3D.new()
-			var shed_mesh := BoxMesh.new()
-			shed_mesh.size = Vector3(5.5, 3.2, 4.0)
-			var shed_mat := StandardMaterial3D.new()
-			shed_mat.albedo_color = Color(0.78, 0.74, 0.68)
-			_apply_pbr_maps(shed_mat, "res://assets/textures/painted_plaster_wall_Diffuse.jpg")
-			shed_mesh.material = shed_mat
-			shed.mesh = shed_mesh
-			shed.position = Vector3(0, 1.6, 0)
-			root.add_child(shed)
+	if root.get_child_count() == 0:
+		var shed := MeshInstance3D.new()
+		var shed_mesh := BoxMesh.new()
+		shed_mesh.size = Vector3(5.5, 3.2, 4.0)
+		var shed_mat := StandardMaterial3D.new()
+		shed_mat.albedo_color = Color(0.78, 0.74, 0.68)
+		_apply_pbr_maps(shed_mat, "res://assets/textures/painted_plaster_wall_Diffuse.jpg")
+		shed_mesh.material = shed_mat
+		shed.mesh = shed_mesh
+		shed.position = Vector3(0, 1.6, 0)
+		root.add_child(shed)
 	return root
 

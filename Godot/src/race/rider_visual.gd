@@ -133,7 +133,7 @@ func _attach_weapons() -> void:
 		return
 	_hand_l_attach = _bone_attach("hand_l")
 	_hand_r_attach = _bone_attach("hand_r")
-	_weapon_l = _spawn_weapon("res://assets/models/weapon_club.glb", _hand_l_attach)
+	_weapon_l = _spawn_chain(_hand_l_attach)
 	_weapon_r = _spawn_weapon("res://assets/models/weapon_bat.glb", _hand_r_attach)
 
 
@@ -164,6 +164,38 @@ func _spawn_weapon(path: String, parent: Node) -> Node3D:
 	parent.add_child(prop)
 	_bind_wood(prop)
 	return prop
+
+
+func _spawn_chain(parent: Node) -> Node3D:
+	if parent == null:
+		return null
+	var prop := Node3D.new()
+	prop.name = "chain"
+	prop.visible = false
+	var link := BoxMesh.new()
+	link.size = Vector3(0.045, 0.09, 0.028)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.22, 0.23, 0.25)
+	mat.metallic = 1.0
+	mat.roughness = 0.28
+	_bind_hero_metal(mat)
+	link.material = mat
+	for i in 8:
+		var mi := MeshInstance3D.new()
+		mi.mesh = link
+		mi.position = Vector3(0.0, -0.08 * i, 0.02 * (i % 2))
+		mi.rotation_degrees = Vector3(0.0, 40.0 if i % 2 == 0 else -40.0, 12.0)
+		prop.add_child(mi)
+	prop.scale = Vector3(0.9, 0.9, 0.9)
+	prop.rotation_degrees = Vector3(70, 0, 10)
+	parent.add_child(prop)
+	return prop
+
+
+func _bind_hero_metal(mat: StandardMaterial3D) -> void:
+	var diff := "res://assets/textures/metal_plate_Diffuse.jpg"
+	if ResourceLoader.exists(diff):
+		mat.albedo_texture = load(diff)
 
 
 func _bind_wood(root: Node) -> void:
@@ -199,7 +231,7 @@ func _bind_wood(root: Node) -> void:
 
 
 func _load_weapon_loose() -> void:
-	_try_loose_weapon("l", "res://assets/models/weapon_club.glb")
+	_weapon_l = _spawn_chain(self)
 	_try_loose_weapon("r", "res://assets/models/weapon_bat.glb")
 
 

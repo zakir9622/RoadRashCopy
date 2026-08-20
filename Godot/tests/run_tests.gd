@@ -25,7 +25,7 @@ func _init() -> void:
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 178
+	const EXPECTED_CHECKS := 187
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -67,6 +67,12 @@ func _test_combat() -> void:
 	check(not CombatMath.can_steal(20.0, CombatMath.Weapon.FISTS), "cannot steal fists")
 	check(CombatMath.better(CombatMath.Weapon.BAT, CombatMath.Weapon.CHAIN) == CombatMath.Weapon.BAT,
 		"bat outranks chain")
+	var rasher := Rider.new()
+	check(rasher.pickup_weapon(CombatMath.Weapon.CHAIN), "fists pick up a chain")
+	check(rasher.weapon == CombatMath.Weapon.CHAIN, "holding chain")
+	check(not rasher.pickup_weapon(CombatMath.Weapon.CHAIN), "same weapon is not a pickup")
+	check(rasher.pickup_weapon(CombatMath.Weapon.BAT), "chain upgrades to bat")
+	rasher.free()
 
 
 func _test_catalog() -> void:
@@ -178,7 +184,10 @@ func _test_track_geometry() -> void:
 	check(bool(kinds.get("oil", false)), "oil slick on track")
 	check(bool(kinds.get("deer", false)), "deer on track")
 	check(bool(kinds.get("cow", false)), "cow on track")
+	check(bool(kinds.get("chain", false)), "chain pickup on track")
+	check(bool(kinds.get("bat", false)), "bat pickup on track")
 	check(track.get_node_or_null("FinishBanner") != null, "chequered finish banner")
+	check(track.get_node_or_null("Guardrail_L") != null, "coast jersey barriers")
 	track.queue_free()
 
 
@@ -215,6 +224,7 @@ func _test_world_biomes() -> void:
 	check(city.find_child("City_Dumpsters", true, false) != null, "city dumpsters")
 	check(city.find_child("Streetlights", true, false) != null, "Kenney streetlamps")
 	check(city.find_child("City_StopSigns", true, false) != null, "city stop signs")
+	check(city.find_child("City_Planters", true, false) != null, "city planters")
 	city.queue_free()
 
 	var desert := Track.new()
@@ -521,6 +531,7 @@ func _test_cinematic_hud() -> void:
 	check(FileAccess.file_exists("res://assets/CC0.md"), "CC0 credits")
 	check(ResourceLoader.exists("res://assets/models/kenney/roads/light-curved.glb"), "Kenney streetlamp")
 	check(ResourceLoader.exists("res://assets/models/kenney/roads/construction-barrier.glb"), "Kenney barrier")
+	check(ResourceLoader.exists("res://assets/models/kenney/car/car_police.glb"), "Kenney police cruiser")
 	check(ResourceLoader.exists("res://assets/models/kenney/suburban/building-type-a.glb"), "Kenney suburban house")
 	check(ResourceLoader.exists("res://assets/models/kenney/characters/character-male-a.glb"), "Kenney crowd")
 	check(ResourceLoader.exists("res://assets/models/quaternius/cow.glb"), "CC0 cow")

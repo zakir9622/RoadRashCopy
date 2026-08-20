@@ -30,6 +30,7 @@ func _run() -> void:
 		root.add_child(node)
 	await process_frame
 
+	_reset_game_state()
 	await _shoot("res://src/ui/MainMenu.tscn", out.path_join("menu.png"), 18, "")
 	await _shoot("res://src/race/Race.tscn", out.path_join("race_coast.png"), 8, "coast_run")
 	await _shoot("res://src/race/Race.tscn", out.path_join("race_city.png"), 8, "downtown")
@@ -59,6 +60,8 @@ func _shoot(scene_path: String, out_path: String, frames: int, track_id: String)
 	root.add_child(instance)
 
 	if scene_path.contains("Race"):
+		_reset_game_state()
+		_arm_preview(instance)
 		_skip_countdown(instance)
 		_place_pack(instance)
 
@@ -70,10 +73,12 @@ func _shoot(scene_path: String, out_path: String, frames: int, track_id: String)
 		_place_pack(instance)
 		_frame_chase(instance)
 		_clear_countdown_labels(instance)
+		_hide_results(instance)
 		await process_frame
 		await process_frame
 		_freeze_tree(instance)
 		await process_frame
+		_hide_results(instance)
 
 	var image := root.get_viewport().get_texture().get_image()
 	image.save_png(out_path)
@@ -82,6 +87,37 @@ func _shoot(scene_path: String, out_path: String, frames: int, track_id: String)
 	instance.queue_free()
 	await process_frame
 	await process_frame
+
+
+func _reset_game_state() -> void:
+	var gs := root.get_node_or_null("GameState")
+	if gs != null and gs.has_method("reset_for_preview"):
+		gs.call("reset_for_preview")
+
+
+func _arm_preview(instance: Node) -> void:
+	var manager = instance.get("manager")
+	if manager == null:
+		return
+	if manager.has_signal("finished") and instance.has_method("_on_finished"):
+		if manager.finished.is_connected(instance._on_finished):
+			manager.finished.disconnect(instance._on_finished)
+
+
+func _hide_results(node: Node) -> void:
+	if node is Label:
+		var text := String((node as Label).text)
+		if "GAME OVER" in text or "RACE PRIZE" in text:
+			var cur: Node = node
+			while cur != null:
+				if cur is CanvasLayer:
+					(cur as CanvasLayer).visible = false
+					break
+				cur = cur.get_parent()
+	if String(node.name).to_lower().contains("result"):
+		node.visible = false
+	for child in node.get_children():
+		_hide_results(child)
 
 
 func _skip_countdown(instance: Node) -> void:
