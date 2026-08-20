@@ -88,9 +88,9 @@ func _tint_suit_meshes() -> void:
 			var std := mat as StandardMaterial3D
 			if std == null:
 				continue
-			if std.resource_name.begins_with("suit") or std.albedo_color.v < 0.35:
+			if std.resource_name.to_lower().begins_with("suit"):
 				var tinted := std.duplicate() as StandardMaterial3D
-				tinted.albedo_color = _suit_color.lerp(Color(0.08, 0.08, 0.1), 0.35)
+				tinted.albedo_color = _suit_color
 				mesh.set_surface_override_material(i, tinted)
 
 

@@ -41,29 +41,69 @@ func build(track_def: Dictionary, rng_seed: int = 1337) -> void:
 		_build_water()
 
 
-## Deterministic spine: sweeping sine curves + hills, seeded so the same track
-## is identical every run (replays, tests, fair racing lines).
+## Piecewise corners, not a kilometre-scale sine. The old generator used
+## `sin(z * 0.004)` (period ~1.57 km) so Coast (curviness 0.5) only drifted
+## ~30 m sideways — the camera read as a ruler. This spine: short opening
+## straight for the grid, then alternating corners and straights at radii
+## a 250 cc bike can actually take. Seeded so replays stay identical.
 func _build_curve(rng_seed: int) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = rng_seed + String(definition["id"]).hash()
 
 	curve = Curve3D.new()
-	curve.bake_interval = 2.0
+	curve.bake_interval = 1.2
 	var track_length := float(definition["length"])
 	var curviness := float(definition["curviness"])
 	var hills := float(definition["hills"])
 
-	var phase1 := rng.randf_range(0.0, TAU)
-	var phase2 := rng.randf_range(0.0, TAU)
-	var step := 40.0
-	var count := int(track_length / step) + 2
-	for i in count:
-		var z := i * step
-		var x := sin(z * 0.004 + phase1) * 60.0 * curviness \
-			+ sin(z * 0.0013 + phase2) * 110.0 * curviness
-		var y := (sin(z * 0.002 + phase2) * 9.0 + sin(z * 0.0007 + phase1) * 14.0) * hills
-		curve.add_point(Vector3(x, y, z))
+	var pos := Vector3.ZERO
+	var heading := 0.0
+	var traveled := 0.0
+	curve.add_point(pos)
+
+	# Opening straight so the start grid is fair, then the first corner arrives
+	# within a few seconds of racing — Road Rash 3D, not a drag strip.
+	var opening := 70.0
+	pos += Vector3(sin(heading), 0.0, cos(heading)) * opening
+	traveled += opening
+	curve.add_point(_elevated(pos, traveled, hills))
+
+	var turn_sign := 1.0
+	var guard := 0
+	while traveled < track_length and guard < 500:
+		guard += 1
+		var turn := (0.62 + rng.randf() * 0.78 + curviness * 0.48) * turn_sign
+		var radius := clampf(52.0 / maxf(curviness, 0.45), 20.0, 86.0)
+		radius *= rng.randf_range(0.78, 1.12)
+		var arc := absf(turn) * radius
+		var steps := maxi(5, int(ceil(arc / 8.0)))
+		for _i in range(1, steps + 1):
+			heading += turn / float(steps)
+			var ds := arc / float(steps)
+			pos += Vector3(sin(heading), 0.0, cos(heading)) * ds
+			traveled += ds
+			curve.add_point(_elevated(pos, traveled, hills))
+			if traveled >= track_length:
+				break
+		turn_sign *= -1.0
+		if traveled >= track_length:
+			break
+		var straight := rng.randf_range(48.0, 90.0) / clampf(curviness, 0.7, 1.8)
+		straight = clampf(straight, 36.0, 100.0)
+		var s_steps := maxi(2, int(ceil(straight / 16.0)))
+		for _i in range(1, s_steps + 1):
+			var ds := straight / float(s_steps)
+			pos += Vector3(sin(heading), 0.0, cos(heading)) * ds
+			traveled += ds
+			curve.add_point(_elevated(pos, traveled, hills))
+			if traveled >= track_length:
+				break
 	length = curve.get_baked_length()
+
+
+func _elevated(xz: Vector3, s: float, hills: float) -> Vector3:
+	xz.y = (sin(s * 0.007) * 8.0 + sin(s * 0.018) * 3.5) * hills
+	return xz
 
 
 func sample(distance: float, lateral: float, height: float = 0.0) -> Transform3D:
@@ -447,7 +487,11 @@ func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 			var t := sample(clampf(d, 0.0, length), lateral, y_bias)
 			var s := rng.randf_range(scale_range.x, scale_range.y)
 			if face_road:
-				t.basis = Basis(Vector3.UP, sside * PI * 0.5).scaled(Vector3(s, s, s))
+				var inward := (-t.basis.x * sside)
+				inward.y = 0.0
+				if inward.length() < 0.001:
+					inward = Vector3.FORWARD
+				t.basis = Basis.looking_at(inward.normalized(), Vector3.UP).scaled(Vector3(s, s, s))
 			else:
 				t.basis = Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3(s, s, s))
 			var aabb := mesh.get_aabb()
@@ -510,7 +554,12 @@ func _city_row(rng: RandomNumberGenerator, kits: Array, spacing: float, shoulder
 				var t := sample(clampf(d, 0.0, length), lateral, 0.0)
 				var w := rng.randf_range(width_range.x, width_range.y)
 				var h := rng.randf_range(height_range.x, height_range.y)
-				t.basis = Basis(Vector3.UP, -side * PI * 0.5).scaled(Vector3(w, h, w))
+				# Face the shopfronts into the road, following the new corners.
+				var inward := (-t.basis.x * side)
+				inward.y = 0.0
+				if inward.length() < 0.001:
+					inward = Vector3.FORWARD
+				t.basis = Basis.looking_at(inward.normalized(), Vector3.UP).scaled(Vector3(w, h, w))
 				var aabb := mesh.get_aabb()
 				t.origin += Vector3.UP * (-aabb.position.y * h)
 				mm.set_instance_transform(idx, t)
@@ -575,7 +624,11 @@ func _build_billboards(rng: RandomNumberGenerator) -> void:
 		mi.name = "Billboard"
 		add_child(mi)
 		var xf := sample(d, (half_width + 5.8) * side, 4.4)
-		xf.basis = Basis(Vector3.UP, side * PI * 0.5)
+		var inward := -xf.basis.x * side
+		inward.y = 0.0
+		if inward.length() < 0.001:
+			inward = Vector3.FORWARD
+		xf.basis = Basis.looking_at(inward.normalized(), Vector3.UP)
 		mi.global_transform = xf
 		d += 140.0
 

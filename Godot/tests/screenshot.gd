@@ -82,7 +82,7 @@ func _prepare_race_shot(instance: Node) -> void:
 	if manager != null:
 		manager.phase = RaceManager.Phase.RACING
 		manager.countdown_remaining = 0.0
-	player.distance = 420.0
+	player.distance = 210.0
 	player.lateral = 0.0
 	player.speed = 34.0
 	player.in_throttle = 1.0
@@ -92,8 +92,8 @@ func _prepare_race_shot(instance: Node) -> void:
 	for child in instance.get_children():
 		if child is Rider and child != player:
 			var rival := child as Rider
-			rival.distance = 455.0 + extra * 7.0
-			rival.lateral = clampf(rival.lateral, -4.0, 4.0)
+			rival.distance = 228.0 + extra * 5.0
+			rival.lateral = clampf(-3.2 + extra * 1.1, -4.5, 4.5)
 			rival.speed = 28.0
 			if rival.has_method("_apply_transform"):
 				rival._apply_transform()
@@ -114,8 +114,8 @@ func _frame_chase(instance: Node) -> void:
 	var player := instance.get("player") as Rider
 	if cam == null or track == null or player == null:
 		return
-	var behind := track.sample(maxf(player.distance - 8.0, 0.0), player.lateral * 0.2, 2.7)
-	var look := track.sample(player.distance + 24.0, player.lateral * 0.1, 0.85)
+	var behind := track.sample(maxf(player.distance - 5.6, 0.0), player.lateral * 0.28, 1.72)
+	var look := track.sample(player.distance + 18.0, player.lateral * 0.12, 0.7)
 	cam.global_position = behind.origin
 	View.look_at(cam, look.origin)
-	cam.fov = 60.0
+	cam.fov = 68.0

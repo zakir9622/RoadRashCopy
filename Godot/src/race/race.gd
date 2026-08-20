@@ -16,10 +16,10 @@ var camera: Camera3D
 var hud: CanvasLayer
 var _biome := "coast"
 
-var _fov_base := 62.0
-var _cam_back := 2.4
-var _cam_up := 1.35
-var _cam_look := 8.0
+var _fov_base := 68.0
+var _cam_back := 5.6
+var _cam_up := 1.72
+var _cam_look := 18.0
 var _cockpit: Node3D
 
 
@@ -84,8 +84,9 @@ func _spawn_grid(definition: Dictionary) -> void:
 	var rasher := "Rasher"
 	if _state().has_method("player_display_name"):
 		rasher = String(_state().call("player_display_name"))
-	# Classic Road Rash: you start at the BACK of a tight 15-bike pack.
-	player = _make_rider(rasher, 14.0, 0.0, Color(0.9, 0.35, 0.1))
+	# Classic Road Rash: you start at the BACK of a tight 15-bike pack and
+	# have to fight through it before the first corner.
+	player = _make_rider(rasher, 8.0, 0.0, Color(0.9, 0.35, 0.1))
 	player.is_player = true
 	player.rider_id = "player"
 	player.top_speed = float(spec["top_speed"])
@@ -106,7 +107,7 @@ func _spawn_grid(definition: Dictionary) -> void:
 		var profile: Dictionary = Campaign.ROSTER[i]
 		var lateral := lerpf(-track.half_width * 0.72, track.half_width * 0.72,
 			float(i) / maxf(float(rival_count - 1), 1.0))
-		var stagger := 18.0 + (i % 7) * 2.6 + (i / 7) * 1.8
+		var stagger := 12.0 + (i % 5) * 2.0 + int(i / 5) * 1.15
 		var gang := String(profile.get("gang", "Desades"))
 		var suit: Color = Campaign.GANG_COLORS.get(gang, Color(0.5, 0.5, 0.5))
 		if Story.is_hostile(_state().save, String(profile["id"])) and String(profile["id"]) == "natasha":
@@ -241,11 +242,14 @@ static func _tint_model(model: Node3D, colour: Color) -> void:
 			var std := mat as StandardMaterial3D
 			if std == null:
 				continue
-			# Tintable panels are the generator's "body" material, marked
-			# bright red as a fallback signature.
-			var by_name := std.resource_name.begins_with("body")
-			var by_color := std.albedo_color.r > 0.85 and std.albedo_color.g < 0.3
-			if by_name or by_color:
+			# Only painted body panels (tank / fairing). Never tyres, chrome, or engine.
+			var mat_name := std.resource_name.to_lower()
+			var mesh_name := String(mesh_child.name).to_lower()
+			var painted := mat_name.begins_with("body") \
+				or mesh_name.begins_with("tank") or mesh_name.begins_with("nose") \
+				or mesh_name.begins_with("fairing") or mesh_name.begins_with("tail") \
+				or mesh_name.begins_with("side_") or mesh_name.begins_with("fender")
+			if painted:
 				var tinted := std.duplicate() as StandardMaterial3D
 				tinted.albedo_color = colour
 				mesh_child.set_surface_override_material(surface, tinted)
@@ -315,8 +319,8 @@ func _build_environment(definition: Dictionary) -> void:
 	add_child(world_env)
 
 	var sun := DirectionalLight3D.new()
-	sun.shadow_enabled = false
-	sun.directional_shadow_max_distance = 180.0
+	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 140.0
 	match biome:
 		"desert":
 			sun.rotation_degrees = Vector3(-42.0, 28.0, 0.0)
@@ -337,12 +341,8 @@ func _build_environment(definition: Dictionary) -> void:
 	add_child(sun)
 
 
-func _hide_helmet_from_cockpit(visual: Node3D) -> void:
-	# Cockpit sits in front of the visor; keep the head out of the lens.
-	for n in ["helmet", "mesh_head", "visor"]:
-		var node := visual.find_child(n, true, false)
-		if node is VisualInstance3D:
-			(node as VisualInstance3D).layers = 2
+func _hide_helmet_from_cockpit(_visual: Node3D) -> void:
+	pass
 
 
 func _build_camera() -> void:
@@ -350,11 +350,8 @@ func _build_camera() -> void:
 	camera.fov = _fov_base
 	camera.near = 0.12
 	camera.far = 900.0
-	camera.cull_mask = camera.cull_mask & ~2
 	add_child(camera)
 	camera.make_current()
-	if player != null and player.visual != null:
-		_cockpit = player.visual.find_child("cockpit_cam", true, false) as Node3D
 	_snap_camera()
 
 
@@ -362,43 +359,33 @@ func _snap_camera() -> void:
 	_update_camera(1.0)
 
 
+## Road Rash 3D camera: behind and above the bike so you see the machine,
+## the rider, and the next corner — not a cockpit that hides all three.
 func _update_camera(delta: float) -> void:
 	if player == null or track == null or camera == null:
 		return
-	if player.state == Rider.State.RIDING or player.state == Rider.State.REMOUNT \
-			or player.is_airborne():
-		_cockpit_camera(delta)
-	else:
-		_chase_camera(delta)
-
-
-func _cockpit_camera(delta: float) -> void:
-	if _cockpit == null and player.visual != null:
-		_cockpit = player.visual.find_child("cockpit_cam", true, false) as Node3D
-	var origin: Vector3
-	if _cockpit != null:
-		origin = _cockpit.global_position
-	else:
-		origin = track.sample(player.distance + 0.28, player.lateral, 1.18 + player.air_height).origin
-	var look := track.sample(player.distance + 16.0, player.lateral * 0.10, 0.62 + player.air_height * 0.25)
-	if delta >= 0.99 or camera.global_position.distance_to(origin) > 8.0:
-		camera.global_position = origin
-	else:
-		camera.global_position = camera.global_position.lerp(origin, 1.0 - exp(-16.0 * delta))
-	View.look_at(camera, look.origin)
-	camera.rotate_object_local(Vector3.FORWARD, player.lean * 1.05)
-	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
-	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 12.0, 7.0 * delta)
+	_chase_camera(delta)
 
 
 func _chase_camera(delta: float) -> void:
-	var behind := track.sample(maxf(player.distance - _cam_back, 0.0), player.lateral * 0.4, _cam_up)
-	var look := track.sample(player.distance + 4.0, player.lateral * 0.2, 0.55)
-	if delta >= 0.99 or camera.global_position.distance_to(behind.origin) > 10.0:
+	var back := _cam_back
+	var up := _cam_up
+	var look_ahead := _cam_look
+	if player.state == Rider.State.CRASHED or player.state == Rider.State.RUNNING:
+		back = 7.4
+		up = 2.1
+		look_ahead = 10.0
+	var behind := track.sample(maxf(player.distance - back, 0.0), player.lateral * 0.28, up + player.air_height * 0.35)
+	var look := track.sample(player.distance + look_ahead, player.lateral * 0.12, 0.7 + player.air_height * 0.2)
+	if delta >= 0.99 or camera.global_position.distance_to(behind.origin) > 12.0:
 		camera.global_position = behind.origin
 	else:
-		camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-10.0 * delta))
+		camera.global_position = camera.global_position.lerp(behind.origin, 1.0 - exp(-12.0 * delta))
 	View.look_at(camera, look.origin)
+	var speed01 := clampf(player.speed / maxf(player.top_speed, 1.0), 0.0, 1.2)
+	camera.fov = lerpf(camera.fov, _fov_base + speed01 * 10.0, 6.0 * delta)
+	if player.state == Rider.State.RIDING:
+		camera.rotate_object_local(Vector3.FORWARD, player.lean * 0.35)
 
 
 func _build_hud() -> void:

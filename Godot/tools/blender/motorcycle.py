@@ -36,6 +36,7 @@ def _cyl(name, radius, depth, loc, material, rot=(0, 0, 0), verts=24, parent=Non
     o = bpy.context.active_object
     o.name = name
     o.data.materials.append(material)
+    _smooth(o)
     return _parent(o, parent) if parent else o
 
 
@@ -45,16 +46,18 @@ def _sphere(name, radius, loc, material, segs=16, parent=None):
     o = bpy.context.active_object
     o.name = name
     o.data.materials.append(material)
+    _smooth(o)
     return _parent(o, parent) if parent else o
 
 
 def _torus(name, major, minor, loc, material, rot=(0, math.pi / 2, 0), parent=None):
     bpy.ops.mesh.primitive_torus_add(
         major_radius=major, minor_radius=minor, location=loc, rotation=rot,
-        major_segments=28, minor_segments=12)
+        major_segments=40, minor_segments=16)
     o = bpy.context.active_object
     o.name = name
     o.data.materials.append(material)
+    _smooth(o)
     return _parent(o, parent) if parent else o
 
 
@@ -82,6 +85,14 @@ def _pipe(name, a, b, radius, material, verts=10, parent=None):
     o.rotation_euler = (b - a).normalized().to_track_quat("Z", "Y").to_euler()
     o.data.materials.append(material)
     return _parent(o, parent) if parent else o
+
+
+def _smooth(obj):
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.ops.object.shade_smooth()
+    return obj
 
 
 def _empty(name, loc, parent, rot=(0, 0, 0)):
@@ -129,6 +140,22 @@ def build_street_bike(root, style="rat"):
     wr = _cyl("wheel_r", rr * 0.62, 0.11 * sc, (0, ry, rr), alum, (0, math.pi / 2, 0), 22, root)
     _torus("tyre_r", rr * 0.84, 0.068 * sc, (0, ry, rr), rubber, parent=wr)
     _cyl("disc_r", rr * 0.55, 0.014, (-0.06 * sc, ry, rr), disc, (0, math.pi / 2, 0), 20, wr)
+    # Radial spokes so the wheels read as laced street rims, not plastic toys.
+    for wi, wheel, y, z, rad in (("f", wf, fy, fr, fr), ("r", wr, ry, rr, rr)):
+        for i in range(8):
+            ang = i * (math.pi / 4.0)
+            inner = (0.0, y + math.cos(ang) * rad * 0.16, z + math.sin(ang) * rad * 0.16)
+            outer = (0.0, y + math.cos(ang) * rad * 0.70, z + math.sin(ang) * rad * 0.70)
+            _pipe(f"spoke_{wi}_{i}", inner, outer, 0.007 * sc, chrome, verts=8, parent=wheel)
+
+    # Footpegs + radiator + chain guard — silhouette details the chase cam actually sees.
+    for sx in (-1, 1):
+        _box(f"peg_{sx}", (0.07 * sc, 0.04 * sc, 0.025 * sc),
+             (sx * 0.16 * sc, -0.02 * sc, 0.36 * sc), dark, bevel=0.004, parent=root)
+    _box("radiator", (0.28 * sc, 0.08 * sc, 0.22 * sc), (0, fy * 0.18, 0.48 * sc), dark,
+         bevel=0.008, parent=root)
+    _box("chain_guard", (0.04 * sc, 0.28 * sc, 0.08 * sc), (-0.18 * sc, ry * 0.55, rr + 0.08 * sc),
+         dark, bevel=0.006, parent=root)
 
     # --- steel/alloy frame tubes ---
     _pipe("frame_top", (0, fy * 0.15, 0.78 * sc), (0, ry * 0.15, 0.72 * sc), 0.022 * sc, chrome, parent=root)
@@ -178,6 +205,10 @@ def build_street_bike(root, style="rat"):
     tail.scale = (0.7, 1.4, 0.45)
     _cyl("tail_light", 0.04 * sc, 0.03, (0, -0.62 * sc, 0.78 * sc),
          _mat("tail_em", (0.8, 0.05, 0.05), emission=(1.0, 0.08, 0.05)), (0, math.pi / 2, 0), 12, root)
+    _box("fender_r", (0.22 * sc, 0.28 * sc, 0.04 * sc), (0, ry * 0.72, rr + 0.14 * sc), body,
+         rot=(math.radians(18), 0, 0), bevel=0.012, parent=root)
+    _box("plate", (0.16 * sc, 0.012 * sc, 0.10 * sc), (0, -0.66 * sc, 0.62 * sc),
+         _mat("plate", (0.92, 0.90, 0.82), roughness=0.45), bevel=0.004, parent=root)
 
     # --- exhaust ---
     ex_x = 0.18 * sc

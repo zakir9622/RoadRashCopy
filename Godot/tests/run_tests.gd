@@ -24,7 +24,7 @@ func _init() -> void:
 
 	# A compile failure in a dependency can silently skip whole test functions;
 	# demanding the full check count turns that into a loud failure.
-	const EXPECTED_CHECKS := 128
+	const EXPECTED_CHECKS := 131
 	if checks < EXPECTED_CHECKS:
 		printerr("FAIL: only %d/%d checks ran — a test aborted early" % [checks, EXPECTED_CHECKS])
 		failures += 1
@@ -157,6 +157,24 @@ func _test_track_geometry() -> void:
 	var left := track.sample(50.0, -5.0)
 	var right := track.sample(50.0, 5.0)
 	check(left.origin.distance_to(right.origin) > 8.0, "lateral offset separates")
+	var f_grid := track.forward(70.0)
+	var f_corner := track.forward(260.0)
+	check(f_grid.dot(f_corner) < 0.92, "coast turns within 200 m of the grid")
+	track.queue_free()
+
+	var city := Track.new()
+	root.add_child(city)
+	city.build(TrackCatalog.find("downtown"))
+	var c0 := city.forward(70.0)
+	var c1 := city.forward(220.0)
+	check(c0.dot(c1) < 0.90, "city corners harder than coast")
+	var s300 := city.sample(300.0, 0.0)
+	check(absf(s300.origin.x) > 12.0, "city has left the start axis by 300 m")
+	city.queue_free()
+
+	track = Track.new()
+	root.add_child(track)
+	track.build(TrackCatalog.find("coast_run"))
 	var kinds := {}
 	for hz in track.hazards:
 		kinds[String(hz["kind"])] = true
