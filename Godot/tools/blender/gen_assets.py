@@ -258,6 +258,19 @@ def build_rock():
     export("rock.glb")
 
 
+def build_pine():
+    reset()
+    trunk = mat("pine_trunk", (0.22, 0.14, 0.08), roughness=0.95)
+    leaf = mat("pine_leaf", (0.10, 0.28, 0.12), roughness=0.95)
+    cyl("trunk", 0.16, 2.4, (0, 0, 1.2), trunk, verts=8)
+    bpy.ops.mesh.primitive_cone_add(vertices=8, radius1=1.7, radius2=0.05, depth=4.2, location=(0, 0, 4.0))
+    bpy.context.active_object.data.materials.append(leaf)
+    bpy.ops.mesh.primitive_cone_add(vertices=8, radius1=1.2, radius2=0.04, depth=2.6, location=(0, 0, 5.6))
+    bpy.context.active_object.data.materials.append(leaf)
+    join_meshes()
+    export("pine.glb")
+
+
 def build_palm():
     reset()
     trunk_m = mat("palm_trunk", (0.45, 0.32, 0.16), roughness=0.95)
@@ -390,6 +403,7 @@ if __name__ == "__main__":
         build_tree()
         build_rock()
         build_palm()
+        build_pine()
         build_cactus()
         build_building()
         build_building_shop()

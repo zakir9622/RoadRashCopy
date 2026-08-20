@@ -29,13 +29,16 @@ func build(track_def: Dictionary, rng_seed: int = 1337) -> void:
 		_build_terrain_banks()
 	_build_guardrails()
 	_build_props(rng_seed)
+	if biome == "city" or biome == "night":
+		_build_overpasses()
+		_build_streetlights()
+	if biome == "mountain" or biome == "coast" or biome == "desert":
+		_build_horizon_peaks()
 	_build_hazards(rng_seed)
 	_build_roadblocks(rng_seed)
 	_build_finish()
 	if biome == "coast":
 		_build_water()
-	if biome == "city" or biome == "night":
-		_build_streetlights()
 
 
 ## Deterministic spine: sweeping sine curves + hills, seeded so the same track
@@ -89,9 +92,10 @@ func _road_material() -> Material:
 			mat.set_shader_parameter("wetness", 0.0)
 			mat.set_shader_parameter("extra_lanes", 0.0)
 		"city":
-			mat.set_shader_parameter("asphalt_tint", Vector3(0.82, 0.84, 0.88))
+			mat.set_shader_parameter("asphalt_tint", Vector3(0.72, 0.74, 0.78))
 			mat.set_shader_parameter("wetness", 0.08)
 			mat.set_shader_parameter("extra_lanes", 1.0)
+			mat.set_shader_parameter("center_color", Color(0.98, 0.82, 0.12))
 		"night":
 			mat.set_shader_parameter("asphalt_tint", Vector3(0.55, 0.58, 0.7))
 			mat.set_shader_parameter("wetness", 0.55)
@@ -401,40 +405,51 @@ func _build_props(rng_seed: int) -> void:
 	if biome == "city" or biome == "night":
 		_build_city_skyline(rng)
 		_build_city_furniture(rng)
+		_scatter_prop("res://assets/models/tree.glb", "StreetTrees", rng, 18.0, Vector2(1.5, 2.4), Vector2(0.55, 0.85), 0.0, [-1.0, 1.0])
+		_scatter_prop("res://assets/models/car.glb", "ParkedCars", rng, 34.0, Vector2(2.0, 2.6), Vector2(0.95, 1.05), 0.0, [-1.0, 1.0], true)
 		return
 
 	match biome:
 		"coast":
-			_scatter_prop("res://assets/models/palm.glb", "Palms", rng, 22.0, Vector2(5.5, 16.0), Vector2(0.85, 1.35), -0.05)
-			_scatter_prop("res://assets/models/tree.glb", "Trees", rng, 34.0, Vector2(14.0, 36.0), Vector2(0.9, 1.7), -0.3)
+			_scatter_prop("res://assets/models/palm.glb", "Palms", rng, 10.0, Vector2(4.2, 9.0), Vector2(0.9, 1.4), -0.05, [1.0])
+			_scatter_prop("res://assets/models/palm.glb", "PalmsOcean", rng, 16.0, Vector2(6.0, 11.0), Vector2(0.8, 1.2), -0.8, [-1.0])
+			_scatter_prop("res://assets/models/tree.glb", "Trees", rng, 28.0, Vector2(12.0, 32.0), Vector2(0.9, 1.7), -0.3, [1.0])
 		"desert":
-			_scatter_prop("res://assets/models/rock.glb", "Rocks", rng, 20.0, Vector2(5.0, 32.0), Vector2(0.7, 2.1), -0.2)
-			_scatter_prop("res://assets/models/cactus.glb", "Cactus", rng, 38.0, Vector2(7.0, 22.0), Vector2(0.8, 1.5), 0.0)
+			_scatter_prop("res://assets/models/rock.glb", "Rocks", rng, 16.0, Vector2(4.5, 28.0), Vector2(0.7, 2.1), -0.2)
+			_scatter_prop("res://assets/models/cactus.glb", "Cactus", rng, 22.0, Vector2(6.0, 20.0), Vector2(0.8, 1.6), 0.0)
 		"mountain":
-			_scatter_prop("res://assets/models/tree.glb", "Pines", rng, 18.0, Vector2(8.0, 28.0), Vector2(0.9, 1.8), -0.2)
-			_scatter_prop("res://assets/models/rock.glb", "Boulders", rng, 24.0, Vector2(5.0, 18.0), Vector2(0.8, 2.0), -0.15)
+			_scatter_prop("res://assets/models/pine.glb", "Pines", rng, 8.0, Vector2(3.6, 14.0), Vector2(1.0, 1.9), -0.15)
+			_scatter_prop("res://assets/models/pine.glb", "PineWall", rng, 12.0, Vector2(14.0, 28.0), Vector2(1.2, 2.2), -0.2)
+			_scatter_prop("res://assets/models/rock.glb", "Boulders", rng, 16.0, Vector2(4.0, 12.0), Vector2(0.8, 2.0), -0.15)
+			_build_tunnel()
 		_:
 			_scatter_prop("res://assets/models/tree.glb", "Props", rng, 26.0, Vector2(6.0, 34.0), Vector2(0.8, 1.6), -0.4)
 
 
 func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
-		spacing: float, clearance: Vector2, scale_range: Vector2, y_bias: float) -> void:
+		spacing: float, clearance: Vector2, scale_range: Vector2, y_bias: float,
+		sides: Array = [-1.0, 1.0], face_road: bool = false) -> void:
 	var mesh := _extract_mesh(path)
 	if mesh == null:
 		mesh = _fallback_prop_mesh(String(definition.get("biome", "coast")))
 	var count := maxi(int(length / spacing), 1)
+	var side_count := maxi(sides.size(), 1)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = mesh
-	mm.instance_count = count * 2
+	mm.instance_count = count * side_count
 	var idx := 0
 	for i in count:
-		for side: float in [-1.0, 1.0]:
-			var d := i * spacing + rng.randf_range(-spacing * 0.3, spacing * 0.3)
-			var lateral := (half_width + rng.randf_range(clearance.x, clearance.y)) * side
+		for side in sides:
+			var sside := float(side)
+			var d := i * spacing + rng.randf_range(-spacing * 0.28, spacing * 0.28)
+			var lateral := (half_width + rng.randf_range(clearance.x, clearance.y)) * sside
 			var t := sample(clampf(d, 0.0, length), lateral, y_bias)
 			var s := rng.randf_range(scale_range.x, scale_range.y)
-			t.basis = Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3(s, s, s))
+			if face_road:
+				t.basis = Basis(Vector3.UP, sside * PI * 0.5).scaled(Vector3(s, s, s))
+			else:
+				t.basis = Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3(s, s, s))
 			var aabb := mesh.get_aabb()
 			t.origin += t.basis.y.normalized() * (-aabb.position.y * s)
 			mm.set_instance_transform(idx, t)
@@ -446,13 +461,17 @@ func _scatter_prop(path: String, node_name: String, rng: RandomNumberGenerator,
 
 
 func _build_city_skyline(rng: RandomNumberGenerator) -> void:
-	# Street frontage: shops on the sidewalk. Towers one lot back.
-	_city_row(rng, ["res://assets/models/building_shop.glb"], 20.0, 2.7, Vector2(0.9, 1.2), Vector2(0.85, 1.05), "City_Shops")
+	# RR3D city: shop fronts hard against the curb, then a wall of towers, then a far skyline.
+	_city_row(rng, ["res://assets/models/building_shop.glb"], 8.2, 3.6, Vector2(0.95, 1.15), Vector2(0.9, 1.15), "City_Shops")
 	_city_row(rng, [
 		"res://assets/models/building.glb",
 		"res://assets/models/building_apartment.glb",
 		"res://assets/models/building_office.glb",
-	], 16.0, 9.2, Vector2(0.85, 1.4), Vector2(0.75, 1.85), "City_Towers")
+	], 11.0, 10.5, Vector2(0.95, 1.35), Vector2(0.85, 1.7), "City_Towers")
+	_city_row(rng, [
+		"res://assets/models/building_office.glb",
+		"res://assets/models/building.glb",
+	], 22.0, 24.0, Vector2(1.6, 2.4), Vector2(1.8, 2.6), "City_Horizon")
 
 
 func _city_row(rng: RandomNumberGenerator, kits: Array, spacing: float, shoulder: float,
@@ -491,7 +510,7 @@ func _city_row(rng: RandomNumberGenerator, kits: Array, spacing: float, shoulder
 				var t := sample(clampf(d, 0.0, length), lateral, 0.0)
 				var w := rng.randf_range(width_range.x, width_range.y)
 				var h := rng.randf_range(height_range.x, height_range.y)
-				t.basis = Basis(Vector3.UP, side * PI * 0.5).scaled(Vector3(w, h, w))
+				t.basis = Basis(Vector3.UP, -side * PI * 0.5).scaled(Vector3(w, h, w))
 				var aabb := mesh.get_aabb()
 				t.origin += Vector3.UP * (-aabb.position.y * h)
 				mm.set_instance_transform(idx, t)
@@ -591,6 +610,133 @@ func _build_streetlights() -> void:
 	inst.name = "Streetlights"
 	inst.multimesh = mm
 	add_child(inst)
+	_build_light_heads()
+
+
+func _build_light_heads() -> void:
+	var head := BoxMesh.new()
+	head.size = Vector3(0.8, 0.12, 0.35)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.2, 0.2, 0.18)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.85, 0.5)
+	mat.emission_energy_multiplier = 2.2 if String(definition.get("biome", "")) == "night" else 0.7
+	head.material = mat
+	var spacing := 28.0
+	var steps := maxi(int(length / spacing), 1)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = head
+	mm.instance_count = steps * 2
+	var idx := 0
+	for i in steps:
+		for side: float in [-1.0, 1.0]:
+			var t := sample(i * spacing, (half_width + 0.35) * side, 7.05)
+			t.basis = Basis(Vector3.UP, side * PI * 0.5)
+			mm.set_instance_transform(idx, t)
+			idx += 1
+	var inst := MultiMeshInstance3D.new()
+	inst.name = "StreetlightHeads"
+	inst.multimesh = mm
+	add_child(inst)
+
+
+func _build_overpasses() -> void:
+	var deck_mat := StandardMaterial3D.new()
+	deck_mat.albedo_color = Color(0.42, 0.43, 0.46)
+	deck_mat.roughness = 0.9
+	var d := 380.0
+	var n := 0
+	while d < length - 200.0:
+		var deck := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(half_width * 2.8 + 8.0, 0.7, 12.0)
+		box.material = deck_mat
+		deck.mesh = box
+		deck.name = "Overpass"
+		add_child(deck)
+		deck.global_transform = sample(d, 0.0, 6.4)
+		for side in [-1.0, 1.0]:
+			var pillar := MeshInstance3D.new()
+			var cyl := CylinderMesh.new()
+			cyl.top_radius = 0.45
+			cyl.bottom_radius = 0.55
+			cyl.height = 6.2
+			cyl.material = deck_mat
+			pillar.mesh = cyl
+			add_child(pillar)
+			pillar.global_transform = sample(d, (half_width + 1.6) * side, 3.1)
+		d += 420.0
+		n += 1
+		if n >= 4:
+			break
+
+
+func _build_horizon_peaks() -> void:
+	var biome := String(definition.get("biome", "coast"))
+	var mat := StandardMaterial3D.new()
+	mat.roughness = 1.0
+	match biome:
+		"desert":
+			mat.albedo_color = Color(0.72, 0.52, 0.32)
+		"coast":
+			mat.albedo_color = Color(0.28, 0.38, 0.26)
+		_:
+			mat.albedo_color = Color(0.32, 0.38, 0.34)
+	var mesh: Mesh
+	if biome == "mountain":
+		var prism := PrismMesh.new()
+		prism.size = Vector3(90.0, 70.0, 90.0)
+		prism.material = mat
+		mesh = prism
+	else:
+		var hill := BoxMesh.new()
+		hill.size = Vector3(90.0, 28.0, 50.0)
+		hill.material = mat
+		mesh = hill
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = 10
+	var idx := 0
+	for i in 5:
+		for side: float in [-1.0, 1.0]:
+			var d := length * (0.12 + i * 0.18)
+			var t := sample(clampf(d, 0.0, length), (half_width + 70.0 + i * 8.0) * side, 8.0)
+			var s := 0.8 + i * 0.15
+			t.basis = t.basis.scaled(Vector3(s, s * (1.2 if biome == "mountain" else 0.7), s))
+			mm.set_instance_transform(idx, t)
+			idx += 1
+	var inst := MultiMeshInstance3D.new()
+	inst.name = "HorizonPeaks"
+	inst.multimesh = mm
+	add_child(inst)
+
+
+func _build_tunnel() -> void:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.28, 0.28, 0.3)
+	mat.roughness = 0.95
+	var start := length * 0.42
+	var wall_h := 6.4
+	var wall_z := 38.0
+	for side in [-1.0, 1.0]:
+		var wall := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(1.2, wall_h, wall_z)
+		box.material = mat
+		wall.mesh = box
+		wall.name = "TunnelWall"
+		add_child(wall)
+		wall.global_transform = sample(start, (half_width + 0.9) * side, wall_h * 0.5)
+	var roof := MeshInstance3D.new()
+	var rbox := BoxMesh.new()
+	rbox.size = Vector3(half_width * 2.0 + 3.0, 1.0, wall_z)
+	rbox.material = mat
+	roof.mesh = rbox
+	roof.name = "Tunnel"
+	add_child(roof)
+	roof.global_transform = sample(start, 0.0, wall_h + 0.4)
 
 
 static func _extract_mesh(path: String) -> Mesh:

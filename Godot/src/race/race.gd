@@ -254,75 +254,86 @@ static func _tint_model(model: Node3D, colour: Color) -> void:
 func _build_environment(definition: Dictionary) -> void:
 	var env := Environment.new()
 	var night := bool(definition.get("night", false))
-
-	var sky_path := "res://assets/sky/dikhololo_night_hdri.hdr" if night \
-		else "res://assets/sky/kloppenheim_02_puresky_hdri.hdr"
-	if ResourceLoader.exists(sky_path):
-		var sky_mat := PanoramaSkyMaterial.new()
-		sky_mat.panorama = load(sky_path)
-		var sky := Sky.new()
-		sky.sky_material = sky_mat
-		env.background_mode = Environment.BG_SKY
-		env.sky = sky
-		env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-		env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
-	else:
-		env.background_mode = Environment.BG_COLOR
-		env.background_color = Color(0.04, 0.05, 0.09) if night else Color(0.45, 0.65, 0.85)
-		env.ambient_light_color = Color(0.5, 0.55, 0.65)
-		env.ambient_light_energy = 1.0
-
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.0 if not night else 1.3
-	env.glow_enabled = true
-	env.glow_intensity = 0.5
-	env.glow_bloom = 0.1
-	env.fog_enabled = true
-	env.fog_sky_affect = 0.0
 	var biome := String(definition.get("biome", "coast"))
+
+	# RR3D's signature look is a hot sunset sky over the highway, not a clean HDRI.
+	var sky_mat := ProceduralSkyMaterial.new()
+	match biome:
+		"night":
+			sky_mat.sky_top_color = Color(0.02, 0.03, 0.08)
+			sky_mat.sky_horizon_color = Color(0.12, 0.1, 0.22)
+			sky_mat.ground_horizon_color = Color(0.05, 0.05, 0.08)
+			sky_mat.ground_bottom_color = Color(0.02, 0.02, 0.03)
+		"desert":
+			sky_mat.sky_top_color = Color(0.45, 0.62, 0.88)
+			sky_mat.sky_horizon_color = Color(0.98, 0.78, 0.48)
+			sky_mat.ground_horizon_color = Color(0.72, 0.52, 0.32)
+			sky_mat.ground_bottom_color = Color(0.45, 0.32, 0.18)
+		"mountain":
+			sky_mat.sky_top_color = Color(0.18, 0.22, 0.38)
+			sky_mat.sky_horizon_color = Color(0.85, 0.42, 0.28)
+			sky_mat.ground_horizon_color = Color(0.28, 0.32, 0.26)
+			sky_mat.ground_bottom_color = Color(0.12, 0.14, 0.12)
+		_:
+			# City + coast: the orange RR3D dusk.
+			sky_mat.sky_top_color = Color(0.12, 0.1, 0.22)
+			sky_mat.sky_horizon_color = Color(0.98, 0.38, 0.16)
+			sky_mat.ground_horizon_color = Color(0.55, 0.22, 0.12)
+			sky_mat.ground_bottom_color = Color(0.12, 0.08, 0.06)
+	sky_mat.sun_angle_max = 8.0
+	sky_mat.sun_curve = 0.05
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_energy = 0.85 if not night else 0.35
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.05 if not night else 1.25
+	env.glow_enabled = false
+	env.fog_enabled = true
+	env.fog_sky_affect = 0.12
 	match biome:
 		"desert":
-			env.fog_light_color = Color(0.92, 0.78, 0.52)
-			env.fog_density = 0.0024
+			env.fog_light_color = Color(0.90, 0.82, 0.68)
+			env.fog_density = 0.00045
 		"coast":
-			env.fog_light_color = Color(0.70, 0.82, 0.90)
-			env.fog_density = 0.0018
+			env.fog_light_color = Color(0.86, 0.78, 0.72)
+			env.fog_density = 0.00032
 		"city":
-			env.fog_light_color = Color(0.62, 0.66, 0.72)
-			env.fog_density = 0.0017
+			env.fog_light_color = Color(0.82, 0.74, 0.70)
+			env.fog_density = 0.00038
 		"mountain":
-			env.fog_light_color = Color(0.68, 0.76, 0.82)
-			env.fog_density = 0.0026
+			env.fog_light_color = Color(0.78, 0.72, 0.70)
+			env.fog_density = 0.00042
 		_:
-			env.fog_light_color = Color(0.05, 0.07, 0.12) if night else Color(0.75, 0.8, 0.88)
-			env.fog_density = 0.0035 if night else 0.0012
+			env.fog_light_color = Color(0.18, 0.18, 0.28)
+			env.fog_density = 0.0008
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
 
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-38.0, 40.0, 0.0)
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 220.0
+	sun.shadow_enabled = false
+	sun.directional_shadow_max_distance = 180.0
 	match biome:
 		"desert":
-			sun.light_energy = 1.45
-			sun.light_color = Color(1.0, 0.88, 0.62)
-			sun.rotation_degrees = Vector3(-52.0, 28.0, 0.0)
-		"coast":
-			sun.light_energy = 1.15
-			sun.light_color = Color(0.95, 0.97, 1.0)
-		"city":
-			sun.light_energy = 1.05
-			sun.light_color = Color(0.96, 0.96, 1.0)
+			sun.rotation_degrees = Vector3(-42.0, 28.0, 0.0)
+			sun.light_energy = 1.5
+			sun.light_color = Color(1.0, 0.86, 0.6)
+		"night":
+			sun.rotation_degrees = Vector3(-12.0, 160.0, 0.0)
+			sun.light_energy = 0.18
+			sun.light_color = Color(0.45, 0.55, 0.95)
 		"mountain":
-			sun.light_energy = 1.1
-			sun.light_color = Color(0.92, 0.95, 1.0)
-			sun.rotation_degrees = Vector3(-28.0, 50.0, 0.0)
+			sun.rotation_degrees = Vector3(-8.0, 140.0, 0.0)
+			sun.light_energy = 0.85
+			sun.light_color = Color(1.0, 0.48, 0.28)
 		_:
-			sun.light_energy = 0.15 if night else 1.2
-			sun.light_color = Color(0.7, 0.75, 1.0) if night else Color(1.0, 0.95, 0.85)
+			sun.rotation_degrees = Vector3(-6.0, 150.0, 0.0)
+			sun.light_energy = 1.05
+			sun.light_color = Color(1.0, 0.42, 0.22)
 	add_child(sun)
 
 

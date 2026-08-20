@@ -35,24 +35,27 @@ void fragment() {
 	wear += stripe(u, 0.70, 0.10) * 0.5;
 	albedo *= 1.0 - wear * 0.18;
 
-	float edge = stripe(u, 0.035, 0.012) + stripe(u, 0.965, 0.012);
-	float dash_mask = step(0.5, fract(track_uv.y * 0.55));
-	float center = stripe(u, 0.5, 0.010) * dash_mask;
-	// City / night: extra dashed lane splits so it reads as a packed boulevard.
-	float lanes = 0.0;
+	float edge = stripe(u, 0.028, 0.018) + stripe(u, 0.972, 0.018);
+	float dash_mask = step(0.42, fract(track_uv.y * 0.48));
+	// RR3D: bold yellow centre, often a double line on packed streets.
+	float center = stripe(u, 0.5, 0.016) * (0.55 + 0.45 * dash_mask);
 	if (extra_lanes > 0.5) {
-		lanes += stripe(u, 0.25, 0.007) * dash_mask;
-		lanes += stripe(u, 0.75, 0.007) * dash_mask;
+		center = stripe(u, 0.47, 0.012) + stripe(u, 0.53, 0.012);
+	}
+	float lanes = stripe(u, 0.33, 0.010) * dash_mask + stripe(u, 0.67, 0.010) * dash_mask;
+	if (extra_lanes > 0.5) {
+		lanes += stripe(u, 0.22, 0.008) * dash_mask;
+		lanes += stripe(u, 0.78, 0.008) * dash_mask;
 	}
 
 	float paint_wear = texture(albedo_tex, uv * 2.7).r;
-	float wear_mask = 0.55 + 0.45 * smoothstep(0.08, 0.35, paint_wear);
+	float wear_mask = 0.78 + 0.22 * smoothstep(0.08, 0.35, paint_wear);
 	edge *= wear_mask;
 	center *= wear_mask;
 	lanes *= wear_mask;
 
-	albedo = mix(albedo, line_color.rgb, clamp(edge + lanes, 0.0, 1.0) * 0.85);
-	albedo = mix(albedo, center_color.rgb, clamp(center, 0.0, 1.0) * 0.9);
+	albedo = mix(albedo, line_color.rgb, clamp(edge + lanes, 0.0, 1.0) * 0.95);
+	albedo = mix(albedo, center_color.rgb, clamp(center, 0.0, 1.0) * 0.98);
 
 	ALBEDO = albedo;
 	NORMAL_MAP = texture(normal_tex, uv).rgb;
