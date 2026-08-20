@@ -1,0 +1,4 @@
+{
+  "name": "Highway Renegade",
+  "install": "sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y dotnet-sdk-8.0 && (bash Tools/CompileCheck/compile-check.sh --tests || true)"
+}
