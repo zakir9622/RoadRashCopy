@@ -157,17 +157,13 @@ func _test_track_geometry() -> void:
 	var left := track.sample(50.0, -5.0)
 	var right := track.sample(50.0, 5.0)
 	check(left.origin.distance_to(right.origin) > 8.0, "lateral offset separates")
-	var f_grid := track.forward(70.0)
-	var f_corner := track.forward(260.0)
-	check(f_grid.dot(f_corner) < 0.92, "coast turns within 200 m of the grid")
+	check(_min_forward_dot(track, 70.0, 260.0) < 0.85, "coast turns within 200 m of the grid")
 	track.queue_free()
 
 	var city := Track.new()
 	root.add_child(city)
 	city.build(TrackCatalog.find("downtown"))
-	var c0 := city.forward(70.0)
-	var c1 := city.forward(220.0)
-	check(c0.dot(c1) < 0.90, "city corners harder than coast")
+	check(_min_forward_dot(city, 70.0, 250.0) < 0.50, "city corners harder than coast")
 	var s300 := city.sample(300.0, 0.0)
 	check(absf(s300.origin.x) > 12.0, "city has left the start axis by 300 m")
 	city.queue_free()
@@ -183,6 +179,16 @@ func _test_track_geometry() -> void:
 	check(bool(kinds.get("cow", false)), "cow on track")
 	check(track.get_node_or_null("FinishBanner") != null, "chequered finish banner")
 	track.queue_free()
+
+
+func _min_forward_dot(track: Track, d0: float, d1: float) -> float:
+	var f0 := track.forward(d0)
+	var worst := 1.0
+	var d := d0 + 15.0
+	while d <= d1:
+		worst = minf(worst, f0.dot(track.forward(d)))
+		d += 15.0
+	return worst
 
 
 func _test_world_biomes() -> void:

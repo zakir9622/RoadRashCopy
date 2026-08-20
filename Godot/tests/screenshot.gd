@@ -82,7 +82,7 @@ func _prepare_race_shot(instance: Node) -> void:
 	if manager != null:
 		manager.phase = RaceManager.Phase.RACING
 		manager.countdown_remaining = 0.0
-	player.distance = 210.0
+	player.distance = 125.0
 	player.lateral = 0.0
 	player.speed = 34.0
 	player.in_throttle = 1.0
@@ -92,7 +92,7 @@ func _prepare_race_shot(instance: Node) -> void:
 	for child in instance.get_children():
 		if child is Rider and child != player:
 			var rival := child as Rider
-			rival.distance = 228.0 + extra * 5.0
+			rival.distance = 138.0 + extra * 4.5
 			rival.lateral = clampf(-3.2 + extra * 1.1, -4.5, 4.5)
 			rival.speed = 28.0
 			if rival.has_method("_apply_transform"):
